@@ -575,17 +575,32 @@
   function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
   // ---------------------------------------------------------------------
-  // Alerts / notifications (Phase 1: browser only)
+  // Alerts / notifications (browser notifications; wired to both real and
+  // simulated readings — see fireAlert()'s origin check below. Additional
+  // channels — email, Telegram, WhatsApp — are Phase 10 work.)
   // ---------------------------------------------------------------------
 
   function fireAlert(reading, value) {
-    const msg = `🚨 ${state.currency} RATE ALERT (SIMULATED) — ${reading.sourceName} ${state.rateType}: ${formatRate(value)}, target ${formatRate(state.targetRate)}. Target reached.`;
+    // reading.origin was already real ("REAL") or simulated ("SIMULATED")
+    // by the time it reaches here — never guess or assume: label the alert
+    // exactly as honestly as the reading itself was labeled everywhere else
+    // on the dashboard. Getting this wrong in either direction (claiming a
+    // real trigger is simulated, or vice versa) breaks the project's core
+    // "never mislabel data" rule just as much as showing fabricated data as
+    // LIVE would.
+    const isReal = reading.origin === "REAL";
+    const tag = isReal ? "LIVE" : "SIMULATED";
+    const msg = `🚨 ${state.currency} RATE ALERT (${tag}) — ${reading.sourceName} ${state.rateType}: ${formatRate(value)}, target ${formatRate(state.targetRate)}. Target reached.`;
     logActivity(msg);
     showToast(msg);
     playBeep();
     if (state.notification === "browser" && "Notification" in window && Notification.permission === "granted") {
-      new Notification("Currency Rate Alert (Simulated)", {
-        body: `${state.currency} ${state.rateType} = ${formatRate(value)} — target ${formatRate(state.targetRate)} reached.\nThis is Phase 1 simulated data.`,
+      new Notification(`Currency Rate Alert${isReal ? "" : " (Simulated)"}`, {
+        body: `${state.currency} ${state.rateType} = ${formatRate(value)} — target ${formatRate(state.targetRate)} reached.\n` +
+          `Money changer: ${reading.sourceName}${reading.branch ? ` (${reading.branch})` : ""}\n` +
+          (isReal
+            ? "Retrieved directly from the live source."
+            : "This is simulated data, not a live rate."),
       });
     }
   }
