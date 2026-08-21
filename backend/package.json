@@ -2,7 +2,7 @@
   "name": "currency-rate-alert-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Scheduled live-rate retrieval, validation, target comparison, and notifications for the CKM currency-rate alert app. Phase 1: scaffold only.",
+  "description": "Scheduled live-rate retrieval, validation, target comparison, and notifications for the MY Currency Rate Tracker app. Phase 1: scaffold only.",
   "main": "index.js",
   "scripts": {
     "test": "node --test tests/"

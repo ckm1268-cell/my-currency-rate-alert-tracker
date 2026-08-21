@@ -1,5 +1,5 @@
 /**
- * CKM Currency Rate Monitor — Phase 1 dashboard logic
+ * MY Currency Rate Tracker — Phase 1 dashboard logic
  * =====================================================
  * IMPORTANT: everything this file displays as a "rate" is generated locally
  * by simulateReading() below. There is no network call to a money changer
@@ -445,7 +445,7 @@
     showToast(msg);
     playBeep();
     if (state.notification === "browser" && "Notification" in window && Notification.permission === "granted") {
-      new Notification("CKM Rate Alert (Simulated)", {
+      new Notification("Currency Rate Alert (Simulated)", {
         body: `${state.currency} ${state.rateType} = ${formatRate(value)} — target ${formatRate(state.targetRate)} reached.\nThis is Phase 1 simulated data.`,
       });
     }

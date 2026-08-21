@@ -1,4 +1,4 @@
-# CKM Currency Rate Monitor
+# MY Currency Rate Tracker
 
 Real-time currency exchange-rate monitoring and target-rate alerts for
 Malaysian money changers. Not a converter — this proves, with a timestamp,
