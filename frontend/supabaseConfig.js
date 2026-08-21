@@ -14,5 +14,5 @@
  * Loaded before app.js and auth.js in index.html.
  */
 
-window.CKM_SUPABASE_URL = "YOUR_SUPABASE_PROJECT_URL"; // e.g. "https://abcdefghijk.supabase.co"
-window.CKM_SUPABASE_ANON_KEY = "YOUR_SUPABASE_ANON_KEY"; // Project Settings -> API -> Project API keys -> anon / public
+window.CKM_SUPABASE_URL = "https://vhcpotlfgdpjyheoynvz.supabase.co";
+window.CKM_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZoY3BvdGxmZ2RwanloZW95bnZ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODczMDE1MjUsImV4cCI6MjEwMjg3NzUyNX0.16STr9thFLMVRWB6liiMcu0ir8NmYbhAChzlAhLDI5c";
