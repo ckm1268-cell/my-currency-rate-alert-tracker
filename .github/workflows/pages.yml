@@ -40,6 +40,12 @@ jobs:
         working-directory: backend
         run: node scripts/checkRate.js mymoneymaster CNY
         continue-on-error: true
+
+      - name: Check Taj Muhabath CNY rate
+        working-directory: backend
+        run: node scripts/checkRate.js tajmuhabath CNY "LALAPORT BBCC"
+        continue-on-error: true
+        
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
