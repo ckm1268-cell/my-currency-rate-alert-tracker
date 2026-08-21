@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 /**
- * checkRate.js — Phase 2 CLI runner
+ * checkRate.js — Phase 2/3 CLI runner
  * ===================================
- * Usage: node scripts/checkRate.js <source> <currencyCode>
+ * Usage: node scripts/checkRate.js <source> <currencyCode> [branch]
  *   e.g. node scripts/checkRate.js mymoneymaster CNY
+ *   e.g. node scripts/checkRate.js tajmuhabath CNY "LALAPORT BBCC"
+ *
+ * [branch] is optional and only meaningful for adapters whose config sets
+ * branchSupport: true (Taj Muhabath). My Money Master ignores a branch
+ * argument if one is passed, since it publishes one site-wide rate.
  *
  * Runs the named adapter's fetchRateWithFallback() (HTTP first, Playwright
- * fallback), prints the StandardRateResult as JSON to stdout, and merges it
+ * fallback where applicable — Taj Muhabath's adapter is Playwright-only),
+ * prints the StandardRateResult as JSON to stdout, and merges it
  * into frontend/data/latest-rates.json — the flat-file "API" the static
  * GitHub Pages frontend reads (see frontend/app.js: loadLiveData()).
  *
@@ -29,17 +35,16 @@ const path = require('node:path');
 
 const ADAPTERS = {
   mymoneymaster: () => require('../scrapers/mymoneymaster.adapter'),
-  // tajmuhabath: Phase 3 — add once backend/scrapers/tajmuhabath.adapter.js
-  // is implemented for real (it's still a throwing stub as of Phase 2).
+  tajmuhabath: () => require('../scrapers/tajmuhabath.adapter'),
 };
 
 const DATA_FILE = path.join(__dirname, '..', '..', 'frontend', 'data', 'latest-rates.json');
 
 async function main() {
-  const [, , sourceId, currencyCode] = process.argv;
+  const [, , sourceId, currencyCode, branch] = process.argv;
 
   if (!sourceId || !currencyCode) {
-    console.error('Usage: node scripts/checkRate.js <source> <currencyCode>');
+    console.error('Usage: node scripts/checkRate.js <source> <currencyCode> [branch]');
     console.error(`Known sources: ${Object.keys(ADAPTERS).join(', ')}`);
     process.exit(1);
   }
@@ -51,9 +56,9 @@ async function main() {
   }
 
   const adapter = loadAdapter();
-  console.error(`[checkRate] Fetching ${sourceId} ${currencyCode}...`);
+  console.error(`[checkRate] Fetching ${sourceId} ${currencyCode}${branch ? ` (branch: ${branch})` : ''}...`);
 
-  const result = await adapter.fetchRateWithFallback({ currencyCode });
+  const result = await adapter.fetchRateWithFallback({ currencyCode, ...(branch ? { branch } : {}) });
   console.error(`[checkRate] status=${result.status} validationStatus=${result.validationStatus}` +
     (result.errorMessage ? ` errorMessage=${result.errorMessage}` : ''));
   console.log(JSON.stringify(result, null, 2));

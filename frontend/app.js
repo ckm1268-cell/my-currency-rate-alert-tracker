@@ -1,23 +1,24 @@
 /**
- * MY Currency Rate Tracker — Phase 2 dashboard logic
+ * MY Currency Rate Tracker — Phase 3 dashboard logic
  * =====================================================
- * As of Phase 2, My Money Master CNY is retrieved for real: a GitHub
- * Actions workflow (.github/workflows/pages.yml) runs
- * backend/scrapers/mymoneymaster.adapter.js on every deploy and writes the
- * result to data/latest-rates.json, a same-origin static file this page
- * fetches in loadLiveData() below. That is the ONLY path any real number
- * reaches this file — there is still no direct network call from the
- * browser to a money-changer site anywhere here (see the project's
+ * As of Phase 3, BOTH My Money Master CNY and Taj Muhabath CNY (branch:
+ * LALAPORT BBCC) are retrieved for real: a GitHub Actions workflow
+ * (.github/workflows/pages.yml) runs backend/scrapers/mymoneymaster.adapter.js
+ * and backend/scrapers/tajmuhabath.adapter.js on every deploy and writes
+ * the results to data/latest-rates.json, a same-origin static file this
+ * page fetches in loadLiveData() below. That is the ONLY path any real
+ * number reaches this file — there is still no direct network call from
+ * the browser to a money-changer site anywhere here (see the project's
  * architecture: the frontend never talks to scraping targets directly).
  *
- * Every other source/currency combination (Taj Muhabath, and My Money
- * Master for anything other than CNY) has no real adapter yet and is still
- * generated locally by simulateReading() — and is always labeled
- * SIMULATED, never LIVE, per the project's core rule. getReading() below
- * is the dispatcher that decides, per source+currency, whether a reading
- * is real (origin: "REAL") or simulated (origin: "SIMULATED") — every
- * rendering function keys off that flag so the two are never visually
- * confused with each other.
+ * Every other source/currency combination (any currency other than CNY,
+ * at either source) has no real adapter yet and is still generated
+ * locally by simulateReading() — and is always labeled SIMULATED, never
+ * LIVE, per the project's core rule. getReading() below is the dispatcher
+ * that decides, per source+currency, whether a reading is real
+ * (origin: "REAL") or simulated (origin: "SIMULATED") — every rendering
+ * function keys off that flag so the two are never visually confused with
+ * each other.
  *
  * The comparison / validation / target-condition logic is real either way
  * — it's pure and has no dependency on where the number came from.
@@ -66,9 +67,9 @@
 
   // Which source+currency combinations have a real Phase 2/3 adapter behind
   // them. Everything not listed here still falls back to simulateReading().
-  // Add "tajmuhabath": ["CNY"] once Phase 3 lands its real adapter.
   const REAL_ADAPTER_SUPPORT = {
     mymoneymaster: ["CNY"],
+    tajmuhabath: ["CNY"],
   };
 
   const LIVE_DATA_URL = "data/latest-rates.json";
@@ -85,7 +86,11 @@
     targetRate: 60.5,
     pctChange: 1,
     sources: { mymoneymaster: true, tajmuhabath: true },
-    branch: TM_BRANCHES[13], // LALAPORT BBCC — matches the default branch observed live
+    branch: TM_BRANCHES[13], // LALAPORT BBCC — the branch the Phase 3 backend job explicitly
+    // requests via checkRate.js (see .github/workflows/pages.yml). NOT the page's own
+    // natural default when no branch is selected (that's "THE EXCHANGE TRX", confirmed
+    // live during the Phase 3 build) — LALAPORT BBCC was chosen here specifically to
+    // exercise the branch-selection code path in backend/scrapers/tajmuhabath.adapter.js.
     condition: "AT_OR_BELOW",
     interval: 5,
     notification: "browser",

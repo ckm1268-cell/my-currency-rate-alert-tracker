@@ -3,44 +3,53 @@
   "displayName": "Taj Muhabath",
   "officialUrl": "https://www.tajmuhabath.com.my/web/index.html",
   "liveRateUrl": "https://www.tajmuhabath.com.my/web/rates.html",
-  "notes": "Verified 21-Aug-2026 by opening the live site directly. Independently fetching the raw HTML (outside a browser) returns the table headers with an EMPTY <tbody> — zero rate rows. Rows only exist after the page's JavaScript runs. Browser automation is not optional for this source.",
+  "notes": "Verified live 21-Aug-2026 (architecture review), RE-verified live again 21-Aug-2026 (Phase 3 build, same day) via a fresh browser session — the table structure (id=example1, column order Flag/Unit/Code/Currency/We Buy/We Sell/Last Updated) is unchanged from the original inspection, unlike My Money Master which had drifted. The raw HTTP response's <tbody> is empty (headers only) — the rows are filled in by client-side JavaScript that calls an internal API (https://fx.tajmuhabath.com.my/rbapi/WebRbService.svc/json/getdailyratesapi) AFTER the page loads. That internal API was inspected via the browser's network log during this re-verification and confirmed to require an authorization the page's own JS supplies (an unauthenticated call to it returns {\"appError\":{\"ErrCode\":-104,\"ErrMsg\":\"user not authorized to access.!\"}}) — this adapter deliberately does NOT attempt to call that API directly or replicate whatever token/session unlocks it, since doing so would mean working around an access control, which this project's compliance rules (and this assistant's operating rules) prohibit. Playwright browser automation against the public page, exactly as the project brief anticipated for this site, is the only extraction path used.",
   "requiresBrowserAutomation": true,
-  "requiresBrowserAutomationReason": "Confirmed: raw HTML has no rate data. Rows are populated client-side, each with its own 'Last Updated' timestamp appearing roughly 1-2 seconds apart from the next row, indicating progressive/async population rather than a single synchronous render.",
-  "extractionMethod": "PLAYWRIGHT_HEADLESS",
+  "requiresBrowserAutomationReason": "Confirmed live: a raw HTTP GET of liveRateUrl returns table#example1 with zero <tbody><tr> rows — every currency row (including CNY) is populated by client-side JS after page load, staggered roughly 1-2 seconds apart per row. A plain HTTP fetch + HTML parse cannot see this data at all; there is no non-Playwright primary path for this site (unlike My Money Master).",
+  "playwrightFallback": false,
+  "playwrightFallbackReason": "Playwright IS the primary (and only) path here, not a fallback — there is nothing simpler to fall back FROM.",
+  "extractionMethod": "PLAYWRIGHT_RENDERED_DOM",
   "branchSupport": true,
-  "branchNotes": "A branch dropdown (#dpdBranch) is present with 15 branches observed at verification time, e.g. 'THE EXCHANGE TRX', 'Leisure Mall, Cheras', 'Econsave, Balakong', 'Terminal One, Seremban', 'Aeon Big, Tun Hussein Onn', 'CS Bangi, Bangi', 'PETRONAS,GP', 'IOI City Mall, Putrajaya', 'Jalan Bunus, Masjid India', 'R&R,Gelang Patah-NB', 'R&R,Gelang Patah-SB', 'LARKIN SENTRAL', 'PETRON GELANG PATAH', 'LALAPORT BBCC', 'SEMUA HOUSE', 'AEON MALL CHERAS SELATAN'. The page loads with a default branch pre-selected (observed default: THE EXCHANGE TRX - LALAPORT BBCC) — re-verify the branch list before relying on it, it is admin-configurable and may change.",
+  "branchNotes": "A native <select id=\"dpdBranch\"> offers branch selection. Its <option> VALUES are opaque numeric branch IDs (e.g. \"17\", \"18\") that are not human-meaningful and could be reassigned by the site at any time — select by the option's visible TEXT LABEL instead (e.g. \"LALAPORT BBCC\"), via Playwright's page.selectOption({ label }). The page loads with a default branch already selected (\"THE EXCHANGE TRX\" as of this verification) — if no branch is requested, the adapter reads whatever branch loaded by default and reports that branch's name in the result, rather than silently reading an arbitrary/undocumented default.",
+  "branchSelector": "#dpdBranch",
+  "knownBranches": [
+    "THE EXCHANGE TRX", "Econsave, Balakong", "Leisure Mall, Cheras",
+    "Terminal One, Seremban", "Aeon Big, Tun Hussein Onn", "CS Bangi, Bangi",
+    "PETRONAS,GP", "IOI City Mall, Putrajaya", "Jalan Bunus, Masjid India",
+    "R&R,Gelang Patah-NB", "R&R,Gelang Patah-SB", "LARKIN SENTRAL",
+    "PETRON GELANG PATAH", "LALAPORT BBCC", "SEMUA HOUSE",
+    "AEON MALL CHERAS SELATAN"
+  ],
+  "knownBranchesObservedAt": "2026-08-21 (Phase 3 live re-verification) — this list is informational only (for UI dropdowns / sanity checks), not authoritative; the adapter should always read the live <option> list from the page rather than hardcoding against this array for extraction purposes.",
   "primarySelector": {
-    "description": "Rate table. One row per currency.",
+    "description": "table#example1's <tbody> has one <tr> per currency (26 observed). Cell order per row: [0] flag <img>, [1] Unit (e.g. \"1\" or, for CNY specifically, \"100\" — CNY's Buy/Sell figures are per 100 units of CNY, not per 1, which is why they look numerically similar in scale to My Money Master's per-1-unit-implied CNY figures; both sites are internally consistent with each other on this so target-rate comparisons between the two sources remain apples-to-apples), [2] Code (ISO-ish code, e.g. \"CNY\", \"USD-S\"), [3] Currency display name (visually hidden column, still present in DOM), [4] We Buy, [5] We Sell, [6] Last Updated (visually hidden column, still present in DOM, format \"DD-MM-YYYY hh:mm:ss AM/PM\").",
     "page": "https://www.tajmuhabath.com.my/web/rates.html",
     "tableSelector": "table#example1",
-    "tableClassObserved": "table table-pad table-striped w-auto header-fixed",
-    "rowSelector": "table#example1 tbody tr",
-    "columns": ["flagIcon", "unit", "code", "currencyName", "weBuy", "weSell", "lastUpdated"],
-    "targetRowRule": "row where the 'code' cell text equals the ISO code, e.g. 'CNY'",
-    "branchSelectorId": "#dpdBranch"
+    "rowSelector": "tbody tr",
+    "codeCellIndex": 2,
+    "buyCellIndex": 4,
+    "sellCellIndex": 5,
+    "lastUpdatedCellIndex": 6,
+    "matchStrategy": "Enumerate table#example1 tbody tr rows, find the one whose codeCellIndex cell's trimmed text exactly equals the requested ISO currency code (e.g. \"CNY\") — NOT the display-name column, unlike My Money Master which keys by display name. Read buyCellIndex/sellCellIndex as the numeric Buy/Sell values, and lastUpdatedCellIndex as the row's own sourceTimestamp (parse \"DD-MM-YYYY hh:mm:ss AM/PM\" — do not assume a browser-locale-dependent Date.parse() will handle this format correctly; parse it explicitly).",
+    "sampleMatchedHtml": "<tr><td class=\"col10p\"><img src=\"images/Flags/CNY.png\"></td><td class=\"th-sm col10p col-xs-1\">100</td><td class=\"th-sm col10p\">CNY</td><td class=\"th-sm col25p hidden \">CHINESE RENMINBI</td><td class=\"th-sm col10p text-right\">60.200</td><td class=\"th-sm col10p text-right\">60.600</td><td class=\"th-sm col25p hidden\">21-08-2026 10:40:06 AM</td></tr>",
+    "liveSampleObservedAt": "2026-08-21 (Phase 3 re-verification, branch=THE EXCHANGE TRX default): CNY BUY 60.200 / SELL 60.600, row's own Last Updated = 21-08-2026 10:40:06 AM (several hours before the page-load time of ~17:48 that same day — see staleness notes below; this reflects the underlying rate not having moved recently, not a broken adapter)."
+  },
+  "currencyDisplayNames": {
+    "CNY": "CHINESE RENMINBI"
   },
   "waitStrategy": {
-    "playwright": [
-      "goto liveRateUrl",
-      "optionally: select branch via #dpdBranch, then wait for table to re-populate",
-      "wait for 'table#example1 tbody tr' count > 0",
-      "re-check the target currency row's 'Last Updated' cell after a short settle delay (e.g. 2-3s) since rows fill in progressively — do not read on first paint"
-    ]
+    "initialLoad": "navigate to liveRateUrl, wait for table#example1 tbody tr to have at least 1 row, THEN wait an additional short settle window (recommend 3-5s) before reading — rows populate progressively (observed ~1-2s apart per row on initial load) and a naive 'table visible = data ready' check can read a row before its value/timestamp cells are filled in.",
+    "afterBranchChange": "If a non-default branch is requested: use page.selectOption('#dpdBranch', { label: branchName }) — NOT a synthetic DOM 'change' event (confirmed during live verification that a scripted/untrusted change event does not reliably trigger the site's own branch-reload handler; Playwright's selectOption dispatches a proper trusted browser-level interaction, which does). After selecting, wait for the same settle window as initialLoad before reading, since the branch change triggers a fresh authenticated fetch of that branch's rates."
   },
   "validation": {
     "expectedRange": { "CNY": { "min": 40, "max": 80 } },
-    "freshnessCheck": "compare the row's own 'Last Updated' timestamp (not just retrieval time) against a freshness threshold before labeling LIVE"
+    "notes": "Same scale/reasoning as My Money Master's CNY range (per-100-unit CNY quoted against MYR). Reject a reading where buyRate > sellRate, or where the value looks like it's missing the /100 unit scaling.",
+    "sourceTimestampStalenessNote": "This site (unlike My Money Master) exposes a genuine per-row 'Last Updated' timestamp, which can legitimately be hours old for a currency whose rate simply hasn't moved recently — this is normal market behavior, not a broken scrape. The adapter treats a reading as LIVE if it was successfully retrieved and passed validateRate(), and separately flags it STALE (informationally, in the result's status) only if sourceTimestamp is older than a generous threshold (see backend/scrapers/tajmuhabath.adapter.js STALENESS_THRESHOLD_MS) — this threshold is a judgment call made without strong evidence of what 'too old' means for this specific currency pair's real trading frequency, and is easy to tune later once real historical data accumulates."
   },
   "compliance": {
-    "robotsTxt": "not found (404) as of 21-Aug-2026 — no machine-readable crawl restriction in place",
-    "actionRequired": "No CAPTCHA or login wall encountered during verification. Re-confirm branch list and selectors periodically — this is a smaller, more frequently re-themed site than My Money Master."
-  },
-  "sampleObservedRate": {
-    "branch": "THE EXCHANGE TRX - LALAPORT BBCC (default)",
-    "currency": "CNY",
-    "buy": 60.2,
-    "sell": 60.6,
-    "observedAt": "2026-08-21"
+    "robotsTxt": "not found (404) as of the original architecture review (21-Aug-2026) — not re-checked during this Phase 3 build; re-verify before enabling any cron schedule.",
+    "termsOfUseUrl": "not located during either inspection — check the site footer / About Us page before continuous production polling.",
+    "actionRequired": "Same as My Money Master: a human should read this site's Terms of Use before this adapter runs on a continuous production schedule. The GitHub Actions workflow remains push/manual-trigger only (no cron) until that review happens for BOTH sites. Additionally: the internal API discovered during this build (fx.tajmuhabath.com.my/rbapi/...) must never be called directly by this codebase — see 'notes' above."
   },
   "lastVerified": "2026-08-21"
 }

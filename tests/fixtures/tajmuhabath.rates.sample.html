@@ -1,0 +1,34 @@
+<!--
+  Fixture for tests/tajmuhabath.adapter.test.js.
+
+  This is NOT a fabricated mock — all three rows below (USD, SGD, CNY) are
+  real markup captured live from https://www.tajmuhabath.com.my/web/rates.html
+  on 21-Aug-2026, via a real browser session, AFTER the page's own
+  JavaScript had populated the table (this site's raw HTTP response has an
+  empty <tbody> — see the adapter's header comment). This represents
+  page.content() after Playwright's waitForSelector + settle wait, which is
+  exactly what the real adapter reads.
+
+  USD and SGD are included (in addition to CNY, the row the parser is
+  actually tested against) to prove the matcher correctly locates ONE
+  specific currency by its Code column rather than always matching the
+  first row on the page.
+-->
+<!DOCTYPE html>
+<html>
+<body>
+  <table id="example1">
+    <thead>
+      <tr>
+        <th>Flag</th><th>Unit</th><th>Code</th><th>Currency</th>
+        <th>We Buy</th><th>We Sell</th><th>Last Updated</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="col10p"><img src="images/Flags/USD.png"></td><td class="th-sm col10p col-xs-1">1</td><td class="th-sm col10p">USD</td><td class="th-sm col25p hidden ">US DOLLAR</td><td class="th-sm col10p text-right">4.015</td><td class="th-sm col10p text-right">4.055</td><td class="th-sm col25p hidden">21-08-2026 05:48:36 PM</td></tr>
+      <tr><td class="col10p"><img src="images/Flags/SGD.png"></td><td class="th-sm col10p col-xs-1">1</td><td class="th-sm col10p">SGD</td><td class="th-sm col25p hidden ">SINGAPORE DOLLAR</td><td class="th-sm col10p text-right">3.170</td><td class="th-sm col10p text-right">3.192</td><td class="th-sm col25p hidden">21-08-2026 05:48:39 PM</td></tr>
+      <tr><td class="col10p"><img src="images/Flags/CNY.png"></td><td class="th-sm col10p col-xs-1">100</td><td class="th-sm col10p">CNY</td><td class="th-sm col25p hidden ">CHINESE RENMINBI</td><td class="th-sm col10p text-right">60.200</td><td class="th-sm col10p text-right">60.600</td><td class="th-sm col25p hidden">21-08-2026 10:40:06 AM</td></tr>
+    </tbody>
+  </table>
+</body>
+</html>

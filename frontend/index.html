@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MY Currency Rate Tracker</title>
-<meta name="description" content="Live currency-rate monitoring and target-rate alerts for Malaysian money changers. Phase 2 — My Money Master CNY is retrieved live from the real site; other sources are still simulated and clearly labeled.">
+<meta name="description" content="Live currency-rate monitoring and target-rate alerts for Malaysian money changers. Phase 3 — My Money Master CNY and Taj Muhabath CNY are both retrieved live from the real sites; other currencies are still simulated and clearly labeled.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
 <body>
 
 <div class="mock-banner">
-  🟢 <strong>My Money Master CNY is now LIVE</strong> — retrieved directly from the real site by a scheduled backend check (see the LIVE SOURCE tag below). 🧪 Every other row is still <strong>SIMULATED</strong> and clearly labeled — Taj Muhabath's real adapter and other currencies are Phase 3+ work. Simulated data is never shown as LIVE.
+  🟢 <strong>My Money Master CNY and Taj Muhabath CNY (LALAPORT BBCC) are now LIVE</strong> — retrieved directly from the real sites by a scheduled backend check (see the LIVE SOURCE tags below). 🧪 Every other currency is still <strong>SIMULATED</strong> and clearly labeled — more currencies are Phase 4+ work. Simulated data is never shown as LIVE.
 </div>
 
 <header class="topbar">
@@ -22,7 +22,7 @@
   </div>
   <div style="display:flex; align-items:center; gap:10px;">
     <span class="brand-sub" id="clockLabel">—</span>
-    <span class="phase-chip">Phase 2 · My Money Master live</span>
+    <span class="phase-chip">Phase 3 · both sources live</span>
   </div>
 </header>
 
@@ -97,7 +97,7 @@
           <option value="15">Every 15 minutes</option>
           <option value="30">Every 30 minutes</option>
         </select>
-        <p class="hint">The real My Money Master check only refreshes when the site redeploys (no cron yet — see the README). Simulated rows still tick every few seconds regardless of this setting, so you can see the demo states without waiting.</p>
+        <p class="hint">The real My Money Master and Taj Muhabath checks only refresh when the site redeploys (no cron yet — see the README). Simulated rows still tick every few seconds regardless of this setting, so you can see the demo states without waiting.</p>
       </div>
 
       <div class="field">
@@ -212,7 +212,7 @@
     <!-- Test controls -->
     <article class="card test-controls">
       <div class="card-eyebrow">Test controls — simulated sources only</div>
-      <p>These buttons force the SIMULATED sources into each state so you can see it without waiting for the demo to land on it naturally. They only affect simulated rows — they cannot fake the real My Money Master LIVE reading.</p>
+      <p>These buttons force the SIMULATED sources into each state so you can see it without waiting for the demo to land on it naturally. They only affect simulated rows — they cannot fake a real My Money Master or Taj Muhabath LIVE reading.</p>
       <div class="btn-row">
         <button type="button" id="testForceTrigger">Force target reached</button>
         <button type="button" id="testSourceDown">Simulate source unavailable</button>
@@ -225,7 +225,7 @@
 </main>
 
 <footer class="site-footer">
-  MY Currency Rate Tracker — Phase 2 · My Money Master CNY is a real live connection · Taj Muhabath and other currencies are still simulated.
+  MY Currency Rate Tracker — Phase 3 · My Money Master CNY and Taj Muhabath CNY are real live connections · other currencies are still simulated.
 </footer>
 
 <div id="toast" role="status" aria-live="polite"></div>

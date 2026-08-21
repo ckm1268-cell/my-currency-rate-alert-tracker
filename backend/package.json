@@ -6,7 +6,8 @@
   "main": "index.js",
   "scripts": {
     "test": "cd .. && node --test",
-    "check:mymoneymaster": "node scripts/checkRate.js mymoneymaster CNY"
+    "check:mymoneymaster": "node scripts/checkRate.js mymoneymaster CNY",
+    "check:tajmuhabath": "node scripts/checkRate.js tajmuhabath CNY \"LALAPORT BBCC\""
   },
   "dependencies": {
     "cheerio": "^1.0.0",
