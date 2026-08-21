@@ -598,6 +598,7 @@
       new Notification(`Currency Rate Alert${isReal ? "" : " (Simulated)"}`, {
         body: `${state.currency} ${state.rateType} = ${formatRate(value)} — target ${formatRate(state.targetRate)} reached.\n` +
           `Money changer: ${reading.sourceName}${reading.branch ? ` (${reading.branch})` : ""}\n` +
+          `Time: ${new Date().toLocaleString()}\n` +
           (isReal
             ? "Retrieved directly from the live source."
             : "This is simulated data, not a live rate."),
@@ -737,7 +738,13 @@
     lastSelectedValue = null;
     $("startBtn").textContent = "✓ Monitoring active";
     $("startBtn").dataset.active = "true";
-    $("formStatus").textContent = "Simulated monitoring is running — see the Activity log below.";
+    // Same rule as tick()'s own primary-source pick and fireAlert()'s origin
+    // check: never claim "simulated" over a real source, or vice versa.
+    const primaryId = state.sources.mymoneymaster ? "mymoneymaster" : "tajmuhabath";
+    const isRealPrimary = hasRealAdapter(primaryId, state.currency);
+    $("formStatus").textContent = isRealPrimary
+      ? "Monitoring live data — see the Activity log below."
+      : "Simulated monitoring is running — see the Activity log below.";
     logActivity(`Monitoring started: ${state.currency} ${state.rateType}, target ${formatRate(state.targetRate)}, condition ${state.condition}.`);
 
     if (state.notification === "browser" && "Notification" in window && Notification.permission === "default") {
