@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MY Currency Rate Tracker</title>
-<meta name="description" content="Live currency-rate monitoring and target-rate alerts for Malaysian money changers. Phase 1 preview — dashboard UI running on simulated data.">
+<meta name="description" content="Live currency-rate monitoring and target-rate alerts for Malaysian money changers. Phase 2 — My Money Master CNY is retrieved live from the real site; other sources are still simulated and clearly labeled.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -13,7 +13,7 @@
 <body>
 
 <div class="mock-banner">
-  🧪 <strong>SIMULATED DATA</strong> — this Phase 1 build has no live scraper wired in yet. Every rate on this page is generated locally for UI demonstration and is never labeled LIVE. See Phase 2/3 in the roadmap.
+  🟢 <strong>My Money Master CNY is now LIVE</strong> — retrieved directly from the real site by a scheduled backend check (see the LIVE SOURCE tag below). 🧪 Every other row is still <strong>SIMULATED</strong> and clearly labeled — Taj Muhabath's real adapter and other currencies are Phase 3+ work. Simulated data is never shown as LIVE.
 </div>
 
 <header class="topbar">
@@ -22,7 +22,7 @@
   </div>
   <div style="display:flex; align-items:center; gap:10px;">
     <span class="brand-sub" id="clockLabel">—</span>
-    <span class="phase-chip">Phase 1 · UI scaffold</span>
+    <span class="phase-chip">Phase 2 · My Money Master live</span>
   </div>
 </header>
 
@@ -97,7 +97,7 @@
           <option value="15">Every 15 minutes</option>
           <option value="30">Every 30 minutes</option>
         </select>
-        <p class="hint">In this Phase 1 demo, the simulation ticks every few seconds regardless of this setting, so you can see the states without waiting.</p>
+        <p class="hint">The real My Money Master check only refreshes when the site redeploys (no cron yet — see the README). Simulated rows still tick every few seconds regardless of this setting, so you can see the demo states without waiting.</p>
       </div>
 
       <div class="field">
@@ -183,7 +183,7 @@
     <article class="card">
       <div class="card-head">
         <div>
-          <div class="card-eyebrow">Rate history (simulated)</div>
+          <div class="card-eyebrow">Rate history</div>
           <h3>Selected rate over time</h3>
         </div>
       </div>
@@ -211,8 +211,8 @@
 
     <!-- Test controls -->
     <article class="card test-controls">
-      <div class="card-eyebrow">Test controls — Phase 1 demo only</div>
-      <p>These buttons exist so you can see every dashboard state without waiting for the simulation to land on it naturally. They will not exist once real adapters are wired in.</p>
+      <div class="card-eyebrow">Test controls — simulated sources only</div>
+      <p>These buttons force the SIMULATED sources into each state so you can see it without waiting for the demo to land on it naturally. They only affect simulated rows — they cannot fake the real My Money Master LIVE reading.</p>
       <div class="btn-row">
         <button type="button" id="testForceTrigger">Force target reached</button>
         <button type="button" id="testSourceDown">Simulate source unavailable</button>
@@ -225,7 +225,7 @@
 </main>
 
 <footer class="site-footer">
-  MY Currency Rate Tracker — Phase 1 scaffold · Sources referenced: My Money Master, Taj Muhabath · No live connection in this build.
+  MY Currency Rate Tracker — Phase 2 · My Money Master CNY is a real live connection · Taj Muhabath and other currencies are still simulated.
 </footer>
 
 <div id="toast" role="status" aria-live="polite"></div>

@@ -3,30 +3,39 @@
   "displayName": "My Money Master",
   "officialUrl": "http://www.mymoneymaster.com.my/",
   "liveRateUrl": "http://www.mymoneymaster.com.my/Home/rate_board",
-  "notes": "Verified 21-Aug-2026 by opening the live site directly. The site does not serve a working HTTPS version (https:// redirects back to http://) — use the http URL. The 'Exchange Rate' nav link resolves to /Home/rate_board, not a guessable slug; do not hard-code an assumed path without re-checking if this ever 404s.",
+  "notes": "Verified 21-Aug-2026, then RE-verified live on 21-Aug-2026 (Phase 2 build) via a fresh browser-driven fetch of the raw response. The re-check corrected an assumption from the first pass: the homepage's scrolling ticker ('.rating-content.simply-scroll-list li', formerly documented as the primary selector) is actually populated by client-side JavaScript — it is NOT present in the raw HTTP response, only in the live DOM after the page's own scripts run. The '/Home/rate_board' card layout, however, genuinely is server-rendered and IS present in the raw response with no JS required. The primary/secondary roles below have been swapped from the first draft to reflect this. The site does not serve a working HTTPS version (https:// redirects back to http://) — use the http URL.",
   "requiresBrowserAutomation": false,
-  "requiresBrowserAutomationReason": "CNY BUY/SELL values were confirmed present in the raw server-rendered HTML (fetched independently of a browser). A plain HTTP GET + HTML parser (e.g. cheerio) is sufficient for the primary path.",
+  "requiresBrowserAutomationReason": "The '/Home/rate_board' card layout's BUY/SELL values were confirmed present in the raw server-rendered HTML via a fetch independent of any browser JS execution (re-verified 21-Aug-2026). A plain HTTP GET + HTML parser (cheerio) is sufficient for the primary path.",
   "playwrightFallback": true,
-  "playwrightFallbackReason": "If the site migrates to client-side rendering in the future, plain-fetch extraction will start failing validation (fails safe). Keep a Playwright-based adapter with the same selectors ready as a fallback rather than only building fetch+parse.",
+  "playwrightFallbackReason": "If the site migrates this page to client-side rendering in the future, plain-fetch extraction will start failing validation (fails safe, never silently stale). The Playwright fallback re-uses the exact same selectors against the rendered DOM of the same URL, so it keeps working whether or not JS involvement changes.",
   "extractionMethod": "HTTP_FETCH_HTML_PARSE",
   "branchSupport": false,
   "branchNotes": "No branch/location selector was found on the public site; My Money Master publishes a single site-wide rate per currency.",
   "primarySelector": {
-    "description": "Scrolling ticker on the homepage (also mirrored on /Home/rate_board). Each list item is one currency in a predictable plain-text format.",
-    "page": "http://www.mymoneymaster.com.my/  (or /Home/rate_board)",
-    "cssSelector": ".rating-content.simply-scroll-list li",
-    "textPattern": "^(?<code>[A-Z]{3}):\\s*BUY\\s*(?<buy>[\\d.]+)\\s*\\([-\\d.]+\\)\\s*/\\s*SELL\\s*(?<sell>[\\d.]+)\\s*\\([-\\d.]+\\)",
-    "sampleMatchedText": "CNY: BUY 60.25 (0.150) / SELL 60.53 (-0.020)"
+    "description": "Per-country card on the Exchange Rate page. Each currency is a '.smallBox3' block containing a '.flag-country-rating-head' (the currency's full display name, e.g. 'Chinese Renminbi' — NOT the ISO code) followed by two '.flag-country-rating-list' sibling divs, one for Buy and one for Sell, each holding two plain <span>s: a label ('Buy :' / 'Sell :') and the numeric value.",
+    "page": "http://www.mymoneymaster.com.my/Home/rate_board",
+    "cardBlockSelector": ".smallBox3",
+    "headingSelector": ".flag-country-rating-head",
+    "valueRowSelector": ".flag-country-rating-list",
+    "matchStrategy": "For each '.smallBox3' block, read '.flag-country-rating-head' text and match it against config.currencyDisplayNames[currencyCode] (exact, trimmed). Within the matching block, read each '.flag-country-rating-list' div's two child <span>s: first span's text (case-insensitive, colon-stripped) tells you Buy vs Sell; second span's text is the numeric value.",
+    "sampleMatchedHtml": "<div class=\"flag-country-rating-head\">Chinese Renminbi</div><div class=\"flag-country-rating-list\"><span>Buy :</span><span> 60.30</span></div><div class=\"flag-country-rating-list\"><span>Sell :</span><span> 60.60</span></div>",
+    "liveSampleObservedAt": "2026-08-21 (Phase 2 re-verification): CNY BUY 60.30 / SELL 60.60"
+  },
+  "currencyDisplayNames": {
+    "CNY": "Chinese Renminbi"
   },
   "secondarySelector": {
-    "description": "Per-country card on the Exchange Rate page. Values are split into whole/decimal <span> pairs for a digit-flip visual effect — concatenate them. There is also a hidden hover tooltip (class flag-country-rating) with the same figures as plain 'Buy : X' / 'Sell : Y' text, useful as a cross-check.",
-    "page": "http://www.mymoneymaster.com.my/Home/rate_board",
-    "cardHeadingContains": "Chinese Renminbi",
-    "note": "Use the ticker selector above as the primary target — it is plain text and does not require reassembling split digit spans."
+    "description": "DEMOTED as of the Phase 2 re-verification — this was originally documented as the primary selector, but is confirmed to require JavaScript execution (not present in the raw HTTP response). Kept here only as the target for the Playwright fallback path, or if a future adapter revision prefers it once JS-rendered.",
+    "page": "http://www.mymoneymaster.com.my/  (homepage ticker)",
+    "cssSelector": ".rating-content.simply-scroll-list li",
+    "textPattern": "^(?<code>[A-Z]{3}):\\s*BUY\\s*(?<buy>[\\d.]+)\\s*\\([-\\d.]+\\)\\s*/\\s*SELL\\s*(?<sell>[\\d.]+)\\s*\\([-\\d.]+\\)",
+    "sampleMatchedText": "CNY: BUY 60.30 (0.200) / SELL 60.60 (0.050)",
+    "requiresJs": true,
+    "note": "Confirmed via fetch(location.href) from within the live page context returning HTML that does NOT contain this element or text, while document.querySelector('.rating-content li') against the already-loaded DOM does. A raw HTTP GET (no JS) will not see this ticker's content."
   },
   "waitStrategy": {
-    "httpFetch": "none required — values are present on initial response",
-    "playwrightFallback": "wait for '.rating-content.simply-scroll-list li' to be attached, then read textContent"
+    "httpFetch": "none required for the primary ('/Home/rate_board' card) selector — values are present on initial response",
+    "playwrightFallback": "navigate to liveRateUrl, wait for '.smallBox3 .flag-country-rating-head' to be attached, then read as with the HTTP path (same selectors, rendered DOM)"
   },
   "validation": {
     "expectedRange": { "CNY": { "min": 40, "max": 80 } },
@@ -35,7 +44,7 @@
   "compliance": {
     "robotsTxt": "not found (404) as of 21-Aug-2026 — no machine-readable crawl restriction in place",
     "termsOfUseUrl": "linked from the site footer",
-    "actionRequired": "A human should read the Terms of Use page before this adapter is run on a continuous production schedule, per the project's compliance requirement."
+    "actionRequired": "A human should read the Terms of Use page before this adapter is run on a continuous production schedule, per the project's compliance requirement. This has NOT been done yet as of this Phase 2 build — the GitHub Actions workflow is intentionally left on manual trigger only (no cron schedule) until that review happens."
   },
   "lastVerified": "2026-08-21"
 }

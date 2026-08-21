@@ -1,0 +1,76 @@
+name: Deploy GitHub Pages
+
+# Phase 2 addition: before every deploy, this workflow re-checks the live
+# My Money Master CNY rate and regenerates frontend/data/latest-rates.json
+# — a same-origin static JSON file the frontend reads as its interim
+# "real live data" source (see frontend/app.js: loadLiveData()). This is
+# a deliberately lightweight stand-in for the Supabase-backed pipeline
+# planned for Phase 7 — no secrets, no database, just a fresh check that
+# happens to run right before each static-site publish.
+#
+# NOT scheduled on a cron yet — see config/websites/mymoneymaster.json's
+# "compliance" section: a human still needs to read My Money Master's
+# Terms of Use before this runs on any kind of recurring, unattended
+# schedule. Until then, every check here is either triggered by a push
+# to main, or manually via this workflow's "Run workflow" button.
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '*/5 * * * *'  # DO NOT enable before the compliance review above is done
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Install Playwright's Chromium (fallback path only, used if the plain HTTP fetch fails)
+        working-directory: backend
+        run: npx playwright install --with-deps chromium
+
+      - name: Check My Money Master CNY rate
+        working-directory: backend
+        run: node scripts/checkRate.js mymoneymaster CNY
+        # Non-LIVE results exit non-zero (see checkRate.js) so this step
+        # shows up as a warning in the Actions run — but the deploy still
+        # proceeds either way: the frontend is built to show
+        # SOURCE_UNAVAILABLE/STALE honestly rather than block the whole
+        # site from publishing over one source having a bad moment.
+        continue-on-error: true
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: frontend
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

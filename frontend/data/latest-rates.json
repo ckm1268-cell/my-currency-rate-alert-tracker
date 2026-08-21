@@ -1,0 +1,5 @@
+{
+  "generatedAt": null,
+  "results": [],
+  "note": "Placeholder — no successful live check has run yet. This file is overwritten by backend/scripts/checkRate.js, run automatically by .github/workflows/pages.yml on every deploy (and manually via that workflow's 'Run workflow' button). The frontend treats an empty/missing/stale result here as SOURCE_UNAVAILABLE, never as a fake live rate — see frontend/app.js: loadLiveData()."
+}

@@ -1,21 +1,39 @@
-# Scheduled rate-monitoring workflow — Phase 8
-# ===============================================
-# STATUS: scaffold only, intentionally NOT scheduled yet.
+# Scheduled rate-monitoring workflow — Phase 7/8 (Supabase-backed)
+# ===================================================================
+# STATUS: scaffold only, intentionally NOT active.
 #
-# The adapters this workflow would call (backend/scrapers/*.adapter.js) are
-# still stubs that throw "not implemented" (Phase 2/3 work). Turning on the
-# cron schedule before then would just produce a wall of failed Actions runs.
+# As of Phase 2, live retrieval for My Money Master is real and working —
+# but it runs inside `.github/workflows/pages.yml`, not this file. That
+# workflow re-checks the rate and regenerates frontend/data/latest-rates.json
+# on every deploy, which is enough to get a genuinely live number onto the
+# static dashboard without needing a database yet (see the comment at the
+# top of pages.yml and backend/scripts/checkRate.js for why).
 #
-# To activate once Phases 2-7 are done:
-#   1. Uncomment the `schedule:` block below (every 5 minutes, matching the
-#      project's default monitoring interval).
-#   2. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as encrypted repo
-#      secrets (Settings -> Secrets and variables -> Actions) — see
-#      .env.example for what's required. Never commit these values.
-#   3. Replace the placeholder run step with the real entry point once it
-#      exists (e.g. `node backend/scheduler/run.js`).
+# THIS file is reserved for the architecture actually described in the
+# approved Phase 7/8 plan: a workflow that runs on its own schedule
+# (independent of deploys), calls every adapter (not just My Money
+# Master), and writes to Supabase using a service-role secret — enabling
+# true multi-user alerts, rate history, and Realtime push notifications,
+# none of which a static JSON file can do. Activate this (and retire the
+# check step in pages.yml) once:
+#
+#   1. Taj Muhabath's adapter is real (Phase 3) — right now only
+#      My Money Master has one.
+#   2. Rate validation is applied to both adapters (Phase 4) — My Money
+#      Master's is wired in backend/validation/validateRate.js already;
+#      Taj Muhabath's staggered-row timing needs its own settle logic.
+#   3. Supabase is provisioned and SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY
+#      are added as encrypted repo secrets (Settings -> Secrets and
+#      variables -> Actions). Never commit these values — see .env.example.
+#   4. The Terms of Use compliance review noted in
+#      config/websites/mymoneymaster.json has been done, since this file's
+#      whole point is to run unattended on a recurring cron.
+#
+# Then replace the placeholder run step below with the real entry point
+# (e.g. `node backend/scheduler/run.js`), uncomment the `schedule:` block,
+# and this workflow can be enabled independently of pages.yml.
 
-name: Monitor Exchange Rates
+name: Monitor Exchange Rates (Phase 7/8 — Supabase, not yet active)
 
 on:
   workflow_dispatch: {} # manual "Run workflow" button only, for now
@@ -40,8 +58,11 @@ jobs:
         working-directory: backend
         run: npx playwright install --with-deps chromium
 
-      - name: Placeholder — adapters not implemented yet
+      - name: Placeholder — Supabase-backed pipeline not implemented yet
         run: |
-          echo "Phase 1 scaffold: backend/scrapers adapters are stubs."
-          echo "This step is a placeholder until Phases 2-7 are complete."
+          echo "Phase 2 note: My Money Master's live check now runs for"
+          echo "real, but from .github/workflows/pages.yml, not this file."
+          echo "This workflow is reserved for the Phase 7/8 Supabase-backed"
+          echo "pipeline (Taj Muhabath + multi-user + rate history). See the"
+          echo "header comment in this file for the activation checklist."
           exit 0

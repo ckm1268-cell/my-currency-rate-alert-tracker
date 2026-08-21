@@ -389,6 +389,19 @@ select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
 .status-pill.error { background: var(--status-error-bg); color: var(--status-error-fg); }
 .status-pill.mock { background: var(--status-mock-bg); color: var(--status-mock-fg); }
 
+.origin-tag {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+}
+.origin-tag.origin-live { background: var(--status-live-bg); color: var(--status-live-fg); }
+.origin-tag.origin-sim { background: var(--status-mock-bg); color: var(--status-mock-fg); }
+
 .hero-footer {
   display: flex;
   justify-content: space-between;

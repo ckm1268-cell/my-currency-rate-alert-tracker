@@ -5,7 +5,8 @@
   "description": "Scheduled live-rate retrieval, validation, target comparison, and notifications for the MY Currency Rate Tracker app. Phase 1: scaffold only.",
   "main": "index.js",
   "scripts": {
-    "test": "node --test tests/"
+    "test": "cd .. && node --test",
+    "check:mymoneymaster": "node scripts/checkRate.js mymoneymaster CNY"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

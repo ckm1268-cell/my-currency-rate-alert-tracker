@@ -13,7 +13,7 @@ and sources without a redesign.
 
 | Phase | What | Status |
 |---|---|---|
-| 1 | Repo scaffold, dashboard UI on simulated data, deployable to GitHub Pages | ✅ this build |
+| 1 | Repo scaffold, dashboard UI on simulated data, deployed to GitHub Pages | ✅ live |
 | 2 | My Money Master live retrieval | ⏳ not started |
 | 3 | Taj Muhabath live retrieval | ⏳ not started |
 | 4 | Rate validation wired into adapters | ⏳ not started |
@@ -64,13 +64,26 @@ currency-rate-alert/
 └── LICENSE
 ```
 
-## Deploying the Phase 1 frontend to GitHub Pages
+## Deploying the frontend to GitHub Pages
 
-This part you'll need to do yourself — I can build and verify the code, but
-I can't create repositories or push under your GitHub account.
+**Live now:** https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/
 
-1. Create a new **public** GitHub repository (e.g. `currency-rate-alert`).
-2. Push this folder's contents to it:
+This repo deploys via **GitHub Actions**, not "Deploy from a branch". That
+matters because GitHub's branch-deploy source only lets you pick `/ (root)`
+or `/docs` as the published folder — it does **not** offer `/frontend` as an
+option (this was tested directly in the Pages settings UI; the folder
+dropdown returns "No results found" for anything else). Since this repo
+keeps `frontend/` as its own top-level folder, GitHub Actions is the only
+source that can publish it without moving files around.
+
+The workflow lives at `.github/workflows/pages.yml` and runs automatically
+on every push to `main`, plus on demand via the Actions tab ("Run workflow").
+It checks out the repo, uploads `frontend/` as the Pages artifact, and
+deploys it — no build step, since the frontend has none.
+
+To set this up on a fresh fork/clone:
+
+1. Push this folder's contents to your own **public** GitHub repository:
    ```bash
    git init
    git add .
@@ -79,14 +92,13 @@ I can't create repositories or push under your GitHub account.
    git remote add origin https://github.com/<your-username>/<your-repo>.git
    git push -u origin main
    ```
-3. In the repo, go to **Settings → Pages**, set **Source** to "Deploy from a
-   branch", branch `main`, folder `/frontend`. Save.
+2. In the repo, go to **Settings → Pages** and set **Source** to
+   **"GitHub Actions"** (not "Deploy from a branch").
+3. The `pages.yml` workflow (already in `.github/workflows/`) will run on
+   the next push, or trigger it manually from the **Actions** tab →
+   "Deploy GitHub Pages" → "Run workflow".
 4. GitHub will publish it at `https://<your-username>.github.io/<your-repo>/`
-   within a minute or two.
-
-(If your GitHub plan/org requires it, Pages can also build from a
-`gh-pages` branch or a GitHub Actions deploy workflow instead of `/frontend`
-directly — either works, since `frontend/` has no build step to run.)
+   within a minute or two. Check the **Actions** tab for build status.
 
 ## What's real vs. simulated in this build
 

@@ -1,18 +1,26 @@
 /**
- * MY Currency Rate Tracker — Phase 1 dashboard logic
+ * MY Currency Rate Tracker — Phase 2 dashboard logic
  * =====================================================
- * IMPORTANT: everything this file displays as a "rate" is generated locally
- * by simulateReading() below. There is no network call to a money changer
- * anywhere in this file. Every place a rate reaches the screen, it is
- * labeled SIMULATED, never LIVE — see the project's core rule that mock
- * data must never be presented as live. Real retrieval is Phase 2/3 work
- * (backend/scrapers/*.adapter.js) and will replace simulateReading() with
- * a call to the backend, not touch this rendering code.
+ * As of Phase 2, My Money Master CNY is retrieved for real: a GitHub
+ * Actions workflow (.github/workflows/pages.yml) runs
+ * backend/scrapers/mymoneymaster.adapter.js on every deploy and writes the
+ * result to data/latest-rates.json, a same-origin static file this page
+ * fetches in loadLiveData() below. That is the ONLY path any real number
+ * reaches this file — there is still no direct network call from the
+ * browser to a money-changer site anywhere here (see the project's
+ * architecture: the frontend never talks to scraping targets directly).
  *
- * The comparison / validation / target-condition logic below IS the real
- * logic (not a stub) — it's pure and has no dependency on where the number
- * came from, so it's safe to build and demonstrate now, in Phase 1, ahead
- * of the real adapters landing in Phase 2/3.
+ * Every other source/currency combination (Taj Muhabath, and My Money
+ * Master for anything other than CNY) has no real adapter yet and is still
+ * generated locally by simulateReading() — and is always labeled
+ * SIMULATED, never LIVE, per the project's core rule. getReading() below
+ * is the dispatcher that decides, per source+currency, whether a reading
+ * is real (origin: "REAL") or simulated (origin: "SIMULATED") — every
+ * rendering function keys off that flag so the two are never visually
+ * confused with each other.
+ *
+ * The comparison / validation / target-condition logic is real either way
+ * — it's pure and has no dependency on where the number came from.
  */
 
 (() => {
@@ -56,6 +64,17 @@
     BUY: "You're selling foreign currency for MYR — you want the money changer's BUY rate (what they pay you for it). A higher BUY rate is better for you.",
   };
 
+  // Which source+currency combinations have a real Phase 2/3 adapter behind
+  // them. Everything not listed here still falls back to simulateReading().
+  // Add "tajmuhabath": ["CNY"] once Phase 3 lands its real adapter.
+  const REAL_ADAPTER_SUPPORT = {
+    mymoneymaster: ["CNY"],
+  };
+
+  const LIVE_DATA_URL = "data/latest-rates.json";
+  const LIVE_DATA_POLL_MS = 60_000; // re-check the static file every minute
+  const LIVE_DATA_FRESHNESS_MS = 30 * 60 * 1000; // 30 min — see README for why
+
   // ---------------------------------------------------------------------
   // State
   // ---------------------------------------------------------------------
@@ -78,9 +97,100 @@
     walk: {}, // per source+currency running mock value, seeded lazily
     history: [], // { t: Date, value: number } for the currently selected series
     log: [],
+
+    liveData: { generatedAt: null, results: [] }, // from data/latest-rates.json
+    liveDataFetchFailed: false,
   };
 
   const $ = (id) => document.getElementById(id);
+
+  // ---------------------------------------------------------------------
+  // Real live data (My Money Master CNY, Phase 2) — loaded from a static
+  // JSON file a backend GitHub Actions job regenerates on every deploy.
+  // See backend/scripts/checkRate.js and .github/workflows/pages.yml.
+  // ---------------------------------------------------------------------
+
+  function hasRealAdapter(sourceId, currencyCode) {
+    const supported = REAL_ADAPTER_SUPPORT[sourceId];
+    return Array.isArray(supported) && supported.includes(currencyCode);
+  }
+
+  async function loadLiveData() {
+    try {
+      const res = await fetch(LIVE_DATA_URL, { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      state.liveData = { generatedAt: data.generatedAt || null, results: Array.isArray(data.results) ? data.results : [] };
+      state.liveDataFetchFailed = false;
+    } catch (err) {
+      // Fetch itself failing (404 before the first workflow run, network
+      // error, malformed JSON) is a real, honest SOURCE_UNAVAILABLE
+      // condition for every real-adapter source — never silently ignored.
+      state.liveDataFetchFailed = true;
+    }
+    tick();
+  }
+
+  function findLiveResult(sourceId, currencyCode, branch) {
+    return state.liveData.results.find((r) =>
+      r.source === sourceId && r.currency === currencyCode && (r.branch || null) === (branch || null)
+    );
+  }
+
+  /**
+   * Real counterpart to simulateReading(): builds a StandardRateResult-
+   * shaped reading from data/latest-rates.json instead of the random walk.
+   * Never upgrades a stale or failed check to look LIVE — that is exactly
+   * the false-freshness bug the project's Error Handling section warns
+   * against ("do not display the last known rate as if it were live").
+   */
+  function getRealReading(sourceId, branch) {
+    const now = new Date();
+    const base = { source: sourceId, branch: branch || null, currency: state.currency, origin: "REAL" };
+
+    if (state.liveDataFetchFailed) {
+      return { ...base, buyRate: null, sellRate: null, retrievedAt: null, sourceTimestamp: null,
+        status: "SOURCE_UNAVAILABLE", validationStatus: "NOT_RUN",
+        errorMessage: `Could not load ${LIVE_DATA_URL} — the site may not have completed its first deploy yet.` };
+    }
+
+    const entry = findLiveResult(sourceId, state.currency, branch);
+    if (!entry) {
+      return { ...base, buyRate: null, sellRate: null, retrievedAt: null, sourceTimestamp: null,
+        status: "SOURCE_UNAVAILABLE", validationStatus: "NOT_RUN",
+        errorMessage: "No live check has completed for this currency yet." };
+    }
+
+    const retrievedAt = entry.retrievedAt ? new Date(entry.retrievedAt) : null;
+
+    if (entry.status !== "LIVE") {
+      // Pass through whatever the backend actually recorded (EXTRACTION_ERROR,
+      // RATE_VALIDATION_ERROR, SOURCE_UNAVAILABLE) rather than reinterpreting it.
+      return { ...base, buyRate: entry.buyRate ?? null, sellRate: entry.sellRate ?? null,
+        retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
+        status: entry.status, validationStatus: entry.validationStatus,
+        errorMessage: entry.errorMessage };
+    }
+
+    const ageMs = retrievedAt ? now.getTime() - retrievedAt.getTime() : Infinity;
+    if (ageMs > LIVE_DATA_FRESHNESS_MS) {
+      return { ...base, buyRate: entry.buyRate, sellRate: entry.sellRate,
+        retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
+        status: "STALE", validationStatus: entry.validationStatus,
+        errorMessage: `Last successful check was ${Math.round(ageMs / 60000)} min ago (freshness window is ${LIVE_DATA_FRESHNESS_MS / 60000} min).` };
+    }
+
+    return { ...base, buyRate: entry.buyRate, sellRate: entry.sellRate,
+      retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
+      status: "LIVE", validationStatus: entry.validationStatus };
+  }
+
+  /** Dispatcher: real reading if this source+currency has a real adapter, simulated otherwise. */
+  function getReading(sourceId, branch) {
+    return hasRealAdapter(sourceId, state.currency)
+      ? getRealReading(sourceId, branch)
+      : simulateReading(sourceId, branch);
+  }
 
   // ---------------------------------------------------------------------
   // Mock rate simulation (clearly separated from everything else)
@@ -127,14 +237,14 @@
     const src = SOURCES.find((s) => s.id === sourceId);
 
     if (state.forcedMode === "SOURCE_DOWN") {
-      return { source: sourceId, branch: branch || null, currency: state.currency,
+      return { source: sourceId, branch: branch || null, currency: state.currency, origin: "SIMULATED",
         buyRate: null, sellRate: null, retrievedAt: now, sourceTimestamp: null,
         status: "SOURCE_UNAVAILABLE", validationStatus: "NOT_RUN" };
     }
     if (state.forcedMode === "VALIDATION_ERROR") {
       // deliberately return an out-of-range value, e.g. missing the /100 unit scale
       const bad = seedWalk(sourceId, branch) / 100;
-      return { source: sourceId, branch: branch || null, currency: state.currency,
+      return { source: sourceId, branch: branch || null, currency: state.currency, origin: "SIMULATED",
         buyRate: bad, sellRate: bad, retrievedAt: now, sourceTimestamp: now,
         status: "RATE_VALIDATION_ERROR", validationStatus: "FAILED" };
     }
@@ -145,7 +255,7 @@
     const buyRate = round(sellBase - spread, decimalsFor(state.currency));
 
     return {
-      source: sourceId, branch: branch || null, currency: state.currency,
+      source: sourceId, branch: branch || null, currency: state.currency, origin: "SIMULATED",
       buyRate, sellRate, retrievedAt: now, sourceTimestamp: now,
       status: "SIMULATED", validationStatus: "PASSED",
     };
@@ -162,7 +272,10 @@
   // ---------------------------------------------------------------------
 
   function validateReading(reading) {
-    if (reading.status === "SOURCE_UNAVAILABLE") return { passed: false, reason: "Source unavailable" };
+    if (reading.status === "SOURCE_UNAVAILABLE") return { passed: false, reason: reading.errorMessage || "Source unavailable" };
+    if (reading.status === "EXTRACTION_ERROR") return { passed: false, reason: reading.errorMessage || "Extraction error" };
+    if (reading.status === "RATE_VALIDATION_ERROR" && reading.origin === "REAL") return { passed: false, reason: reading.errorMessage || "Rate failed validation" };
+    if (reading.status === "STALE") return { passed: false, reason: reading.errorMessage || "Last successful check is too old to treat as current" };
     const value = state.rateType === "SELL" ? reading.sellRate : reading.buyRate;
     if (typeof value !== "number" || Number.isNaN(value)) return { passed: false, reason: "Non-numeric value" };
     if (value <= 0) return { passed: false, reason: "Value not greater than zero" };
@@ -222,7 +335,7 @@
     }
 
     const readings = active.map((s) => {
-      const r = simulateReading(s.id, s.branch);
+      const r = getReading(s.id, s.branch);
       const v = validateReading(r);
       return { ...r, sourceName: s.name, valid: v.passed, invalidReason: v.reason };
     });
@@ -265,42 +378,57 @@
 
   function renderHero(primary, allReadings) {
     const cur = CURRENCIES.find((c) => c.code === state.currency);
+    const isReal = primary.origin === "REAL";
     $("heroPair").textContent = `${state.currency} / MYR`;
-    $("heroRateLabel").textContent = `SIMULATED ${state.rateType} RATE`;
 
-    let pillClass = "mock", pillText = "🧪 SIMULATED";
+    const diffEl = $("heroDiff");
+    let pillClass = "mock", pillText = isReal ? "⚠ SOURCE UNAVAILABLE" : "🧪 SIMULATED";
     let rateText = "--.--";
+    let rateLabel = isReal ? `${state.rateType} RATE` : `SIMULATED ${state.rateType} RATE`;
 
-    if (primary.status === "SOURCE_UNAVAILABLE") {
-      pillClass = "error"; pillText = "⚠ SIMULATED: SOURCE UNAVAILABLE";
-      const diffEl = $("heroDiff");
+    if (primary.status === "SOURCE_UNAVAILABLE" || primary.status === "EXTRACTION_ERROR") {
+      pillClass = "error";
+      const reason = primary.status === "EXTRACTION_ERROR" ? "EXTRACTION ERROR" : "SOURCE UNAVAILABLE";
+      pillText = isReal ? `⚠ ${reason}` : `⚠ SIMULATED: ${reason}`;
+      diffEl.textContent = "—"; diffEl.className = "hero-metric-value tabular";
+      // If we have a prior successful value cached (only possible for real
+      // sources, from an earlier — now overwritten — entry) we still don't
+      // show it here on purpose: the current live-data file has no prior
+      // value to fall back to, so honestly there's nothing to show.
+    } else if (primary.status === "STALE") {
+      pillClass = "error"; pillText = "🟠 STALE";
+      rateLabel = `${state.rateType} RATE — last successful check`;
+      const value = state.rateType === "SELL" ? primary.sellRate : primary.buyRate;
+      rateText = value != null ? formatRate(value) : "--.--";
       diffEl.textContent = "—"; diffEl.className = "hero-metric-value tabular";
     } else if (!primary.valid) {
-      pillClass = "error"; pillText = "⚠ SIMULATED: VALIDATION ERROR";
-      const diffEl = $("heroDiff");
+      pillClass = "error";
+      pillText = isReal ? "⚠ VALIDATION ERROR" : "⚠ SIMULATED: VALIDATION ERROR";
       diffEl.textContent = "—"; diffEl.className = "hero-metric-value tabular";
     } else {
       const value = state.rateType === "SELL" ? primary.sellRate : primary.buyRate;
       rateText = formatRate(value);
+      if (isReal) rateLabel = `LIVE ${state.rateType} RATE — retrieved directly from source`;
       if (state.monitoring) {
-        if (state.triggered) { pillClass = "reached"; pillText = "🔴 SIMULATED: TARGET REACHED"; }
-        else { pillClass = "waiting"; pillText = "🟡 SIMULATED: WAITING"; }
+        if (state.triggered) { pillClass = "reached"; pillText = (isReal ? "🔴 " : "🔴 SIMULATED: ") + "TARGET REACHED"; }
+        else { pillClass = isReal ? "live" : "waiting"; pillText = isReal ? "🟢 LIVE — WAITING" : "🟡 SIMULATED: WAITING"; }
       } else {
-        pillClass = "mock"; pillText = "🧪 SIMULATED (not monitoring)";
+        pillClass = isReal ? "live" : "mock";
+        pillText = isReal ? "🟢 LIVE (not monitoring)" : "🧪 SIMULATED (not monitoring)";
       }
 
       const diff = value - state.targetRate;
-      const diffEl = $("heroDiff");
       diffEl.textContent = (diff >= 0 ? "+" : "") + diff.toFixed(cur.decimals);
       diffEl.className = "hero-metric-value tabular " + (diff <= 0 ? "diff-up" : "diff-down");
     }
 
     $("statusPill").className = "status-pill " + pillClass;
     $("statusPill").textContent = pillText;
+    $("heroRateLabel").textContent = rateLabel;
     $("heroRateValue").textContent = rateText;
     $("heroTarget").textContent = state.targetRate ? formatRate(state.targetRate) : "—";
     $("heroSourceLabel").textContent = `Primary source: ${primary.sourceName}${primary.branch ? " — " + primary.branch : ""}`;
-    $("lastChecked").textContent = "Last checked: " + primary.retrievedAt.toLocaleTimeString();
+    $("lastChecked").textContent = primary.retrievedAt ? "Last checked: " + primary.retrievedAt.toLocaleTimeString() : "Last checked: —";
   }
 
   function renderCompareTable(readings) {
@@ -316,12 +444,18 @@
     }
 
     $("compareBody").innerHTML = readings.map((r, i) => {
+      const originTag = r.origin === "REAL"
+        ? '<span class="origin-tag origin-live">LIVE SOURCE</span>'
+        : '<span class="origin-tag origin-sim">SIMULATED</span>';
       const statusBadge = r.status === "SOURCE_UNAVAILABLE" ? `<span class="status-pill error" style="font-size:.72rem;">⚠ UNAVAILABLE</span>`
+        : r.status === "EXTRACTION_ERROR" ? `<span class="status-pill error" style="font-size:.72rem;">⚠ EXTRACTION ERROR</span>`
+        : r.status === "STALE" ? `<span class="status-pill error" style="font-size:.72rem;">🟠 STALE</span>`
         : !r.valid ? `<span class="status-pill error" style="font-size:.72rem;">⚠ INVALID</span>`
         : state.monitoring && i === bestIdx && (state.rateType === "SELL" ? r.sellRate : r.buyRate) <= state.targetRate ? `<span class="status-pill reached" style="font-size:.72rem;">🔴 REACHED</span>`
+        : r.origin === "REAL" ? `<span class="status-pill live" style="font-size:.72rem;">🟢 LIVE</span>`
         : `<span class="status-pill waiting" style="font-size:.72rem;">🟡 WAITING</span>`;
       return `<tr class="${i === bestIdx ? "is-best" : ""}">
-        <td>${r.sourceName}${i === bestIdx ? '<span class="best-badge">Best</span>' : ""}</td>
+        <td>${r.sourceName}${i === bestIdx ? '<span class="best-badge">Best</span>' : ""}<br>${originTag}</td>
         <td>${r.branch || "—"}</td>
         <td class="num">${r.buyRate != null ? formatRate(r.buyRate) : "—"}</td>
         <td class="num">${r.sellRate != null ? formatRate(r.sellRate) : "—"}</td>
@@ -368,7 +502,7 @@
     if (pts.length < 2) {
       ctx.fillStyle = inkFaint;
       ctx.font = "13px 'IBM Plex Sans', sans-serif";
-      ctx.fillText("Start monitoring to begin recording simulated history…", pad.l, h / 2);
+      ctx.fillText("Start monitoring to begin recording rate history…", pad.l, h / 2);
       return;
     }
 
@@ -615,8 +749,10 @@
     $("targetRate").value = cur.base.toFixed(cur.decimals);
     wireForm();
     wireChartRange();
+    loadLiveData(); // also calls tick() once it resolves (or fails)
     tick();
     setInterval(tick, 4000);
+    setInterval(loadLiveData, LIVE_DATA_POLL_MS);
     setInterval(() => { $("clockLabel").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }, 1000);
     window.addEventListener("resize", renderChart);
   }

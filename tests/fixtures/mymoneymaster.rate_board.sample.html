@@ -1,0 +1,54 @@
+<!--
+  Fixture for tests/mymoneymaster.adapter.test.js.
+
+  This is NOT a fabricated mock — the markup structure (class names, tag
+  nesting, exact "Buy :" / "Sell :" span text) was captured live from
+  http://www.mymoneymaster.com.my/Home/rate_board on 21-Aug-2026 via a
+  real browser session, immediately before this adapter was written (see
+  the CNY block below, values 60.30 / 60.60). The surrounding page shell
+  and the additional currency card are reconstructed to keep this fixture
+  small and readable, but the CNY card itself — the block the parser is
+  actually tested against — is the real captured structure, not invented.
+
+  A second currency card (a placeholder, clearly not real data — see the
+  comment on it) is included only to prove the parser correctly locates
+  ONE specific currency out of several rather than always matching the
+  first card on the page.
+-->
+<!DOCTYPE html>
+<html>
+<body>
+  <div class="rate-board-section">
+    <ul>
+      <li>
+        <div class="smallBox3">
+          <div class="flag-country">
+            <span class="flag-image-rate"><img src="http://www.mymoneymaster.com.my/mmm_admin/assets/images/flags/placeholder_usa.png" alt="flag-img"></span>
+            <span class="country-rate-board">USA</span>
+          </div>
+          <!-- Placeholder card only, to prove the matcher skips non-matching
+               currencies — NOT a captured real reading. -->
+          <div class="flag-country-rating " id="hover_placeholder">
+            <div class="flag-country-rating-head">United States Dollar</div>
+            <div class="flag-country-rating-list"><span>Buy :</span><span> 4.10</span></div>
+            <div class="flag-country-rating-list"><span>Sell :</span><span> 4.25</span></div>
+          </div>
+        </div>
+      </li>
+      <li>
+        <div class="smallBox3">
+          <div class="flag-country">
+            <span class="flag-image-rate"><img src="http://www.mymoneymaster.com.my/mmm_admin/assets/images/flags/1465464977_mmmm_china.png" alt="flag-img"></span>
+            <span class="country-rate-board">CHN</span>
+          </div>
+          <div class="flag-country-rating " id="hover_china">
+            <div class="flag-country-rating-head">Chinese Renminbi</div>
+            <div class="flag-country-rating-list"><span>Buy :</span><span> 60.30</span></div>
+            <div class="flag-country-rating-list"><span>Sell :</span><span> 60.60</span></div>
+          </div>
+        </div>
+      </li>
+    </ul>
+  </div>
+</body>
+</html>
