@@ -1,5 +1,6 @@
 name: Deploy GitHub Pages
 
+<<<<<<< HEAD
 # Phase 2 addition: before every deploy, this workflow re-checks the live
 # My Money Master CNY rate and regenerates frontend/data/latest-rates.json
 # — a same-origin static JSON file the frontend reads as its interim
@@ -14,13 +15,18 @@ name: Deploy GitHub Pages
 # schedule. Until then, every check here is either triggered by a push
 # to main, or manually via this workflow's "Run workflow" button.
 
+=======
+>>>>>>> fd9fba958e3b5bee0fb69479d0d295248dd317a5
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+<<<<<<< HEAD
   # schedule:
   #   - cron: '*/5 * * * *'  # DO NOT enable before the compliance review above is done
+=======
+>>>>>>> fd9fba958e3b5bee0fb69479d0d295248dd317a5
 
 permissions:
   contents: read
@@ -39,6 +45,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+<<<<<<< HEAD
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -66,11 +73,18 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
+=======
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+>>>>>>> fd9fba958e3b5bee0fb69479d0d295248dd317a5
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: frontend
+<<<<<<< HEAD
 
+=======
+>>>>>>> fd9fba958e3b5bee0fb69479d0d295248dd317a5
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
