@@ -1,0 +1,41 @@
+{
+  "id": "mymoneymaster",
+  "displayName": "My Money Master",
+  "officialUrl": "http://www.mymoneymaster.com.my/",
+  "liveRateUrl": "http://www.mymoneymaster.com.my/Home/rate_board",
+  "notes": "Verified 21-Aug-2026 by opening the live site directly. The site does not serve a working HTTPS version (https:// redirects back to http://) — use the http URL. The 'Exchange Rate' nav link resolves to /Home/rate_board, not a guessable slug; do not hard-code an assumed path without re-checking if this ever 404s.",
+  "requiresBrowserAutomation": false,
+  "requiresBrowserAutomationReason": "CNY BUY/SELL values were confirmed present in the raw server-rendered HTML (fetched independently of a browser). A plain HTTP GET + HTML parser (e.g. cheerio) is sufficient for the primary path.",
+  "playwrightFallback": true,
+  "playwrightFallbackReason": "If the site migrates to client-side rendering in the future, plain-fetch extraction will start failing validation (fails safe). Keep a Playwright-based adapter with the same selectors ready as a fallback rather than only building fetch+parse.",
+  "extractionMethod": "HTTP_FETCH_HTML_PARSE",
+  "branchSupport": false,
+  "branchNotes": "No branch/location selector was found on the public site; My Money Master publishes a single site-wide rate per currency.",
+  "primarySelector": {
+    "description": "Scrolling ticker on the homepage (also mirrored on /Home/rate_board). Each list item is one currency in a predictable plain-text format.",
+    "page": "http://www.mymoneymaster.com.my/  (or /Home/rate_board)",
+    "cssSelector": ".rating-content.simply-scroll-list li",
+    "textPattern": "^(?<code>[A-Z]{3}):\\s*BUY\\s*(?<buy>[\\d.]+)\\s*\\([-\\d.]+\\)\\s*/\\s*SELL\\s*(?<sell>[\\d.]+)\\s*\\([-\\d.]+\\)",
+    "sampleMatchedText": "CNY: BUY 60.25 (0.150) / SELL 60.53 (-0.020)"
+  },
+  "secondarySelector": {
+    "description": "Per-country card on the Exchange Rate page. Values are split into whole/decimal <span> pairs for a digit-flip visual effect — concatenate them. There is also a hidden hover tooltip (class flag-country-rating) with the same figures as plain 'Buy : X' / 'Sell : Y' text, useful as a cross-check.",
+    "page": "http://www.mymoneymaster.com.my/Home/rate_board",
+    "cardHeadingContains": "Chinese Renminbi",
+    "note": "Use the ticker selector above as the primary target — it is plain text and does not require reassembling split digit spans."
+  },
+  "waitStrategy": {
+    "httpFetch": "none required — values are present on initial response",
+    "playwrightFallback": "wait for '.rating-content.simply-scroll-list li' to be attached, then read textContent"
+  },
+  "validation": {
+    "expectedRange": { "CNY": { "min": 40, "max": 80 } },
+    "notes": "Range is a sanity bound only, not a hard limit — widen per-currency ranges as real historical data accumulates. Reject a reading where BUY > SELL, or where the value looks like it's missing the /100 unit scaling (e.g. 0.60 instead of 60)."
+  },
+  "compliance": {
+    "robotsTxt": "not found (404) as of 21-Aug-2026 — no machine-readable crawl restriction in place",
+    "termsOfUseUrl": "linked from the site footer",
+    "actionRequired": "A human should read the Terms of Use page before this adapter is run on a continuous production schedule, per the project's compliance requirement."
+  },
+  "lastVerified": "2026-08-21"
+}

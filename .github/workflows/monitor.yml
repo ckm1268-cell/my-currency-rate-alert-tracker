@@ -1,0 +1,47 @@
+# Scheduled rate-monitoring workflow — Phase 8
+# ===============================================
+# STATUS: scaffold only, intentionally NOT scheduled yet.
+#
+# The adapters this workflow would call (backend/scrapers/*.adapter.js) are
+# still stubs that throw "not implemented" (Phase 2/3 work). Turning on the
+# cron schedule before then would just produce a wall of failed Actions runs.
+#
+# To activate once Phases 2-7 are done:
+#   1. Uncomment the `schedule:` block below (every 5 minutes, matching the
+#      project's default monitoring interval).
+#   2. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as encrypted repo
+#      secrets (Settings -> Secrets and variables -> Actions) — see
+#      .env.example for what's required. Never commit these values.
+#   3. Replace the placeholder run step with the real entry point once it
+#      exists (e.g. `node backend/scheduler/run.js`).
+
+name: Monitor Exchange Rates
+
+on:
+  workflow_dispatch: {} # manual "Run workflow" button only, for now
+  # schedule:
+  #   - cron: '*/5 * * * *'
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        working-directory: backend
+        run: npm install
+
+      - name: Install Playwright browsers
+        working-directory: backend
+        run: npx playwright install --with-deps chromium
+
+      - name: Placeholder — adapters not implemented yet
+        run: |
+          echo "Phase 1 scaffold: backend/scrapers adapters are stubs."
+          echo "This step is a placeholder until Phases 2-7 are complete."
+          exit 0

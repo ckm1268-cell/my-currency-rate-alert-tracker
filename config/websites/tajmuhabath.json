@@ -1,0 +1,46 @@
+{
+  "id": "tajmuhabath",
+  "displayName": "Taj Muhabath",
+  "officialUrl": "https://www.tajmuhabath.com.my/web/index.html",
+  "liveRateUrl": "https://www.tajmuhabath.com.my/web/rates.html",
+  "notes": "Verified 21-Aug-2026 by opening the live site directly. Independently fetching the raw HTML (outside a browser) returns the table headers with an EMPTY <tbody> — zero rate rows. Rows only exist after the page's JavaScript runs. Browser automation is not optional for this source.",
+  "requiresBrowserAutomation": true,
+  "requiresBrowserAutomationReason": "Confirmed: raw HTML has no rate data. Rows are populated client-side, each with its own 'Last Updated' timestamp appearing roughly 1-2 seconds apart from the next row, indicating progressive/async population rather than a single synchronous render.",
+  "extractionMethod": "PLAYWRIGHT_HEADLESS",
+  "branchSupport": true,
+  "branchNotes": "A branch dropdown (#dpdBranch) is present with 15 branches observed at verification time, e.g. 'THE EXCHANGE TRX', 'Leisure Mall, Cheras', 'Econsave, Balakong', 'Terminal One, Seremban', 'Aeon Big, Tun Hussein Onn', 'CS Bangi, Bangi', 'PETRONAS,GP', 'IOI City Mall, Putrajaya', 'Jalan Bunus, Masjid India', 'R&R,Gelang Patah-NB', 'R&R,Gelang Patah-SB', 'LARKIN SENTRAL', 'PETRON GELANG PATAH', 'LALAPORT BBCC', 'SEMUA HOUSE', 'AEON MALL CHERAS SELATAN'. The page loads with a default branch pre-selected (observed default: THE EXCHANGE TRX - LALAPORT BBCC) — re-verify the branch list before relying on it, it is admin-configurable and may change.",
+  "primarySelector": {
+    "description": "Rate table. One row per currency.",
+    "page": "https://www.tajmuhabath.com.my/web/rates.html",
+    "tableSelector": "table#example1",
+    "tableClassObserved": "table table-pad table-striped w-auto header-fixed",
+    "rowSelector": "table#example1 tbody tr",
+    "columns": ["flagIcon", "unit", "code", "currencyName", "weBuy", "weSell", "lastUpdated"],
+    "targetRowRule": "row where the 'code' cell text equals the ISO code, e.g. 'CNY'",
+    "branchSelectorId": "#dpdBranch"
+  },
+  "waitStrategy": {
+    "playwright": [
+      "goto liveRateUrl",
+      "optionally: select branch via #dpdBranch, then wait for table to re-populate",
+      "wait for 'table#example1 tbody tr' count > 0",
+      "re-check the target currency row's 'Last Updated' cell after a short settle delay (e.g. 2-3s) since rows fill in progressively — do not read on first paint"
+    ]
+  },
+  "validation": {
+    "expectedRange": { "CNY": { "min": 40, "max": 80 } },
+    "freshnessCheck": "compare the row's own 'Last Updated' timestamp (not just retrieval time) against a freshness threshold before labeling LIVE"
+  },
+  "compliance": {
+    "robotsTxt": "not found (404) as of 21-Aug-2026 — no machine-readable crawl restriction in place",
+    "actionRequired": "No CAPTCHA or login wall encountered during verification. Re-confirm branch list and selectors periodically — this is a smaller, more frequently re-themed site than My Money Master."
+  },
+  "sampleObservedRate": {
+    "branch": "THE EXCHANGE TRX - LALAPORT BBCC (default)",
+    "currency": "CNY",
+    "buy": 60.2,
+    "sell": 60.6,
+    "observedAt": "2026-08-21"
+  },
+  "lastVerified": "2026-08-21"
+}

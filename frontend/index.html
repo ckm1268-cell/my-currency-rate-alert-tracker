@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CKM Currency Rate Monitor — Phase 1 Preview</title>
+<meta name="description" content="Live currency-rate monitoring and target-rate alerts for Malaysian money changers. Phase 1 preview — dashboard UI running on simulated data.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="mock-banner">
+  🧪 <strong>SIMULATED DATA</strong> — this Phase 1 build has no live scraper wired in yet. Every rate on this page is generated locally for UI demonstration and is never labeled LIVE. See Phase 2/3 in the roadmap.
+</div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">CKM <em>Rate</em> Monitor</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <span class="brand-sub" id="clockLabel">—</span>
+    <span class="phase-chip">Phase 1 · UI scaffold</span>
+  </div>
+</header>
+
+<main class="layout">
+
+  <!-- ============================= FORM PANEL ============================= -->
+  <section class="form-panel" aria-labelledby="formHeading">
+    <h2 id="formHeading">Build your alert</h2>
+    <p class="lede">Set a target and CKM will watch it for you. Takes under a minute.</p>
+
+    <form id="alertForm">
+      <div class="field">
+        <label for="currency">Currency</label>
+        <select id="currency" name="currency"></select>
+      </div>
+
+      <div class="field">
+        <label for="rateType">Rate type</label>
+        <div class="segmented" id="rateTypeSeg" role="group" aria-label="Rate type">
+          <button type="button" data-value="SELL" aria-pressed="true">SELL</button>
+          <button type="button" data-value="BUY" aria-pressed="false">BUY</button>
+        </div>
+        <p class="hint dynamic" id="rateTypeHint"></p>
+      </div>
+
+      <div class="field">
+        <label for="targetRate">Target rate (MYR)</label>
+        <input type="number" id="targetRate" name="targetRate" step="0.0001" min="0" inputmode="decimal" placeholder="e.g. 60.50">
+        <p class="hint" id="targetRateHint">Numeric, greater than zero. Up to 4 decimal places.</p>
+      </div>
+
+      <div class="field">
+        <label>Money changer</label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="srcMMM" value="mymoneymaster" checked>
+          <label for="srcMMM">My Money Master</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="srcTM" value="tajmuhabath" checked>
+          <label for="srcTM">Taj Muhabath</label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="branch">Branch <span style="text-transform:none; font-weight:400;">(Taj Muhabath)</span></label>
+        <select id="branch" name="branch"></select>
+        <p class="hint" id="branchHint">My Money Master publishes one site-wide rate — no branch selection applies to it.</p>
+      </div>
+
+      <div class="field">
+        <label for="condition">Alert condition</label>
+        <select id="condition" name="condition">
+          <option value="AT_OR_BELOW" selected>Rate reaches or falls below target</option>
+          <option value="REACHES">Rate reaches target exactly</option>
+          <option value="BELOW">Rate is below target</option>
+          <option value="ABOVE">Rate is above target</option>
+          <option value="PCT_CHANGE">Rate changes by X%</option>
+        </select>
+      </div>
+
+      <div class="field" id="pctChangeField" style="display:none;">
+        <label for="pctChange">Change threshold (%)</label>
+        <input type="number" id="pctChange" step="0.1" min="0.1" value="1">
+      </div>
+
+      <div class="field">
+        <label for="interval">Monitoring interval</label>
+        <select id="interval" name="interval">
+          <option value="1">Every 1 minute</option>
+          <option value="5" selected>Every 5 minutes (default)</option>
+          <option value="10">Every 10 minutes</option>
+          <option value="15">Every 15 minutes</option>
+          <option value="30">Every 30 minutes</option>
+        </select>
+        <p class="hint">In this Phase 1 demo, the simulation ticks every few seconds regardless of this setting, so you can see the states without waiting.</p>
+      </div>
+
+      <div class="field">
+        <label for="notification">Notification</label>
+        <select id="notification" name="notification">
+          <option value="browser" selected>Browser notification</option>
+          <option value="email" disabled>Email — coming in Phase 10</option>
+          <option value="telegram" disabled>Telegram — coming in Phase 10</option>
+          <option value="whatsapp" disabled>WhatsApp — coming in Phase 10+</option>
+        </select>
+      </div>
+
+      <button type="submit" class="btn-primary" id="startBtn">Start monitoring</button>
+      <button type="button" class="btn-secondary" id="resetBtn">Reset alert</button>
+      <p class="form-status" id="formStatus"></p>
+    </form>
+  </section>
+
+  <!-- ============================== MAIN COLUMN ============================== -->
+  <section class="main-col">
+
+    <!-- Hero rate card -->
+    <article class="card" id="heroCard">
+      <div class="card-head">
+        <div>
+          <div class="card-eyebrow">Best available rate for your alert</div>
+          <div class="hero-pair" id="heroPair">CNY / MYR</div>
+        </div>
+        <span class="status-pill mock" id="statusPill">🧪 SIMULATED</span>
+      </div>
+
+      <div class="hero-grid">
+        <div>
+          <div class="hero-rate-label" id="heroRateLabel">SIMULATED SELL RATE</div>
+          <div class="hero-rate-value tabular" id="heroRateValue">--.--</div>
+        </div>
+        <div class="hero-sub">
+          <div>
+            <div class="hero-metric-label">Target</div>
+            <div class="hero-metric-value tabular" id="heroTarget">—</div>
+          </div>
+        </div>
+        <div class="hero-sub">
+          <div>
+            <div class="hero-metric-label">Difference</div>
+            <div class="hero-metric-value tabular" id="heroDiff">—</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-footer">
+        <span id="heroSourceLabel">Best of your selected sources</span>
+        <span class="last-checked" id="lastChecked">Last checked: —</span>
+      </div>
+    </article>
+
+    <!-- Multi-source comparison -->
+    <article class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-eyebrow">Multi-source comparison</div>
+          <h3>Every selected money changer, side by side</h3>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="compare" id="compareTable">
+          <thead>
+            <tr>
+              <th>Money changer</th>
+              <th>Branch</th>
+              <th>Buy</th>
+              <th>Sell</th>
+              <th>Target</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="compareBody"></tbody>
+        </table>
+      </div>
+    </article>
+
+    <!-- History chart -->
+    <article class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-eyebrow">Rate history (simulated)</div>
+          <h3>Selected rate over time</h3>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-range" role="group" aria-label="History range">
+          <button type="button" data-range="1h" aria-pressed="true">1 hour</button>
+          <button type="button" data-range="6h" aria-pressed="false">6 hours</button>
+          <button type="button" data-range="24h" aria-pressed="false">24 hours</button>
+          <button type="button" data-range="7d" aria-pressed="false">7 days</button>
+        </div>
+        <canvas id="historyChart" width="900" height="180"></canvas>
+      </div>
+    </article>
+
+    <!-- Activity log -->
+    <article class="card">
+      <div class="card-head">
+        <div>
+          <div class="card-eyebrow">Activity log</div>
+          <h3>What the monitor has done</h3>
+        </div>
+      </div>
+      <ul class="log-list" id="activityLog"></ul>
+    </article>
+
+    <!-- Test controls -->
+    <article class="card test-controls">
+      <div class="card-eyebrow">Test controls — Phase 1 demo only</div>
+      <p>These buttons exist so you can see every dashboard state without waiting for the simulation to land on it naturally. They will not exist once real adapters are wired in.</p>
+      <div class="btn-row">
+        <button type="button" id="testForceTrigger">Force target reached</button>
+        <button type="button" id="testSourceDown">Simulate source unavailable</button>
+        <button type="button" id="testValidationError">Simulate validation error</button>
+        <button type="button" id="testResume">Resume normal simulation</button>
+      </div>
+    </article>
+
+  </section>
+</main>
+
+<footer class="site-footer">
+  CKM Currency Rate Monitor — Phase 1 scaffold · Sources referenced: My Money Master, Taj Muhabath · No live connection in this build.
+</footer>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
