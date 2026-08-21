@@ -110,6 +110,30 @@
   const $ = (id) => document.getElementById(id);
 
   // ---------------------------------------------------------------------
+  // Phase 7 integration bridge
+  // ---------------------------------------------------------------------
+  // frontend/auth.js (loaded after this file) wires the dashboard to
+  // Supabase for per-user saved alerts. Rather than reaching into this
+  // IIFE's closed-over `state` directly, auth.js reads it through this
+  // tiny, deliberately narrow public surface, and sets the hook callbacks
+  // below to learn about events it cares about (a target being reached,
+  // monitoring starting/resetting) without this file needing to know
+  // Supabase exists at all. Every hook call is wrapped in try/catch so a
+  // Phase 7 failure (e.g. not signed in, network error) can never break
+  // the Phase 1-6 behavior this file is responsible for.
+  window.CKM = window.CKM || {};
+  window.CKM.getState = () => state;
+  window.CKM.onAlertTriggered = null; // (reading, value) => void
+  window.CKM.onMonitoringStarted = null; // () => void
+  window.CKM.onAlertReset = null; // () => void
+
+  function callHook(name, ...args) {
+    const fn = window.CKM && window.CKM[name];
+    if (typeof fn !== "function") return;
+    try { fn(...args); } catch (err) { /* a Phase 7 hook must never break core monitoring */ }
+  }
+
+  // ---------------------------------------------------------------------
   // Real live data (My Money Master CNY, Phase 2) — loaded from a static
   // JSON file a backend GitHub Actions job regenerates on every deploy.
   // See backend/scripts/checkRate.js and .github/workflows/pages.yml.
@@ -604,6 +628,7 @@
             : "This is simulated data, not a live rate."),
       });
     }
+    callHook("onAlertTriggered", reading, value);
   }
 
   function showToast(msg) {
@@ -711,6 +736,7 @@
       $("startBtn").dataset.active = "false";
       $("formStatus").textContent = "Alert reset. Configure and start again whenever you're ready.";
       logActivity("Alert reset by user.");
+      callHook("onAlertReset");
       tick();
     });
 
@@ -750,6 +776,7 @@
     if (state.notification === "browser" && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
+    callHook("onMonitoringStarted");
     tick();
   }
 

@@ -9,7 +9,7 @@ Initial scope: **CNY/MYR, SELL rate**, from **My Money Master** and
 **Taj Muhabath**. Architecture supports adding more currencies, branches,
 and sources without a redesign.
 
-## Current status: Phase 3 of 10
+## Current status: Phase 7 of 10
 
 | Phase | What | Status |
 |---|---|---|
@@ -17,11 +17,11 @@ and sources without a redesign.
 | 2 | My Money Master live retrieval | ✅ live (CNY SELL/BUY) |
 | 3 | Taj Muhabath live retrieval | ✅ live (CNY SELL/BUY, branch: LALAPORT BBCC) |
 | 4 | Rate validation wired into adapters | ✅ done for both adapters (`backend/validation/validateRate.js`) |
-| 5 | Target comparison engine wired to real data | ✅ done (`isTargetMet` in `frontend/app.js` already operates on real readings) |
-| 6 | Browser notifications wired to real alerts | ⏳ not started |
-| 7 | Supabase (DB, auth, multi-user) | ⏳ not started |
-| 8 | GitHub Pages + GitHub Actions scheduler live in production | 🟡 partial — runs on every deploy (push/manual), no cron yet (see Compliance below) |
-| 9 | Full test pass | 🟡 partial — unit tests for both adapters' parsing logic exist and pass; no end-to-end/multi-user test pass yet |
+| 5 | Target comparison engine wired to real data | ✅ done — `isTargetMet` (`frontend/app.js`) operates on real readings; `backend/targetEngine/compareTarget.js` is the tested server-side twin, not yet called anywhere (Phase 8) |
+| 6 | Browser notifications wired to real alerts | ✅ live-tested end-to-end against a real trigger, not just read-through |
+| 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + magic-link sign-in + per-user saved alerts built — **requires you to provision your own Supabase project**, see `SUPABASE_SETUP.md` |
+| 8 | GitHub Pages + GitHub Actions scheduler live in production | 🟡 partial — the live-rate checks run on every deploy (push/manual) via `pages.yml`, no cron yet (see Compliance below); the Supabase-backed scheduled evaluation in `monitor.yml` is still a placeholder |
+| 9 | Full test pass | 🟡 partial — unit tests for both adapters' parsing logic and the target-comparison engine exist and pass; no end-to-end/multi-user test pass yet (see `SUPABASE_SETUP.md` step 7 for a manual multi-user isolation test) |
 | 10 | Email / Telegram, rate-history charts | ⏳ not started |
 
 **CNY at both money changers is real.** My Money Master CNY and Taj
@@ -48,6 +48,17 @@ that endpoint requires an authorization this adapter does not have and
 should not attempt to replicate. See the header comment in
 `backend/scrapers/tajmuhabath.adapter.js` for details.
 
+### Accounts (Phase 7 — optional)
+
+The dashboard works fully without signing in, exactly as it did in Phases
+1-6. Signing in (magic-link email, no password) additionally lets you save
+your current alert configuration to your own account, isolated from every
+other user by Postgres Row-Level Security — see `database/schema.sql`. This
+requires a Supabase project, which you provision yourself; **see
+`SUPABASE_SETUP.md` for the full step-by-step walkthrough.** Until that's
+done, the account card on the dashboard shows a small "not configured yet"
+notice and nothing else on the page is affected.
+
 ## Try it
 
 Open `frontend/index.html` directly in a browser, or serve the folder:
@@ -67,17 +78,22 @@ currency-rate-alert/
 ├── frontend/                 # GitHub Pages site — static, no secrets
 │   ├── index.html
 │   ├── styles.css
-│   └── app.js
+│   ├── app.js
+│   ├── auth.js                # Phase 7 — sign-in + saved alerts UI, additive to app.js
+│   └── supabaseConfig.js      # Phase 7 — your project URL + anon key (safe to commit)
 ├── backend/                  # Phase 2+ — never deployed to GitHub Pages
 │   ├── scrapers/              # one adapter per money changer
 │   ├── validation/
 │   ├── targetEngine/
 │   ├── notifications/
-│   └── db/
+│   └── db/                    # Supabase service-role client (backend-only)
+├── database/
+│   └── schema.sql             # Phase 7 — tables + Row-Level Security policies
 ├── config/websites/          # per-source URLs, selectors, wait strategy
 ├── .github/workflows/         # scheduled monitor (currently manual-trigger only)
 ├── tests/
 ├── .env.example
+├── SUPABASE_SETUP.md          # Phase 7 — provisioning walkthrough
 └── LICENSE
 ```
 
@@ -133,14 +149,24 @@ To set this up on a fresh fork/clone:
   than LALAPORT BBCC. `frontend/app.js` generates these with a small random
   walk around realistic starting values and always labels them SIMULATED —
   never LIVE, per the project's core rule.
-- **Not yet built:** the database, multi-user auth, and every notification
-  channel beyond the browser demo (Phase 6+).
+- **Real, as of Phase 7 (once you provision Supabase):** account sign-in,
+  saved per-user alerts, and their isolation — enforced by the database
+  itself (`database/schema.sql`'s Row-Level Security policies), not just by
+  the UI. See `SUPABASE_SETUP.md`.
+- **Not yet built:** the scheduled server-side job that checks a *saved*
+  alert in the background (Phase 8 — today, a saved alert is only actually
+  evaluated while the matching browser tab is open and monitoring, same as
+  every phase before it), and every notification channel beyond the
+  browser demo (Phase 10).
 
 ## Environment variables
 
-See `.env.example`. None of these are required to run the Phase 1 frontend
-— they matter starting Phase 7 (Supabase) and Phase 8 (GitHub Actions
-secrets for the scheduled scraper).
+See `.env.example`. None of these are required to run the Phase 1-6
+frontend as a signed-out demo. `SUPABASE_URL` / `SUPABASE_ANON_KEY` matter
+once you provision Supabase for Phase 7 (see `SUPABASE_SETUP.md`) — the
+anon key goes in `frontend/supabaseConfig.js`, not `.env` (that file is for
+backend-only values). `SUPABASE_SERVICE_ROLE_KEY` and the email/Telegram
+keys are Phase 8/10 — backend/GitHub Actions secrets only, never committed.
 
 ## License
 

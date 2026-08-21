@@ -22,7 +22,7 @@
   </div>
   <div style="display:flex; align-items:center; gap:10px;">
     <span class="brand-sub" id="clockLabel">—</span>
-    <span class="phase-chip">Phase 3 · both sources live</span>
+    <span class="phase-chip">Phase 7 · optional accounts</span>
   </div>
 </header>
 
@@ -118,6 +118,43 @@
 
   <!-- ============================== MAIN COLUMN ============================== -->
   <section class="main-col">
+
+    <!-- Account / saved alerts (Phase 7 — Supabase, optional; the rest of the
+         dashboard works fully signed out) -->
+    <article class="card" id="accountCard">
+      <div class="card-head">
+        <div>
+          <div class="card-eyebrow">Your account · Phase 7</div>
+          <h3>Save alerts to your account</h3>
+        </div>
+        <span class="status-pill mock" id="authStatusPill">Not signed in</span>
+      </div>
+
+      <p class="hint" id="authConfigNotice" style="display:none;"></p>
+
+      <form id="signInForm" class="account-form">
+        <div class="field">
+          <label for="authEmail">Email</label>
+          <input type="email" id="authEmail" placeholder="you@example.com" required>
+        </div>
+        <button type="submit" class="btn-primary" id="sendMagicLinkBtn">Send magic link</button>
+        <p class="form-status" id="authFormStatus"></p>
+      </form>
+
+      <div id="signedInPanel" style="display:none;">
+        <p class="hint">Signed in as <strong id="authUserEmail"></strong>.</p>
+        <button type="button" class="btn-secondary" id="signOutBtn">Sign out</button>
+
+        <div class="account-divider"></div>
+
+        <button type="button" class="btn-primary" id="saveAlertBtn">💾 Save current alert to my account</button>
+        <p class="hint">Uses the settings from the panel on the left — currency, rate type, target, sources, branch, condition, interval, and notification.</p>
+        <p class="form-status" id="saveAlertStatus"></p>
+
+        <h4 class="account-subhead">My saved alerts</h4>
+        <ul class="alert-list" id="myAlertsList"></ul>
+      </div>
+    </article>
 
     <!-- Hero rate card -->
     <article class="card" id="heroCard">
@@ -225,11 +262,14 @@
 </main>
 
 <footer class="site-footer">
-  MY Currency Rate Tracker — Phase 3 · My Money Master CNY and Taj Muhabath CNY are real live connections · other currencies are still simulated.
+  MY Currency Rate Tracker — My Money Master CNY and Taj Muhabath CNY are real live connections · other currencies are still simulated · optional accounts (Phase 7) let you save alerts, isolated per user.
 </footer>
 
 <div id="toast" role="status" aria-live="polite"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabaseConfig.js"></script>
 <script src="app.js"></script>
+<script src="auth.js"></script>
 </body>
 </html>
