@@ -14,7 +14,7 @@
   "primarySelector": {
     "description": "Per-country card on the Exchange Rate page. Each currency is a '.smallBox3' block containing a '.flag-country-rating-head' (the currency's full display name, e.g. 'Chinese Renminbi' — NOT the ISO code) followed by two '.flag-country-rating-list' sibling divs, one for Buy and one for Sell, each holding two plain <span>s: a label ('Buy :' / 'Sell :') and the numeric value.",
     "page": "http://www.mymoneymaster.com.my/Home/rate_board",
-    "cardBlockSelector": ".smallBox3",
+    "cardBlockSelector": ".ratebox-table-wrap",
     "headingSelector": ".flag-country-rating-head",
     "valueRowSelector": ".flag-country-rating-list",
     "matchStrategy": "For each '.smallBox3' block, read '.flag-country-rating-head' text and match it against config.currencyDisplayNames[currencyCode] (exact, trimmed). Within the matching block, read each '.flag-country-rating-list' div's two child <span>s: first span's text (case-insensitive, colon-stripped) tells you Buy vs Sell; second span's text is the numeric value.",
