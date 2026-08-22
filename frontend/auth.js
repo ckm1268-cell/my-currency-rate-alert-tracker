@@ -111,11 +111,56 @@
     }
   }
 
+  // Clean base URL (origin + path only) — deliberately excludes any
+  // hash/query from the current address bar. Using window.location.href
+  // directly here was a real bug: once a callback ever lands on this page
+  // with #error=... (e.g. an expired/already-used magic link), that hash
+  // stays in the address bar (nothing was clearing it — see clearAuthHash()
+  // below, added at the same time as this fix). If a *second* magic link is
+  // then requested from the same tab without a manual reload,
+  // window.location.href at that moment already contains the old
+  // "#error=..." fragment, so it gets sent to Supabase as emailRedirectTo.
+  // Supabase's own redirect then appends ITS "#access_token=..." (or
+  // "#error=...") onto a URL that already has a "#" in it — a URL can only
+  // have one real fragment, so everything after the second "#" is not
+  // parsed the way the Supabase JS client expects, and the callback can
+  // fail even on a click made within seconds of a genuinely fresh link.
+  function cleanRedirectUrl() {
+    return window.location.origin + window.location.pathname;
+  }
+
+  // Strip any leftover #access_token=... / #error=... from the address bar
+  // after we've handled it, so it can never be picked up by a later
+  // emailRedirectTo: window.location.href-style call (see above) or simply
+  // confuse the user into thinking a fresh attempt already failed.
+  function clearAuthHash() {
+    if (window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  }
+
+  // Surface a Supabase auth callback error (e.g. #error=access_denied&
+  // error_code=otp_expired&error_description=...) in the sign-in form
+  // instead of leaving the user staring at a raw URL fragment with no
+  // explanation in the UI.
+  function reportHashError() {
+    const hash = window.location.hash;
+    if (!hash || hash.indexOf("error=") === -1) return false;
+    const params = new URLSearchParams(hash.replace(/^#/, ""));
+    const code = params.get("error_code");
+    const description = params.get("error_description");
+    const friendly = code === "otp_expired"
+      ? "That magic link expired or was already used — request a new one below and click it right away (use the most recent email if you requested more than one)."
+      : `Sign-in failed: ${description ? description.replace(/\+/g, " ") : code || "unknown error"}.`;
+    setAuthFormStatus(friendly);
+    return true;
+  }
+
   async function sendMagicLink(email) {
     setAuthFormStatus("Sending magic link…");
     const { error } = await sb.auth.signInWithOtp({
       email,
-      options: { emailRedirectTo: window.location.href },
+      options: { emailRedirectTo: cleanRedirectUrl() },
     });
     if (error) {
       setAuthFormStatus(`Could not send magic link: ${error.message}`);
@@ -314,8 +359,20 @@
       window.CKM.onAlertReset = handleAlertReset;
     }
 
-    sb.auth.onAuthStateChange((_event, session) => updateAuthUI(session));
-    sb.auth.getSession().then(({ data }) => updateAuthUI(data ? data.session : null));
+    // Show a friendly message for a failed callback (e.g. expired/reused
+    // magic link) instead of leaving a raw #error=... in the address bar —
+    // then always strip the hash so it can't leak into a later
+    // emailRedirectTo (see cleanRedirectUrl()'s comment above).
+    const hadError = reportHashError();
+
+    sb.auth.onAuthStateChange((_event, session) => {
+      updateAuthUI(session);
+      clearAuthHash();
+    });
+    sb.auth.getSession().then(({ data }) => {
+      updateAuthUI(data ? data.session : null);
+      if (hadError) clearAuthHash();
+    });
   }
 
   document.addEventListener("DOMContentLoaded", init);
