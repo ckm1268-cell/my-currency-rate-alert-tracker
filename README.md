@@ -25,11 +25,13 @@ below).
 | 5 | Target comparison engine wired to real data | ✅ done — `isTargetMet` (`frontend/app.js`) operates on real readings; `backend/targetEngine/compareTarget.js` is the tested server-side twin, now actually called by Phase 8's scheduler |
 | 6 | Browser notifications wired to real alerts | ✅ live-tested end-to-end against a real trigger, not just read-through |
 | 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + email/password sign-up + log-in + password reset + per-user saved alerts — **live-tested end-to-end**, including a real cross-account isolation check across three separate accounts (see `SUPABASE_SETUP.md`) |
-| 8 | Scheduled backend job (Supabase-backed) | ✅ implemented and **live-tested successfully** — `backend/scheduler/run.js` (wired into `.github/workflows/monitor.yml`) fetches every ACTIVE alert, checks both adapters, writes to the `rates` table, evaluates each alert against the **best rate across its selected sources**, and marks it TRIGGERED + logs a `notifications` row the moment a target is met — no browser tab required. Runs via manual "Run workflow" trigger only; **no recurring cron yet**, deliberately gated on the Terms of Use compliance review (see Compliance note below). |
-| 9 | Full test pass | 🟡 partial — unit tests for all three adapters' parsing logic, the target-comparison engine, the scheduler's pure combo-selection and notify-target-resolution logic, and the notification-message formatting all exist and pass (63/63, updated 22-Aug-2026 with the simultaneous multi-channel notification-targets tests); no end-to-end/multi-user automated test pass yet beyond the manual proofs recorded for Phases 7/8 |
+| 8 | Scheduled backend job (Supabase-backed) | ✅ implemented and **live-tested successfully** — `backend/scheduler/run.js` (wired into `.github/workflows/monitor.yml`) fetches every ACTIVE alert, checks both adapters, writes to the `rates` table, evaluates each alert against the **best rate across its selected sources**, and marks it TRIGGERED + logs a `notifications` row the moment a target is met — no browser tab required. As of Phase 14 this runs on a **recurring 5-minute schedule**, not just a manual click — see that row below and the Compliance note. |
+| 9 | Full test pass | 🟡 partial — unit tests for all three adapters' parsing logic, the target-comparison engine, the scheduler's pure combo-selection, notify-target-resolution, and due-for-check logic, and the notification-message formatting all exist and pass (69/69, updated 22-Aug-2026 with the Phase 14 due-for-check tests); no end-to-end/multi-user automated test pass yet beyond the manual proofs recorded for Phases 7/8 |
 | 10 | Email / Telegram, rate-history charts | ✅ implemented — real email (Resend) and Telegram delivery from `backend/scheduler/run.js` via `backend/notifications/notify.js` (see `NOTIFICATIONS_SETUP.md`), plus a real, Supabase-backed rate-history chart (`frontend/rateHistory.js`) for signed-in users, replacing the old session-only chart for anyone signed in. Telegram delivery has since been confirmed `DELIVERED` in a real test run; email is still blocked on Resend's sandbox-sending restriction — see `NOTIFICATIONS_SETUP.md`'s Troubleshooting section. |
 | — | Merchantrade Asia live retrieval (post-Phase 10, 22-Aug-2026) | ✅ live (CNY SELL/BUY) — added on request, alongside a documented look at three other money changers that could NOT be added yet (MaxMoney: blocked by a `403 Forbidden`; Spectrum Forex: domain does not resolve; Vital Rate: parked domain, likely absorbed into Merchantrade Asia) — see the "Money changers" section below for the full findings. |
 | — | Simultaneous multi-channel notifications (post-Phase 10, 22-Aug-2026) | ✅ done — the Notification field is now checkboxes, not a single dropdown: an alert can select any combination of Browser/Email/Telegram at once, and **all** selected channels fire together via `Promise.all` when the target is met (`resolveNotifyTargets()` + the notify loop in `backend/scheduler/run.js`), instead of only whichever one was picked. Requires the `notification_methods` (array) column added by the Phase 11 migration block at the bottom of `database/schema.sql` — the old singular `notification_method` column is backfilled into the array automatically, then dropped, so **this schema.sql must be re-run in Supabase's SQL Editor** for saving/sending to keep working. |
+| — | Edit an existing saved alert (post-Phase 10, 22-Aug-2026) | ✅ done — each saved alert now has an **Edit** button alongside Disable/Delete. It loads that alert's exact settings back into the form (`window.CKM.loadAlertIntoForm()` in `frontend/app.js`), shows an "Editing…" banner with Cancel, and re-labels Save as **Update this alert** — clicking it does a Supabase `UPDATE` on that same row instead of creating a new one. No schema change needed. |
+| 14 | Recurring schedule — the monitoring interval becomes real | ✅ done, 22-Aug-2026, **at the project owner's explicit request** — `.github/workflows/monitor.yml` now runs every 5 minutes via `schedule:`, not only on a manual click. `alerts.last_checked_at` (new column, `database/schema.sql`'s Phase 14 migration) plus `run.js`'s `isDueForCheck()` make each alert's own **Monitoring interval** dropdown actually throttle how often it's re-checked — a workflow run skips any alert whose own interval hasn't elapsed yet. A single alert can never be checked *more* often than the workflow's own 5-minute cadence, only less. See the Compliance note directly below for exactly what was (and wasn't) verified about each site's Terms of Use before this was turned on — this is a real change in how often these three real sites get automated traffic, and it deserves to be read, not just skimmed. |
 
 **CNY at all three money changers is real.** My Money Master CNY, Taj
 Muhabath CNY (branch: LALAPORT BBCC), and Merchantrade Asia CNY are
@@ -64,12 +66,13 @@ Requested via the dashboard's currency dropdown. Both are now selectable, and **
 
 One thing worth knowing if you're reading a target rate for either: **Merchantrade Asia doesn't quote every currency per 1 unit.** CNY and TWD are per 100 units (label reads "100 CNY" / "100 TWD"), but VND is quoted per **1,000,000** units ("1000000 VND") — confirmed live, not assumed (see the `validation.notes` field in the config file). The currency dropdown's VND/TWD labels spell out the unit denomination for exactly this reason, and the simulated fallback values for both are scaled to match, so a multi-source alert comparing a simulated My Money Master reading against a real Merchantrade Asia one stays apples-to-apples.
 
-### Compliance note (read before enabling any schedule)
+### Compliance note (read this — `monitor.yml` now runs on a recurring schedule)
 
-Neither `pages.yml` nor `monitor.yml` runs on a cron yet. All three of
-`config/websites/mymoneymaster.json`, `config/websites/tajmuhabath.json`,
-and `config/websites/merchantradeasia.json` flag an open action item: a
-human should read each site's Terms of Use before this runs on a
+Through Phase 13, neither `pages.yml` nor `monitor.yml` ran on a cron. All
+three of `config/websites/mymoneymaster.json`,
+`config/websites/tajmuhabath.json`, and
+`config/websites/merchantradeasia.json` flagged the same open action item:
+a human should read each site's Terms of Use before this runs on a
 recurring, unattended schedule. Additionally, the Taj Muhabath adapter
 deliberately does NOT call the internal API endpoint its branch dropdown
 uses internally (discovered during the Phase 3 build) — that endpoint
@@ -81,14 +84,36 @@ related example of the same principle applied at the URL-access level
 rather than the API level — a `403 Forbidden` was treated as an access
 control to respect, not a puzzle to work around.
 
-As of Phase 8, `monitor.yml` runs a real, fully-implemented pipeline
-(`backend/scheduler/run.js`) on every manual trigger — this compliance
-blocker now gates a functional job, not a placeholder. As of Phase 10, that
-same manual-trigger-only job also sends real email/Telegram notifications
-and is what feeds the real rate-history chart — the stakes of this blocker
-have risen twice since it was first flagged in Phase 2, and it still hasn't
-moved. Do not uncomment the `schedule:` block in that file until the Terms
-of Use review above has actually been done.
+**Phase 14 (22-Aug-2026): the project owner explicitly decided to turn the
+schedule on**, at a modest 5-minute interval, after being told what had and
+hadn't actually been checked. For the record, here's exactly what that
+review found, tool limitations included, so this isn't overstated as more
+thorough than it was:
+
+- **Merchantrade Asia** — its Terms & Conditions page
+  (`https://mtradeasia.com/legal/terms-and-conditions`) WAS fetched and
+  read. No clause addressing automated access, scraping, bots, or
+  crawlers was found. `robots.txt` explicitly allows the `/exchange` page
+  (see that config file's `compliance` block).
+- **My Money Master** — no `robots.txt` restriction exists (404). Its
+  Terms of Use page (`/Home/policy`) could NOT actually be fetched: the
+  site has no working HTTPS (`https://` redirects back to `http://`, which
+  the fetching tool used for this review can't follow — a real technical
+  limitation, not a skipped step). Genuinely unread.
+- **Taj Muhabath** — no public Terms of Use page could be located at all;
+  the site only exposes a Privacy link and a registration-gated "terms"
+  reference reachable after signing up. Genuinely unread.
+
+In short: nothing found says "don't automate this," but two of the three
+sites' actual Terms of Use text was never read, for reasons outside the
+tooling's control. If you're the project owner reading this later and want
+to revisit that decision — tighten the interval, pause it, or actually get
+eyes on those two remaining pages (e.g. open `http://www.mymoneymaster.com.my/Home/policy`
+directly in a browser, since a browser follows that redirect fine even
+though the automated fetch tool couldn't) — comment the `schedule:` block
+back out in `.github/workflows/monitor.yml` (the `workflow_dispatch:`
+manual trigger stays available either way) and it goes back to manual-only
+immediately.
 
 ### Accounts (Phase 7 — optional)
 

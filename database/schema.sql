@@ -98,6 +98,19 @@ create table if not exists public.alerts (
   status                 text not null default 'ACTIVE'
                            check (status in ('ACTIVE', 'TRIGGERED', 'DISABLED')),
 
+  last_checked_at        timestamptz,                              -- Phase 14: set by backend/scheduler/run.js every time this
+                                                                    -- alert is actually evaluated against a fresh reading (not
+                                                                    -- just when it triggers). Now that monitor.yml runs on a
+                                                                    -- recurring schedule instead of only a manual click, this is
+                                                                    -- what lets each alert's own monitoring_interval_minutes mean
+                                                                    -- something real: the scheduler skips re-evaluating an alert
+                                                                    -- whose last_checked_at is more recent than its own interval.
+                                                                    -- This can only ever throttle DOWN from the workflow's shared
+                                                                    -- cadence (e.g. skip an "every 30 min" alert on most of the
+                                                                    -- workflow's every-5-min runs) — it can never check an
+                                                                    -- individual alert MORE often than the workflow itself runs.
+                                                                    -- See run.js's isDueForCheck() for the exact logic.
+
   created_at             timestamptz not null default now(),
   updated_at             timestamptz not null default now()
 );
@@ -107,6 +120,7 @@ comment on table public.alerts is
 
 create index if not exists alerts_user_id_idx on public.alerts (user_id);
 create index if not exists alerts_status_idx on public.alerts (status);
+create index if not exists alerts_last_checked_at_idx on public.alerts (last_checked_at); -- Phase 14
 
 -- Keep updated_at current on every UPDATE.
 create or replace function public.set_updated_at()
@@ -313,6 +327,20 @@ alter table public.alerts
 -- migration to read the plural column instead.
 alter table public.alerts
   drop column if exists notification_method;
+
+-- -----------------------------------------------------------------------------
+-- Phase 14 migration — recurring schedule support: last_checked_at.
+-- Safe to re-run: `add column if not exists` is a no-op if it's already there.
+-- Every existing row simply gets last_checked_at = NULL, which run.js already
+-- treats as "never checked, due immediately" — no backfill needed for
+-- correctness (worst case, every alert is treated as due on the very first
+-- recurring run after this migrates, which is exactly what you want).
+-- -----------------------------------------------------------------------------
+
+alter table public.alerts
+  add column if not exists last_checked_at timestamptz;
+
+create index if not exists alerts_last_checked_at_idx on public.alerts (last_checked_at);
 
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to

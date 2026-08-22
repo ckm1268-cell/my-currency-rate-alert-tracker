@@ -49,7 +49,7 @@
   "compliance": {
     "robotsTxt": "not found (404) as of the original architecture review (21-Aug-2026) — not re-checked during this Phase 3 build; re-verify before enabling any cron schedule.",
     "termsOfUseUrl": "not located during either inspection — check the site footer / About Us page before continuous production polling.",
-    "actionRequired": "Same as My Money Master: a human should read this site's Terms of Use before this adapter runs on a continuous production schedule. The GitHub Actions workflow remains push/manual-trigger only (no cron) until that review happens for BOTH sites. Additionally: the internal API discovered during this build (fx.tajmuhabath.com.my/rbapi/...) must never be called directly by this codebase — see 'notes' above."
+    "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. No public Terms of Use page could be located for this site at all — only a Privacy link and a registration-gated \"terms\" reference. Genuinely unread, not cleared. See README.md's Compliance note for the full picture across all three sites. Additionally: the internal API discovered during this build (fx.tajmuhabath.com.my/rbapi/...) must never be called directly by this codebase — see 'notes' above."
   },
   "lastVerified": "2026-08-21"
 }

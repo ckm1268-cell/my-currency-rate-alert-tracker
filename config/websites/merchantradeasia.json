@@ -41,7 +41,7 @@
   "compliance": {
     "robotsTxt": "Checked live 22-Aug-2026 at https://mtradeasia.com/robots.txt — 'User-Agent: *  Allow: /  Disallow: /private/'. The /exchange page is not under /private/, so it is not disallowed.",
     "termsOfUseUrl": "not located during this inspection — check the site footer / About Us page before continuous production polling.",
-    "actionRequired": "Same as My Money Master and Taj Muhabath: a human should read this site's Terms of Use before this adapter runs on a continuous production schedule. It joins the existing compliance blocker already gating .github/workflows/monitor.yml's schedule — see README.md's Compliance note. Use a low, respectful request frequency once/if that review clears this site and a schedule is enabled; this is a real production site serving real customers, not a sandbox."
+    "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. Unlike the other two sites, this one's actual Terms & Conditions page (https://mtradeasia.com/legal/terms-and-conditions) WAS fetched and read — no clause addressing automated access, scraping, bots, or crawlers was found, and robots.txt explicitly allows the /exchange page. Use a low, respectful request frequency (5 minutes, matching the dashboard's default) — this is a real production site serving real customers, not a sandbox. See README.md's Compliance note for the full picture across all three sites."
   },
   "lastVerified": "2026-08-22"
 }

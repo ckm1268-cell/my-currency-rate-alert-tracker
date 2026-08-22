@@ -3,7 +3,7 @@
   "displayName": "My Money Master",
   "officialUrl": "http://www.mymoneymaster.com.my/",
   "liveRateUrl": "http://www.mymoneymaster.com.my/Home/rate_board",
-  "notes": "Verified 21-Aug-2026, then RE-verified live on 21-Aug-2026 (Phase 2 build) via a fresh browser-driven fetch of the raw response. The re-check corrected an assumption from the first pass: the homepage's scrolling ticker ('.rating-content.simply-scroll-list li', formerly documented as the primary selector) is actually populated by client-side JavaScript — it is NOT present in the raw HTTP response, only in the live DOM after the page's own scripts run. The '/Home/rate_board' card layout, however, genuinely is server-rendered and IS present in the raw response with no JS required. The primary/secondary roles below have been swapped from the first draft to reflect this. The site does not serve a working HTTPS version (https:// redirects back to http://) — use the http URL.",
+  "notes": "Verified 21-Aug-2026, then RE-verified live on 21-Aug-2026 (Phase 2 build) via a fresh browser-driven fetch of the raw response. The re-check corrected an assumption from the first pass: the homepage's scrolling ticker ('.rating-content.simply-scroll-list li', formerly documented as the primary selector) is actually populated by client-side JavaScript — it is NOT present in the raw HTTP response, only in the live DOM after the page's own scripts run. The '/Home/rate_board' card layout, however, genuinely is server-rendered and IS present in the raw response with no JS required. The primary/secondary roles below have been swapped from the first draft to reflect this. The site does not serve a working HTTPS version (https:// redirects back to http://) — use the http URL. SECOND CORRECTION (21-Aug-2026, after the first live GitHub Actions run returned EXTRACTION_ERROR): the site's card wrapper changed from a CSS class '.smallBox3' to an HTML id (id=\"smallBox3\") on a element now carrying the class 'ratebox-table-wrap' instead — '.smallBox3' as a class selector now matches zero elements. Everything nested inside the card (the '.flag-country-rating-head' heading and '.flag-country-rating-list' buy/sell rows) is unchanged. cardBlockSelector below was updated from '.smallBox3' to '.ratebox-table-wrap' and re-verified live to match all 8 currency cards on the page, CNY included (Buy 60.35 / Sell 60.60 observed at verification time). This is exactly the 'SOURCE STRUCTURE MAY HAVE CHANGED' scenario the project brief anticipated (section 23) — the system correctly reported EXTRACTION_ERROR rather than showing stale or fabricated data as LIVE.",
   "requiresBrowserAutomation": false,
   "requiresBrowserAutomationReason": "The '/Home/rate_board' card layout's BUY/SELL values were confirmed present in the raw server-rendered HTML via a fetch independent of any browser JS execution (re-verified 21-Aug-2026). A plain HTTP GET + HTML parser (cheerio) is sufficient for the primary path.",
   "playwrightFallback": true,
@@ -12,14 +12,14 @@
   "branchSupport": false,
   "branchNotes": "No branch/location selector was found on the public site; My Money Master publishes a single site-wide rate per currency.",
   "primarySelector": {
-    "description": "Per-country card on the Exchange Rate page. Each currency is a '.smallBox3' block containing a '.flag-country-rating-head' (the currency's full display name, e.g. 'Chinese Renminbi' — NOT the ISO code) followed by two '.flag-country-rating-list' sibling divs, one for Buy and one for Sell, each holding two plain <span>s: a label ('Buy :' / 'Sell :') and the numeric value.",
+    "description": "Per-country card on the Exchange Rate page. Each currency is a '.ratebox-table-wrap' block (formerly '.smallBox3' as a class — the site now uses that string as a literal, non-unique id instead; see 'notes' above) containing a '.flag-country-rating-head' (the currency's full display name, e.g. 'Chinese Renminbi' — NOT the ISO code) followed by two '.flag-country-rating-list' sibling divs, one for Buy and one for Sell, each holding two plain <span>s: a label ('Buy :' / 'Sell :') and the numeric value.",
     "page": "http://www.mymoneymaster.com.my/Home/rate_board",
     "cardBlockSelector": ".ratebox-table-wrap",
     "headingSelector": ".flag-country-rating-head",
     "valueRowSelector": ".flag-country-rating-list",
-    "matchStrategy": "For each '.smallBox3' block, read '.flag-country-rating-head' text and match it against config.currencyDisplayNames[currencyCode] (exact, trimmed). Within the matching block, read each '.flag-country-rating-list' div's two child <span>s: first span's text (case-insensitive, colon-stripped) tells you Buy vs Sell; second span's text is the numeric value.",
-    "sampleMatchedHtml": "<div class=\"flag-country-rating-head\">Chinese Renminbi</div><div class=\"flag-country-rating-list\"><span>Buy :</span><span> 60.30</span></div><div class=\"flag-country-rating-list\"><span>Sell :</span><span> 60.60</span></div>",
-    "liveSampleObservedAt": "2026-08-21 (Phase 2 re-verification): CNY BUY 60.30 / SELL 60.60"
+    "matchStrategy": "For each '.ratebox-table-wrap' block, read '.flag-country-rating-head' text and match it against config.currencyDisplayNames[currencyCode] (exact, trimmed). Within the matching block, read each '.flag-country-rating-list' div's two child <span>s: first span's text (case-insensitive, colon-stripped) tells you Buy vs Sell; second span's text is the numeric value.",
+    "sampleMatchedHtml": "<div class=\"ratebox-table-wrap \" id=\"smallBox3\"><div class=\"flag-country\">...</div><div class=\"flag-country-rating\"><div class=\"flag-country-rating-head\">Chinese Renminbi</div><div class=\"flag-country-rating-list\"><span>Buy :</span><span> 60.35</span></div><div class=\"flag-country-rating-list\"><span>Sell :</span><span> 60.60</span></div></div></div>",
+    "liveSampleObservedAt": "2026-08-21 (second re-verification, after fixing the merge-conflict-broken CI run): CNY BUY 60.35 / SELL 60.60"
   },
   "currencyDisplayNames": {
     "CNY": "Chinese Renminbi"
@@ -35,7 +35,7 @@
   },
   "waitStrategy": {
     "httpFetch": "none required for the primary ('/Home/rate_board' card) selector — values are present on initial response",
-    "playwrightFallback": "navigate to liveRateUrl, wait for '.smallBox3 .flag-country-rating-head' to be attached, then read as with the HTTP path (same selectors, rendered DOM)"
+    "playwrightFallback": "navigate to liveRateUrl, wait for '.ratebox-table-wrap .flag-country-rating-head' to be attached, then read as with the HTTP path (same selectors, rendered DOM)"
   },
   "validation": {
     "expectedRange": { "CNY": { "min": 40, "max": 80 } },
@@ -44,7 +44,7 @@
   "compliance": {
     "robotsTxt": "not found (404) as of 21-Aug-2026 — no machine-readable crawl restriction in place",
     "termsOfUseUrl": "linked from the site footer",
-    "actionRequired": "A human should read the Terms of Use page before this adapter is run on a continuous production schedule, per the project's compliance requirement. This has NOT been done yet as of this Phase 2 build — the GitHub Actions workflow is intentionally left on manual trigger only (no cron schedule) until that review happens."
+    "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. This site's Terms of Use page (/Home/policy) could NOT actually be read as part of that decision — the site has no working HTTPS and the fetching tool used could not follow its http-to-https-back-to-http redirect loop. Genuinely unread, not cleared. See README.md's Compliance note for the full picture across all three sites, and how to actually get eyes on this page (a real browser follows the redirect fine)."
   },
   "lastVerified": "2026-08-21"
 }

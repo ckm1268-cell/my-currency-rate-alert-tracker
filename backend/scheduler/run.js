@@ -25,11 +25,20 @@
  * no active alert at all); it only affects
  * delivery for the channels that need it, recorded honestly as FAILED (with
  * the missing-key message from notify.js) rather than crashing the run.
- * Wired into .github/workflows/monitor.yml on a manual "Run workflow"
- * trigger only — NOT yet on a recurring cron. See that file's own header
- * comment for the one remaining blocker (the Terms of Use compliance
- * review for both money-changer sites, still outstanding as of this
- * build) before that schedule is ever uncommented.
+ * Wired into .github/workflows/monitor.yml, which as of Phase 14
+ * (22-Aug-2026) runs this on a RECURRING every-5-minute schedule, not just
+ * a manual click — see that file's own header comment for exactly what was
+ * (and wasn't) verified about each site's Terms of Use before that was
+ * turned on, at the project owner's explicit, informed decision.
+ *
+ * - Because the workflow now runs unattended every 5 minutes, an individual
+ *   alert's own monitoring_interval_minutes finally means something (Phase
+ *   14): isDueForCheck() below skips re-evaluating an alert until its own
+ *   interval has elapsed since alerts.last_checked_at. This can only ever
+ *   throttle a specific alert DOWN from the workflow's 5-minute cadence
+ *   (e.g. an "every 30 minutes" alert is genuinely skipped on 5 out of
+ *   every 6 runs) — no alert can ever be checked more often than the
+ *   workflow itself runs, regardless of what's selected in the dashboard.
  *
  * Design decisions worth knowing about before touching this file:
  *
@@ -250,6 +259,27 @@ async function resolveNotifyTargets(sb, alert, emailCache) {
   return targets;
 }
 
+/**
+ * Phase 14 — is this alert due to be checked THIS run, given its own
+ * monitoring_interval_minutes and when it was last actually checked?
+ *
+ * An alert that has never been checked (last_checked_at is null — a brand
+ * new alert, or one saved before this migration ran) is always due
+ * immediately rather than waiting a full interval first; that matches how
+ * every other "first run" case in this codebase behaves (e.g. a PCT_CHANGE
+ * alert with no previous rate yet).
+ *
+ * `now` is passed in (rather than read via `new Date()` inside this
+ * function) purely so this stays a pure, easily-testable function — see
+ * tests/isDueForCheck.test.js.
+ */
+function isDueForCheck(alert, now) {
+  if (!alert.last_checked_at) return true;
+  const intervalMinutes = alert.monitoring_interval_minutes || 5;
+  const elapsedMs = now.getTime() - new Date(alert.last_checked_at).getTime();
+  return elapsedMs >= intervalMinutes * 60 * 1000;
+}
+
 async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, emailCache) {
   const candidateReadings = readingsForAlert(alert, readingsByComboKey);
   const best = pickBestReading(candidateReadings, alert.rate_type);
@@ -356,7 +386,25 @@ async function main() {
     return;
   }
 
-  const combos = getRequiredCombos(alerts);
+  // Phase 14: with this workflow now running unattended every 5 minutes
+  // (rather than only on a manual click), fetching live data for every
+  // active alert on every single run would ignore whatever interval each
+  // alert actually asked for and hit the real money-changer sites far more
+  // than necessary. Filter down to only the alerts actually due first —
+  // see isDueForCheck()'s own comment for exactly how "due" is decided.
+  const now = new Date();
+  const dueAlerts = alerts.filter((a) => isDueForCheck(a, now));
+  const skippedCount = alerts.length - dueAlerts.length;
+  console.log(
+    `[scheduler] ${dueAlerts.length} alert(s) due for a check this run (their own monitoring_interval_minutes ` +
+      `has elapsed since last_checked_at); ${skippedCount} skipped — not due yet, no data dropped, just deferred.`
+  );
+  if (dueAlerts.length === 0) {
+    console.log('[scheduler] nothing due this run — exiting.');
+    return;
+  }
+
+  const combos = getRequiredCombos(dueAlerts);
   console.log(`[scheduler] ${combos.length} distinct source/currency/branch combo(s) needed for these alerts.`);
 
   const readingsByComboKey = new Map();
@@ -374,15 +422,28 @@ async function main() {
   let triggeredCount = 0;
   const emailCache = new Map(); // user_id -> email|null, reused across every alert this run
 
-  for (const alert of alerts) {
+  for (const alert of dueAlerts) {
     const result = await evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, emailCache);
     if (result.evaluated) evaluatedCount++;
     if (result.triggered) triggeredCount++;
   }
 
+  // Every due alert was actually looked at this run — whether or not it had
+  // a LIVE reading available or ended up triggering — so all of them get
+  // last_checked_at stamped together in one call, using this run's own
+  // `now` (not a fresh timestamp per alert, and not per-alert timing drift
+  // from how long each one took to evaluate).
+  const { error: touchError } = await sb
+    .from('alerts')
+    .update({ last_checked_at: now.toISOString() })
+    .in('id', dueAlerts.map((a) => a.id));
+  if (touchError) {
+    console.error(`[scheduler] could not update last_checked_at for this run's due alerts: ${touchError.message}`);
+  }
+
   console.log(
-    `[scheduler] run complete: ${alerts.length} active alert(s), ${evaluatedCount} evaluated (had a LIVE reading), ` +
-      `${triggeredCount} newly triggered.`
+    `[scheduler] run complete: ${alerts.length} active alert(s), ${dueAlerts.length} due and checked, ` +
+      `${evaluatedCount} evaluated (had a LIVE reading), ${triggeredCount} newly triggered.`
   );
 }
 
@@ -403,4 +464,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fetchPreviousRateRow, insertRateRow, checkCombo, evaluateAlert, resolveNotifyTargets };
+module.exports = { fetchPreviousRateRow, insertRateRow, checkCombo, evaluateAlert, resolveNotifyTargets, isDueForCheck };
