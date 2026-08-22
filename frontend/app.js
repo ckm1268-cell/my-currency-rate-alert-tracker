@@ -132,6 +132,24 @@
   };
 
   const $ = (id) => document.getElementById(id);
+  // Safe listener-binding helper (Phase 11.2). $("id").addEventListener(...)
+  // throws a TypeError if "id" doesn't exist in the DOM, and because
+  // wireForm() below runs as one long synchronous list of these calls, a
+  // single missing/renamed id silently kills every listener AFTER it in the
+  // list too — exactly what happened when the Browser-notification checkbox
+  // was removed from index.html (Phase 11.1) but an old cached copy of this
+  // file (or vice versa) still expected it: the throw on that one line meant
+  // notifTelegram's own listener a few lines down never got attached, so
+  // checking Telegram silently did nothing. on() logs a console warning and
+  // skips that one binding instead of aborting the rest of the form.
+  const on = (id, event, handler) => {
+    const el = $(id);
+    if (!el) {
+      console.warn(`[wireForm] #${id} not found in the page — its "${event}" listener was skipped. This usually means index.html and app.js are out of sync (e.g. a stale cached copy of one of them) — hard-refresh (Ctrl/Cmd+Shift+R) and confirm both files are the latest pushed version.`);
+      return;
+    }
+    el.addEventListener(event, handler);
+  };
 
   // ---------------------------------------------------------------------
   // Phase 7 integration bridge
@@ -783,9 +801,9 @@
   function wireForm() {
     populateSelects();
     updateBranchAvailability();
-    $("rateTypeHint").textContent = RATE_TYPE_EXPLAINERS[state.rateType];
+    if ($("rateTypeHint")) $("rateTypeHint").textContent = RATE_TYPE_EXPLAINERS[state.rateType];
 
-    $("currency").addEventListener("change", (e) => {
+    on("currency", "change", (e) => {
       state.currency = e.target.value;
       const cur = CURRENCIES.find((c) => c.code === state.currency);
       $("targetRate").value = cur.base.toFixed(cur.decimals);
@@ -799,45 +817,45 @@
         document.querySelectorAll("#rateTypeSeg button").forEach((b) => b.setAttribute("aria-pressed", "false"));
         btn.setAttribute("aria-pressed", "true");
         state.rateType = btn.dataset.value;
-        $("rateTypeHint").textContent = RATE_TYPE_EXPLAINERS[state.rateType];
+        if ($("rateTypeHint")) $("rateTypeHint").textContent = RATE_TYPE_EXPLAINERS[state.rateType];
       });
     });
 
-    $("targetRate").addEventListener("input", (e) => {
+    on("targetRate", "input", (e) => {
       const v = parseFloat(e.target.value);
       state.targetRate = Number.isFinite(v) && v > 0 ? v : state.targetRate;
     });
 
-    $("srcMMM").addEventListener("change", (e) => { state.sources.mymoneymaster = e.target.checked; });
-    $("srcTM").addEventListener("change", (e) => { state.sources.tajmuhabath = e.target.checked; updateBranchAvailability(); });
-    $("srcMTA").addEventListener("change", (e) => { state.sources.merchantradeasia = e.target.checked; });
+    on("srcMMM", "change", (e) => { state.sources.mymoneymaster = e.target.checked; });
+    on("srcTM", "change", (e) => { state.sources.tajmuhabath = e.target.checked; updateBranchAvailability(); });
+    on("srcMTA", "change", (e) => { state.sources.merchantradeasia = e.target.checked; });
 
-    $("branch").addEventListener("change", (e) => { state.branch = e.target.value; });
+    on("branch", "change", (e) => { state.branch = e.target.value; });
 
-    $("condition").addEventListener("change", (e) => {
+    on("condition", "change", (e) => {
       state.condition = e.target.value;
       $("pctChangeField").style.display = state.condition === "PCT_CHANGE" ? "block" : "none";
     });
-    $("pctChange").addEventListener("input", (e) => {
+    on("pctChange", "input", (e) => {
       const v = parseFloat(e.target.value);
       state.pctChange = Number.isFinite(v) && v > 0 ? v : state.pctChange;
     });
 
-    $("interval").addEventListener("change", (e) => { state.interval = parseInt(e.target.value, 10); });
+    on("interval", "change", (e) => { state.interval = parseInt(e.target.value, 10); });
     // No notifBrowser checkbox (Phase 11.1) — state.notifications.browser stays true unconditionally, set at init above.
-    $("notifEmail").addEventListener("change", (e) => { state.notifications.email = e.target.checked; });
-    $("notifTelegram").addEventListener("change", (e) => {
+    on("notifEmail", "change", (e) => { state.notifications.email = e.target.checked; });
+    on("notifTelegram", "change", (e) => {
       state.notifications.telegram = e.target.checked;
       $("telegramChatIdField").style.display = state.notifications.telegram ? "block" : "none";
     });
-    $("telegramChatId").addEventListener("input", (e) => { state.telegramChatId = e.target.value.trim(); });
+    on("telegramChatId", "input", (e) => { state.telegramChatId = e.target.value.trim(); });
 
-    $("alertForm").addEventListener("submit", (e) => {
+    on("alertForm", "submit", (e) => {
       e.preventDefault();
       startMonitoring();
     });
 
-    $("resetBtn").addEventListener("click", () => {
+    on("resetBtn", "click", () => {
       state.monitoring = false;
       state.triggered = false;
       state.forcedMode = null;
@@ -852,7 +870,7 @@
     });
 
     // test controls
-    $("testForceTrigger").addEventListener("click", () => {
+    on("testForceTrigger", "click", () => {
       if (!state.monitoring) startMonitoring();
       const cur = CURRENCIES.find((c) => c.code === state.currency);
       const key = walkKey("mymoneymaster", null);
@@ -862,9 +880,9 @@
       state.forcedMode = null;
       tick();
     });
-    $("testSourceDown").addEventListener("click", () => { state.forcedMode = "SOURCE_DOWN"; tick(); });
-    $("testValidationError").addEventListener("click", () => { state.forcedMode = "VALIDATION_ERROR"; tick(); });
-    $("testResume").addEventListener("click", () => { state.forcedMode = null; tick(); });
+    on("testSourceDown", "click", () => { state.forcedMode = "SOURCE_DOWN"; tick(); });
+    on("testValidationError", "click", () => { state.forcedMode = "VALIDATION_ERROR"; tick(); });
+    on("testResume", "click", () => { state.forcedMode = null; tick(); });
   }
 
   function startMonitoring() {
