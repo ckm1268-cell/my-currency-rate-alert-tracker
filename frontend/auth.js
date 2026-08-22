@@ -51,6 +51,14 @@
     tajmuhabath: "Taj Muhabath",
   };
 
+  const NOTIFICATION_LABELS = {
+    browser: "🔔 Browser (this tab only)",
+    email: "✉️ Email",
+    telegram: "📨 Telegram",
+    whatsapp: "WhatsApp",
+    sms: "SMS",
+  };
+
   const $ = (id) => document.getElementById(id);
 
   let sb = null; // Supabase client, once configured
@@ -182,7 +190,8 @@
     const sources = Array.isArray(a.sources) ? a.sources.map((s) => SOURCE_LABELS[s] || s).join(" + ") : "—";
     const branch = a.branch ? ` (${a.branch})` : "";
     const cond = CONDITION_LABELS[a.condition] || a.condition;
-    return { sources: sources + branch, cond };
+    const notif = NOTIFICATION_LABELS[a.notification_method] || a.notification_method;
+    return { sources: sources + branch, cond, notif };
   }
 
   function statusPillClass(status) {
@@ -199,12 +208,13 @@
       return;
     }
     list.innerHTML = alerts.map((a) => {
-      const { sources, cond } = describeAlert(a);
+      const { sources, cond, notif } = describeAlert(a);
       return `
         <li class="alert-item" data-id="${a.id}">
           <div class="alert-item-main">
             <div class="alert-item-title">${a.currency} ${a.rate_type} <span class="tabular">${Number(a.target_rate).toFixed(4).replace(/0+$/,"").replace(/\.$/,"")}</span></div>
             <div class="alert-item-sub">${cond} · ${sources}</div>
+            <div class="alert-item-sub">${notif}</div>
           </div>
           <div class="alert-item-side">
             <span class="${statusPillClass(a.status)}" style="font-size:.7rem;">${a.status}</span>
@@ -267,6 +277,10 @@
       setSaveStatus("Enter a target rate greater than zero in the panel on the left before saving.");
       return;
     }
+    if (state.notification === "telegram" && !(state.telegramChatId || "").trim()) {
+      setSaveStatus('Enter your Telegram chat ID in the panel on the left before saving a Telegram alert — see "Connecting Telegram" in NOTIFICATIONS_SETUP.md if you don\'t have it yet.');
+      return;
+    }
 
     setSaveStatus("Saving…");
     const row = {
@@ -279,6 +293,9 @@
       branch: sources.includes("tajmuhabath") ? state.branch : null,
       monitoring_interval_minutes: state.interval,
       notification_method: state.notification,
+      // Phase 10: only meaningful (and only ever sent) when Telegram is the
+      // chosen channel — never write a stray chat ID onto a browser/email alert.
+      telegram_chat_id: state.notification === "telegram" ? state.telegramChatId.trim() : null,
       status: "ACTIVE",
     };
 

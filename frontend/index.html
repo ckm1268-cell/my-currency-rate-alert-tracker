@@ -22,7 +22,7 @@
   </div>
   <div style="display:flex; align-items:center; gap:10px;">
     <span class="brand-sub" id="clockLabel">—</span>
-    <span class="phase-chip">Phase 7 · optional accounts</span>
+    <span class="phase-chip">Phase 10 · email &amp; Telegram alerts, rate history</span>
   </div>
 </header>
 
@@ -103,11 +103,18 @@
       <div class="field">
         <label for="notification">Notification</label>
         <select id="notification" name="notification">
-          <option value="browser" selected>Browser notification</option>
-          <option value="email" disabled>Email — coming in Phase 10</option>
-          <option value="telegram" disabled>Telegram — coming in Phase 10</option>
-          <option value="whatsapp" disabled>WhatsApp — coming in Phase 10+</option>
+          <option value="browser" selected>Browser notification (this tab only)</option>
+          <option value="email">Email — sent by the scheduled backend job</option>
+          <option value="telegram">Telegram — sent by the scheduled backend job</option>
+          <option value="whatsapp" disabled>WhatsApp — not yet built</option>
         </select>
+        <p class="hint">Email and Telegram are delivered server-side by <code>backend/scheduler/run.js</code> (Phase 8/10) — they work even with this tab closed, but only for a <strong>saved</strong> alert (sign in below to save one). Browser notification only fires while this tab is open and monitoring.</p>
+      </div>
+
+      <div class="field" id="telegramChatIdField" style="display:none;">
+        <label for="telegramChatId">Telegram chat ID</label>
+        <input type="text" id="telegramChatId" name="telegramChatId" inputmode="numeric" placeholder="e.g. 123456789">
+        <p class="hint">Don't have this yet? See "Connecting Telegram" in <code>NOTIFICATIONS_SETUP.md</code> — in short: message your bot once, then visit <code>https://api.telegram.org/bot&lt;YOUR_BOT_TOKEN&gt;/getUpdates</code> in a browser and copy the number after <code>"chat":{"id":</code>.</p>
       </div>
 
       <button type="submit" class="btn-primary" id="startBtn">Start monitoring</button>
@@ -148,7 +155,7 @@
         <div class="account-divider"></div>
 
         <button type="button" class="btn-primary" id="saveAlertBtn">💾 Save current alert to my account</button>
-        <p class="hint">Uses the settings from the panel on the left — currency, rate type, target, sources, branch, condition, interval, and notification.</p>
+        <p class="hint">Uses the settings from the panel on the left — currency, rate type, target, sources, branch, condition, interval, notification method, and Telegram chat ID (if applicable).</p>
         <p class="form-status" id="saveAlertStatus"></p>
 
         <h4 class="account-subhead">My saved alerts</h4>
@@ -232,6 +239,7 @@
           <button type="button" data-range="7d" aria-pressed="false">7 days</button>
         </div>
         <canvas id="historyChart" width="900" height="180"></canvas>
+        <p class="hint" id="historyModeHint"></p>
       </div>
     </article>
 
@@ -262,7 +270,7 @@
 </main>
 
 <footer class="site-footer">
-  MY Currency Rate Tracker — My Money Master CNY and Taj Muhabath CNY are real live connections · other currencies are still simulated · optional accounts (Phase 7) let you save alerts, isolated per user.
+  MY Currency Rate Tracker — My Money Master CNY and Taj Muhabath CNY are real live connections · other currencies are still simulated · optional accounts (Phase 7) let you save alerts, isolated per user · saved alerts are checked server-side and can notify you by email or Telegram (Phase 8/10), and signed-in users see real recorded rate history, not just this session's readings.
 </footer>
 
 <div id="toast" role="status" aria-live="polite"></div>
@@ -271,5 +279,6 @@
 <script src="supabaseConfig.js"></script>
 <script src="app.js"></script>
 <script src="auth.js"></script>
+<script src="rateHistory.js"></script>
 </body>
 </html>

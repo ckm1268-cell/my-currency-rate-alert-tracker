@@ -9,7 +9,7 @@ Initial scope: **CNY/MYR, SELL rate**, from **My Money Master** and
 **Taj Muhabath**. Architecture supports adding more currencies, branches,
 and sources without a redesign.
 
-## Current status: Phase 8 of 10
+## Current status: Phase 10 of 10
 
 | Phase | What | Status |
 |---|---|---|
@@ -20,9 +20,9 @@ and sources without a redesign.
 | 5 | Target comparison engine wired to real data | ✅ done — `isTargetMet` (`frontend/app.js`) operates on real readings; `backend/targetEngine/compareTarget.js` is the tested server-side twin, now actually called by Phase 8's scheduler |
 | 6 | Browser notifications wired to real alerts | ✅ live-tested end-to-end against a real trigger, not just read-through |
 | 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + magic-link sign-in + per-user saved alerts — **live-tested end-to-end**, including a real cross-account isolation check across three separate accounts (see `SUPABASE_SETUP.md`) |
-| 8 | Scheduled backend job (Supabase-backed) | ✅ implemented — `backend/scheduler/run.js` (wired into `.github/workflows/monitor.yml`) fetches every ACTIVE alert, checks both adapters, writes to the `rates` table, evaluates each alert against the **best rate across its selected sources**, and marks it TRIGGERED + logs a `notifications` row the moment a target is met — no browser tab required. Runs via manual "Run workflow" trigger only; **no recurring cron yet**, deliberately gated on the Terms of Use compliance review (see Compliance note below). **Not yet live-tested against a real Supabase project** — this sandbox cannot reach either money-changer site or a real Supabase instance; the first real run needs to happen via the Actions tab, see the note in the Phase 8 status write-up. |
-| 9 | Full test pass | 🟡 partial — unit tests for both adapters' parsing logic, the target-comparison engine (including Phase 8's `pickBestReading`), and the scheduler's pure combo-selection logic all exist and pass (38/38); no end-to-end/multi-user test pass yet beyond Phase 7's manual isolation check |
-| 10 | Email / Telegram, rate-history charts | ⏳ not started |
+| 8 | Scheduled backend job (Supabase-backed) | ✅ implemented and **live-tested successfully** — `backend/scheduler/run.js` (wired into `.github/workflows/monitor.yml`) fetches every ACTIVE alert, checks both adapters, writes to the `rates` table, evaluates each alert against the **best rate across its selected sources**, and marks it TRIGGERED + logs a `notifications` row the moment a target is met — no browser tab required. Runs via manual "Run workflow" trigger only; **no recurring cron yet**, deliberately gated on the Terms of Use compliance review (see Compliance note below). |
+| 9 | Full test pass | 🟡 partial — unit tests for both adapters' parsing logic, the target-comparison engine, the scheduler's pure combo-selection and notify-target-resolution logic, and the notification-message formatting all exist and pass (49/49); no end-to-end/multi-user automated test pass yet beyond the manual proofs recorded for Phases 7/8 |
+| 10 | Email / Telegram, rate-history charts | ✅ implemented — real email (Resend) and Telegram delivery from `backend/scheduler/run.js` via `backend/notifications/notify.js` (see `NOTIFICATIONS_SETUP.md`), plus a real, Supabase-backed rate-history chart (`frontend/rateHistory.js`) for signed-in users, replacing the old session-only chart for anyone signed in. **Not yet live-tested against real Resend/Telegram accounts** — see the Phase 10 status write-up for what still needs a real end-to-end run. |
 
 **CNY at both money changers is real.** My Money Master CNY and Taj
 Muhabath CNY (branch: LALAPORT BBCC) are retrieved live by a GitHub
@@ -50,9 +50,12 @@ should not attempt to replicate. See the header comment in
 
 As of Phase 8, `monitor.yml` runs a real, fully-implemented pipeline
 (`backend/scheduler/run.js`) on every manual trigger — this compliance
-blocker now gates a functional job, not a placeholder. Do not uncomment
-the `schedule:` block in that file until the Terms of Use review above has
-actually been done.
+blocker now gates a functional job, not a placeholder. As of Phase 10, that
+same manual-trigger-only job also sends real email/Telegram notifications
+and is what feeds the real rate-history chart — the stakes of this blocker
+have risen twice since it was first flagged in Phase 2, and it still hasn't
+moved. Do not uncomment the `schedule:` block in that file until the Terms
+of Use review above has actually been done.
 
 ### Accounts (Phase 7 — optional)
 
@@ -86,21 +89,23 @@ currency-rate-alert/
 │   ├── styles.css
 │   ├── app.js
 │   ├── auth.js                # Phase 7 — sign-in + saved alerts UI, additive to app.js
+│   ├── rateHistory.js         # Phase 10 — real Supabase-backed history chart, additive to app.js
 │   └── supabaseConfig.js      # Phase 7 — your project URL + anon key (safe to commit)
 ├── backend/                  # Phase 2+ — never deployed to GitHub Pages
 │   ├── scrapers/              # one adapter per money changer
 │   ├── validation/
 │   ├── targetEngine/
-│   ├── notifications/
+│   ├── notifications/          # Phase 10 — notify.js (dispatcher) + email.js (Resend) + telegram.js (Bot API)
 │   ├── scheduler/              # Phase 8 — the real scheduled job (run.js) + its pure combo-selection helpers
 │   └── db/                    # Supabase service-role client (backend-only)
 ├── database/
-│   └── schema.sql             # Phase 7 — tables + Row-Level Security policies
+│   └── schema.sql             # Phase 7 tables + RLS; Phase 10 adds telegram_chat_id / delivery_error columns
 ├── config/websites/          # per-source URLs, selectors, wait strategy
 ├── .github/workflows/         # scheduled monitor (currently manual-trigger only)
 ├── tests/
 ├── .env.example
 ├── SUPABASE_SETUP.md          # Phase 7 — provisioning walkthrough
+├── NOTIFICATIONS_SETUP.md     # Phase 10 — Resend + Telegram walkthrough
 └── LICENSE
 ```
 
@@ -169,11 +174,19 @@ To set this up on a fresh fork/clone:
   "this doesn't exist" — it's "this only runs when a maintainer manually
   triggers the 'Monitor Exchange Rates' GitHub Actions workflow"; there is
   no recurring schedule yet (see the Compliance note above).
-- **Not yet built:** an automatic recurring schedule for the Phase 8 job
-  (compliance review pending — see above), and every notification channel
-  beyond the browser demo (Phase 10) — a `notifications` row from Phase 8
-  is logged with `delivery_status: "PENDING"` today, honestly reflecting
-  that nothing server-side actually pushes it to the user yet.
+- **Real, as of Phase 10:** email (via Resend) and Telegram (via the Bot
+  API) notifications are actually sent by `backend/scheduler/run.js` the
+  moment a saved alert's target is reached — see `backend/notifications/
+  notify.js` and `NOTIFICATIONS_SETUP.md`. The `notifications` row records
+  the real outcome (`DELIVERED` or `FAILED`, with a reason) rather than
+  being optimistically marked delivered before a send is even attempted.
+  Also as of Phase 10: signed-in users see a **real** rate-history chart
+  (`frontend/rateHistory.js`) sourced from the `rates` table Phase 8's
+  scheduler has been writing to — not just this browser session's readings.
+- **Not yet built:** an automatic recurring schedule for the Phase 8/10 job
+  (compliance review pending — see above, this is what makes real history
+  and real alerts still depend on someone clicking "Run workflow"), and
+  WhatsApp/SMS delivery (project brief's optional Phase 3 channels).
 
 ## Environment variables
 
@@ -181,8 +194,10 @@ See `.env.example`. None of these are required to run the Phase 1-6
 frontend as a signed-out demo. `SUPABASE_URL` / `SUPABASE_ANON_KEY` matter
 once you provision Supabase for Phase 7 (see `SUPABASE_SETUP.md`) — the
 anon key goes in `frontend/supabaseConfig.js`, not `.env` (that file is for
-backend-only values). `SUPABASE_SERVICE_ROLE_KEY` and the email/Telegram
-keys are Phase 8/10 — backend/GitHub Actions secrets only, never committed.
+backend-only values). `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, and
+`TELEGRAM_BOT_TOKEN` are Phase 8/10 — backend/GitHub Actions secrets only,
+never committed, never referenced anywhere in `frontend/`. See
+`NOTIFICATIONS_SETUP.md` for how to obtain the latter two.
 
 ## License
 

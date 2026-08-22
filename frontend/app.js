@@ -94,6 +94,7 @@
     condition: "AT_OR_BELOW",
     interval: 5,
     notification: "browser",
+    telegramChatId: "", // Phase 10 — only meaningful when notification === "telegram"
 
     monitoring: false,
     triggered: false,
@@ -126,6 +127,22 @@
   window.CKM.onAlertTriggered = null; // (reading, value) => void
   window.CKM.onMonitoringStarted = null; // () => void
   window.CKM.onAlertReset = null; // () => void
+  // Phase 10 — frontend/rateHistory.js sets this to a function that draws a
+  // REAL, Supabase-backed history chart (signed-in users only — see that
+  // file's own header comment) and returns true when it did. renderChart()
+  // below always checks this first; when it's unset or returns false (not
+  // signed in, or Supabase isn't configured), renderChart() falls back to
+  // its own default in-session chart — see renderDefaultChart, exposed
+  // below the function so rateHistory.js can also explicitly restore that
+  // default the moment a user signs out.
+  window.CKM.renderRealHistory = null; // (canvas) => boolean
+  // Lets rateHistory.js explicitly restore the default in-session chart the
+  // moment a user signs out, rather than waiting for the next tick()/resize/
+  // range-click to notice renderRealHistory now returns false. Safe to
+  // reference renderSimulatedChart here even though it's declared further
+  // down this file — function declarations are hoisted, so it already
+  // exists by the time this line runs.
+  window.CKM.renderDefaultChart = renderSimulatedChart;
 
   function callHook(name, ...args) {
     const fn = window.CKM && window.CKM[name];
@@ -548,8 +565,33 @@
     state.history = state.history.filter((p) => p.t.getTime() >= cutoff).slice(-500);
   }
 
+  /**
+   * Public dispatcher — always the function every internal call site here
+   * (tick(), the chart-range buttons, window resize) calls. Phase 10 adds a
+   * real, Supabase-backed history chart (frontend/rateHistory.js) that
+   * should win whenever it's available (signed in, Supabase configured);
+   * this function is the single place that decides which chart actually
+   * gets drawn, so neither implementation has to guess about the other or
+   * fight over the shared <canvas> element.
+   */
   function renderChart() {
     const canvas = $("historyChart");
+    if (typeof window.CKM.renderRealHistory === "function" && window.CKM.renderRealHistory(canvas)) {
+      return;
+    }
+    renderSimulatedChart(canvas);
+  }
+
+  /**
+   * The original Phase 1 hand-drawn chart: this browser tab's own in-memory
+   * `state.history` (real or simulated readings recorded since monitoring
+   * started in THIS session — never persisted, lost on reload). Still the
+   * correct fallback when a user isn't signed in or Supabase isn't
+   * configured, since frontend/rateHistory.js's real chart needs a signed-
+   * in session to read the `rates` table at all (see database/schema.sql's
+   * RLS policy — `to authenticated`, not `anon`).
+   */
+  function renderSimulatedChart(canvas) {
     const ctx = canvas.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth || 900, h = 180;
@@ -758,7 +800,11 @@
     });
 
     $("interval").addEventListener("change", (e) => { state.interval = parseInt(e.target.value, 10); });
-    $("notification").addEventListener("change", (e) => { state.notification = e.target.value; });
+    $("notification").addEventListener("change", (e) => {
+      state.notification = e.target.value;
+      $("telegramChatIdField").style.display = state.notification === "telegram" ? "block" : "none";
+    });
+    $("telegramChatId").addEventListener("input", (e) => { state.telegramChatId = e.target.value.trim(); });
 
     $("alertForm").addEventListener("submit", (e) => {
       e.preventDefault();

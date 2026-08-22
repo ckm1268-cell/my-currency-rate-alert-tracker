@@ -17,6 +17,12 @@
  *
  * Run manually: `node scheduler/run.js` (from backend/), with SUPABASE_URL
  * and SUPABASE_SERVICE_ROLE_KEY set in the environment (see .env.example).
+ * As of Phase 10, RESEND_API_KEY and/or TELEGRAM_BOT_TOKEN are also needed
+ * in the environment if any active alert actually uses notification_method
+ * 'email' or 'telegram' — a run with neither set still completes normally
+ * for alerts using 'browser' (or no active alert at all); it only affects
+ * delivery for the channels that need it, recorded honestly as FAILED (with
+ * the missing-key message from notify.js) rather than crashing the run.
  * Wired into .github/workflows/monitor.yml on a manual "Run workflow"
  * trigger only — NOT yet on a recurring cron. See that file's own header
  * comment for the one remaining blocker (the Terms of Use compliance
@@ -52,18 +58,18 @@
  *   section 24 logging requirement; a failed check is exactly as much a
  *   fact worth recording as a successful one, never silently dropped.
  *
- * - A triggered alert's `notifications` row is written with
- *   delivery_status "PENDING", not "DELIVERED" — because no channel is
- *   actually wired to deliver anything server-side yet.
- *   backend/notifications/notify.js remains an intentional Phase 6/10
- *   scaffold; the client-side browser-notification demo only ever fires
- *   while a matching tab is open (Phase 1-7 behavior, unchanged). Marking
- *   this row DELIVERED would be a real instance of the exact "never
- *   mislabel" mistake this project has caught and fixed several times
- *   already (see the Phase 5 fireAlert() incident) — PENDING is the
- *   honest status: detected and logged server-side, not yet pushed to the
- *   user by anything beyond this audit trail. Phase 10 (email/Telegram)
- *   is what will turn this into a real delivery.
+ * - A triggered alert's `notifications` row now reflects a REAL delivery
+ *   attempt, as of Phase 10 (22-Aug-2026) — backend/notifications/notify.js
+ *   is no longer a throwing scaffold. For notification_method 'email' or
+ *   'telegram', this file resolves the actual destination (the signed-in
+ *   user's own auth email via the Supabase Auth admin API, or the alert's
+ *   own saved telegram_chat_id) and calls notify(), which returns
+ *   DELIVERED / FAILED / PENDING honestly based on what actually happened
+ *   — never optimistically marked DELIVERED before a send is attempted.
+ *   'browser' (Phase 1) and the still-unimplemented whatsapp/sms channels
+ *   correctly stay PENDING: notify() has no server-side channel for them,
+ *   same "never mislabel" principle the Phase 5 fireAlert() incident and
+ *   every phase since has held to.
  *
  * - Duplicate-alert suppression needs no extra bookkeeping here: this
  *   script only ever queries alerts with status = 'ACTIVE'. Once an alert
@@ -79,6 +85,7 @@
 const { getServiceRoleClient } = require('../db/supabaseClient');
 const { isTargetMet, pickBestReading } = require('../targetEngine/compareTarget');
 const { comboKey, getRequiredCombos, readingsForAlert } = require('./comboSelection');
+const { notify } = require('../notifications/notify');
 
 const ADAPTERS = {
   mymoneymaster: () => require('../scrapers/mymoneymaster.adapter'),
@@ -179,7 +186,42 @@ async function checkCombo(sb, combo) {
   return { combo, reading, rateRowId: rateRow ? rateRow.id : null, prevRow };
 }
 
-async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey) {
+/**
+ * Resolves where a triggered alert's notification should actually go, for
+ * the two channels notify.js can deliver. Email addresses are never stored
+ * on the `alerts` row itself — this alert's owner already has one, in
+ * Supabase's own auth.users table, via the Auth admin API (only reachable
+ * with the service-role client this scheduler already uses; the frontend's
+ * anon-key client cannot call this). Results are cached per user_id for the
+ * lifetime of one run, since one user can easily have several active
+ * alerts and there's no reason to look up the same email twice in a single
+ * pass.
+ */
+async function resolveNotifyTarget(sb, alert, emailCache) {
+  if (alert.notification_method === 'telegram') {
+    return { channel: 'telegram', telegramChatId: alert.telegram_chat_id };
+  }
+
+  if (alert.notification_method === 'email') {
+    if (!emailCache.has(alert.user_id)) {
+      try {
+        const { data, error } = await sb.auth.admin.getUserById(alert.user_id);
+        if (error) throw error;
+        emailCache.set(alert.user_id, (data && data.user && data.user.email) || null);
+      } catch (err) {
+        console.error(`[scheduler] could not resolve email for user ${alert.user_id}: ${err.message}`);
+        emailCache.set(alert.user_id, null);
+      }
+    }
+    return { channel: 'email', email: emailCache.get(alert.user_id) };
+  }
+
+  // 'browser', 'whatsapp', 'sms' — notify() itself knows these have no
+  // server-side channel and will return PENDING; nothing to resolve here.
+  return { channel: alert.notification_method };
+}
+
+async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, emailCache) {
   const candidateReadings = readingsForAlert(alert, readingsByComboKey);
   const best = pickBestReading(candidateReadings, alert.rate_type);
 
@@ -221,11 +263,27 @@ async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey) {
 
   const message =
     `${bestLabel} ${alert.currency} ${alert.rate_type} target reached: ${value} (target ${alert.target_rate}).`;
+
+  const notifyTarget = await resolveNotifyTarget(sb, alert, emailCache);
+  const notifyResult = await notify(notifyTarget, {
+    currency: alert.currency,
+    rateType: alert.rate_type,
+    rate: value,
+    targetRate: Number(alert.target_rate),
+    source: bestLabel,
+    retrievedAt: best.retrievedAt || new Date().toISOString(),
+  });
+  console.log(
+    `[scheduler]   notify via ${alert.notification_method}: ${notifyResult.deliveryStatus}` +
+      (notifyResult.error ? ` (${notifyResult.error})` : '')
+  );
+
   const { error: notifyError } = await sb.from('notifications').insert({
     alert_id: alert.id,
     rate_id: record ? record.rateRowId : null,
     notification_type: alert.notification_method,
-    delivery_status: 'PENDING', // see header comment — no server-side delivery channel exists yet (Phase 10)
+    delivery_status: notifyResult.deliveryStatus,
+    delivery_error: notifyResult.error,
     message,
   });
   if (notifyError) {
@@ -270,9 +328,10 @@ async function main() {
 
   let evaluatedCount = 0;
   let triggeredCount = 0;
+  const emailCache = new Map(); // user_id -> email|null, reused across every alert this run
 
   for (const alert of alerts) {
-    const result = await evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey);
+    const result = await evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, emailCache);
     if (result.evaluated) evaluatedCount++;
     if (result.triggered) triggeredCount++;
   }
@@ -283,9 +342,21 @@ async function main() {
   );
 }
 
-main().catch((err) => {
-  console.error('[scheduler] FATAL:', err);
-  process.exitCode = 1;
-});
+// Only auto-run when this file is executed directly (`node scheduler/run.js`,
+// which is how both the manual local script and .github/workflows/monitor.yml
+// invoke it) — NOT when it's require()'d for its exports, which
+// tests/resolveNotifyTarget.test.js now does. Before this guard existed,
+// requiring this file from anywhere (a test, a REPL, a future script) would
+// have kicked off a real scheduler run as a side effect of loading the
+// module — including trying to reach Supabase and, as of Phase 10, actually
+// sending real notifications. That's exactly the kind of surprising,
+// hard-to-test side effect this project's pure-function architecture
+// (see comboSelection.js, compareTarget.js) has otherwise avoided throughout.
+if (require.main === module) {
+  main().catch((err) => {
+    console.error('[scheduler] FATAL:', err);
+    process.exitCode = 1;
+  });
+}
 
-module.exports = { fetchPreviousRateRow, insertRateRow, checkCombo, evaluateAlert };
+module.exports = { fetchPreviousRateRow, insertRateRow, checkCombo, evaluateAlert, resolveNotifyTarget };

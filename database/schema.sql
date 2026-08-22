@@ -73,8 +73,18 @@ create table if not exists public.alerts (
                            check (monitoring_interval_minutes in (1, 5, 10, 15, 30)),
   notification_method    text not null default 'browser'
                            check (notification_method in ('browser', 'email', 'telegram', 'whatsapp', 'sms')),
-                                                                    -- only 'browser' is actually implemented as of Phase 7 —
-                                                                    -- see backend/notifications/notify.js (Phase 10 scaffold)
+                                                                    -- 'browser', 'email', and 'telegram' are all real as of
+                                                                    -- Phase 10 — see backend/notifications/notify.js.
+                                                                    -- 'whatsapp'/'sms' remain unimplemented (out of scope).
+  telegram_chat_id       text,                                     -- Phase 10: only meaningful when notification_method =
+                                                                    -- 'telegram'. Stored per-alert (not per-user) for
+                                                                    -- simplicity, matching this table's existing philosophy
+                                                                    -- of not introducing a separate profile table until
+                                                                    -- something actually needs one (see the header comment's
+                                                                    -- note about `sources`). No email column exists here —
+                                                                    -- email delivery uses the account's own auth.users.email
+                                                                    -- via the Supabase Auth admin API (service-role only),
+                                                                    -- never a second, potentially-stale copy of it.
 
   status                 text not null default 'ACTIVE'
                            check (status in ('ACTIVE', 'TRIGGERED', 'DISABLED')),
@@ -182,6 +192,10 @@ create table if not exists public.notifications (
   triggered_at       timestamptz not null default now(),
   notification_type  text not null default 'browser',
   delivery_status    text not null default 'DELIVERED' check (delivery_status in ('DELIVERED', 'FAILED', 'PENDING')),
+  delivery_error     text,                                        -- Phase 10: notify.js's error message when
+                                                                    -- delivery_status = 'FAILED' (bad/missing API key,
+                                                                    -- no email on the account, Resend/Telegram API error,
+                                                                    -- etc.) — null whenever delivery_status isn't FAILED.
   message            text
 );
 
@@ -224,8 +238,25 @@ create policy "Users can insert notifications for own alerts"
 -- anything to it (RLS never applies to that key), which is what Phase 8's
 -- backend job will use if it ever needs to correct or prune old rows.
 
+-- -----------------------------------------------------------------------------
+-- Phase 10 migration — safe to re-run on a database that already has the
+-- Phase 7 tables above. `create table if not exists` never adds a column to
+-- an already-existing table, so the two new columns below need their own
+-- explicit, idempotent statements. If you're running this file for the
+-- first time ever, these are harmless no-ops immediately after the table
+-- is created with the columns already in place.
+-- -----------------------------------------------------------------------------
+
+alter table public.alerts
+  add column if not exists telegram_chat_id text;
+
+alter table public.notifications
+  add column if not exists delivery_error text;
+
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to
 -- get your Project URL / anon key into frontend/supabaseConfig.js, and your
 -- service-role key into a GitHub Actions secret (never into frontend code).
+-- Phase 10 (email/Telegram delivery) additionally needs RESEND_API_KEY and/or
+-- TELEGRAM_BOT_TOKEN as GitHub Actions secrets — see NOTIFICATIONS_SETUP.md.
 -- =============================================================================
