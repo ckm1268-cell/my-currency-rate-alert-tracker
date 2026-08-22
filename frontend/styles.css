@@ -109,6 +109,12 @@
 
 * { box-sizing: border-box; }
 html { color-scheme: light dark; }
+/* Smooth-scrolls the "✏️ Edit alert" mobile jump link (see .mobile-edit-link)
+   into a gentle scroll instead of a hard jump cut. Gated behind the same
+   prefers-reduced-motion check already used elsewhere in this file. */
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
 
 body {
   margin: 0;
@@ -118,6 +124,11 @@ body {
   font-size: 16px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  /* Safety net, not the real fix (see .hint/code below for that) — this
+     just guarantees a single missed long, unbroken string (a URL, a file
+     path) can never push the whole page into horizontal scroll on a
+     narrow phone, only get clipped at worst. */
+  overflow-x: hidden;
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -173,6 +184,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text
 @media (max-width: 480px) {
   .brand-mark { font-size: 1.15rem; }
   .brand-sub { display: none; }
+  /* Claw back padding on small phones (iPhone SE / older Android widths)
+     so content gets more of the ~360-390px of actual screen width instead
+     of losing a chunk of it to the same margins used on a tablet. */
+  .card, .form-panel { padding: 16px; }
+  .test-controls { padding: 12px 14px; }
 }
 .brand-mark em { color: var(--accent-strong); font-style: normal; }
 .brand-sub {
@@ -190,6 +206,17 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text
   padding: 4px 10px;
   white-space: nowrap;
 }
+/* Placed AFTER the base .phase-chip rule above, deliberately — an earlier
+   version of this override lived inside the max-width:480px block up near
+   .brand-mark, but a media query doesn't win a cascade tie on its own;
+   with equal specificity, whichever rule appears LATER in the file wins
+   regardless of which one is wrapped in a media query. Sitting below the
+   unconditional rule is what actually lets this take effect on a narrow
+   phone, where the full "Phase 10 · email & Telegram alerts, rate
+   history" text doesn't fit on one nowrap line without overflowing. */
+@media (max-width: 480px) {
+  .phase-chip { white-space: normal; text-align: center; }
+}
 
 /* ---------- Layout ---------- */
 .layout {
@@ -197,12 +224,20 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text
   margin: 0 auto;
   padding: clamp(16px, 3vw, 32px) clamp(16px, 4vw, 40px) 64px;
   display: grid;
-  grid-template-columns: 340px 1fr;
+  /* minmax(0, 1fr), not a bare 1fr — a grid track's implicit min-width is
+     "auto" (i.e. its content's own intrinsic width), so a bare 1fr still
+     refuses to shrink the column below whatever its widest child wants to
+     be. On a real phone that silently forced the whole right-hand column
+     out to ~560px width inside a 390px viewport — every card looked fine
+     in isolation but the page as a whole had a permanent horizontal
+     scrollbar. minmax(0, 1fr) is what actually makes 1fr mean "fill the
+     available width," full stop. */
+  grid-template-columns: 340px minmax(0, 1fr);
   gap: 24px;
   align-items: start;
 }
 @media (max-width: 880px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .form-panel { order: 2; }
   .main-col { order: 1; }
 }
@@ -216,6 +251,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text
   position: sticky;
   top: 16px;
   box-shadow: var(--shadow-card);
+  scroll-margin-top: 16px; /* breathing room when jumped to via .mobile-edit-link */
 }
 @media (max-width: 880px) { .form-panel { position: static; } }
 
@@ -238,12 +274,24 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text
   margin-top: 5px;
   line-height: 1.4;
 }
+/* Real fix for the overflow the body{overflow-x:hidden} rule above only
+   papers over: hint text regularly contains file paths and URLs
+   (frontend/supabaseConfig.js, SUPABASE_SETUP.md) with no spaces for the
+   browser to wrap at, so on a narrow phone the text just kept running
+   past the card's edge instead of wrapping to a new line. Applied to
+   every .hint (not just inside .field) and to <code> specifically, since
+   that's where the actual unbroken strings live. */
+.hint, code { overflow-wrap: break-word; word-break: break-word; }
 .field .hint.dynamic { color: var(--accent-strong); font-weight: 500; }
 
 select, input[type="number"], input[type="text"], input[type="email"], input[type="password"] {
   width: 100%;
   font-family: var(--font-body);
-  font-size: 0.95rem;
+  /* 16px, not 0.95rem (15.2px) — iOS Safari auto-zooms the page when a
+     focused input's font-size is under 16px. That zoom-on-tap is a classic
+     "this isn't really a mobile app" tell, so this is deliberately exact,
+     not just a size preference. */
+  font-size: 1rem;
   color: var(--ink);
   background: var(--surface-raised);
   border: 1px solid var(--line-strong);
@@ -343,9 +391,14 @@ select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 8px 12px;
   margin-bottom: 6px;
 }
+/* Lets the title block actually shrink/wrap instead of forcing the card
+   wider than the screen — flex items default to min-width:auto, which
+   otherwise refuses to shrink below the text's natural width. */
+.card-head > div:first-child { min-width: 0; }
 .card-eyebrow {
   font-size: 0.74rem;
   text-transform: uppercase;
@@ -404,8 +457,10 @@ select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
 
 .hero-footer {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 8px 12px;
   margin-top: 18px;
   padding-top: 14px;
   border-top: 1px dashed var(--line-strong);
@@ -413,6 +468,30 @@ select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
   color: var(--ink-faint);
 }
 .hero-footer .last-checked { font-family: var(--font-mono); }
+
+/* Phone-only shortcut to the "Build your alert" form. On mobile the form
+   panel is reordered to appear BELOW this hero card (see the max-width:
+   880px rule under "Layout"), which is the right priority — the live rate
+   is what you came for — but it also means editing your alert now means
+   scrolling down past the whole dashboard. This link jumps straight there.
+   Hidden entirely above 880px, where the form is already right beside the
+   hero card and a jump link would be redundant clutter. */
+.mobile-edit-link {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent-strong);
+  text-decoration: none;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 4px 12px;
+}
+.mobile-edit-link:hover { border-color: var(--accent); }
+@media (max-width: 880px) {
+  .mobile-edit-link { display: inline-flex; }
+}
 
 /* ---------- Comparison table ---------- */
 .table-scroll { overflow-x: auto; }
@@ -449,7 +528,7 @@ table.compare tr.is-best td:first-child { border-left: 3px solid var(--accent); 
 
 /* ---------- History chart ---------- */
 .chart-wrap { margin-top: 12px; }
-.chart-range { display: flex; gap: 6px; margin-bottom: 10px; }
+.chart-range { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .chart-range button {
   border: 1px solid var(--line-strong);
   background: var(--surface-raised);
@@ -538,15 +617,16 @@ canvas#historyChart { width: 100%; height: 180px; display: block; }
 .alert-empty { font-size: 0.82rem; color: var(--ink-faint); padding: 6px 0; }
 .alert-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 8px 10px;
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
 }
-.alert-item-title { font-family: var(--font-mono); font-weight: 600; font-size: 0.92rem; }
+.alert-item-title { font-family: var(--font-mono); font-weight: 600; font-size: 0.92rem; overflow-wrap: break-word; }
 .alert-item-sub { font-size: 0.76rem; color: var(--ink-faint); margin-top: 2px; }
 .alert-item-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .alert-item-actions { display: flex; gap: 6px; }
