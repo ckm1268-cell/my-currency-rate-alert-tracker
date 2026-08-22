@@ -120,7 +120,17 @@ comment on table public.alerts is
 
 create index if not exists alerts_user_id_idx on public.alerts (user_id);
 create index if not exists alerts_status_idx on public.alerts (status);
-create index if not exists alerts_last_checked_at_idx on public.alerts (last_checked_at); -- Phase 14
+-- alerts_last_checked_at_idx is NOT created here. On a brand-new database
+-- the `create table if not exists` above would have just created that
+-- column, so this would work — but on an EXISTING database (i.e. every
+-- real re-run of this file against a live project), `create table if not
+-- exists` is a no-op and last_checked_at doesn't exist yet at this point
+-- in the script; it's only added later, by the Phase 14 migration block
+-- near the bottom (`alter table ... add column if not exists
+-- last_checked_at ...`), which is also where its index actually gets
+-- created — see that block. An earlier version of this file created the
+-- index here too, which broke with "column last_checked_at does not
+-- exist" on exactly that real-re-run case.
 
 -- Keep updated_at current on every UPDATE.
 create or replace function public.set_updated_at()
@@ -292,11 +302,27 @@ alter table public.alerts
 
 -- Backfill from the old single-value column, only for rows that don't
 -- already have an array value (re-running this file a second time must
--- not clobber anything).
-update public.alerts
-set notification_methods = ARRAY[notification_method]
-where notification_methods is null
-  and notification_method is not null;
+-- not clobber anything). Guarded in a DO block with an information_schema
+-- check, rather than a plain UPDATE referencing notification_method
+-- directly: a plain reference to that column is a HARD ERROR (42703 —
+-- "column does not exist"), not a harmless no-op, once a previous run of
+-- this exact migration has already reached the "drop column" step further
+-- below — which is true for any database that has already migrated once,
+-- including re-running this entire file for an unrelated later migration
+-- (e.g. Phase 14's last_checked_at). Real bug, caught 22-Aug-2026 when a
+-- re-run hit exactly this on an already-migrated project.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'alerts' and column_name = 'notification_method'
+  ) then
+    update public.alerts
+    set notification_methods = ARRAY[notification_method]
+    where notification_methods is null
+      and notification_method is not null;
+  end if;
+end $$;
 
 -- Any row with neither an old value nor a new one yet (shouldn't happen
 -- given notification_method's own NOT NULL default, but this must never

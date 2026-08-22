@@ -95,13 +95,12 @@
       <div class="field">
         <label for="interval">Monitoring interval</label>
         <select id="interval" name="interval">
-          <option value="1">Every 1 minute</option>
           <option value="5" selected>Every 5 minutes (default)</option>
           <option value="10">Every 10 minutes</option>
           <option value="15">Every 15 minutes</option>
           <option value="30">Every 30 minutes</option>
         </select>
-        <p class="hint">For a saved alert, this is how often it's actually re-checked in the background (the backend runs every 5 minutes; a longer interval here just means it's skipped on some of those runs). Simulated currencies in this browser tab tick every few seconds regardless of this setting, so you can see the demo states without waiting.</p>
+        <p class="hint">For a saved alert, this is genuinely how often it's re-checked in the background — the scheduled job itself runs every 5 minutes, which is also the fastest a check can happen, so 5 minutes is both the default and the minimum. A longer interval here means it's skipped on some of those runs (e.g. 30 minutes = checked on 1 run out of every 6). Simulated currencies in this browser tab tick every few seconds regardless of this setting, so you can see the demo states without waiting.</p>
       </div>
 
       <div class="field">
