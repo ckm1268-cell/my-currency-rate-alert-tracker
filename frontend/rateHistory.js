@@ -161,7 +161,7 @@
       const n = points.length;
       ctx.fillText(
         n === 0
-          ? `No recorded history yet for ${RANGE_LABELS[range]} — the scheduled backend job (Phase 8) runs on manual "Run workflow" trigger only for now, not a recurring cron (see README). Try a wider range, or trigger a run from the Actions tab.`
+          ? `No recorded history yet for ${RANGE_LABELS[range]} — the scheduled backend check currently runs on manual trigger only, not a recurring schedule yet. Try a wider range, or check back after the next run.`
           : `Only ${n} recorded point in ${RANGE_LABELS[range]} — not enough to draw a line yet.`,
         pad.l, h / 2
       );

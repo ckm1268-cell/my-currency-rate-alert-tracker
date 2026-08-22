@@ -935,6 +935,16 @@
     $("targetRate").value = cur.base.toFixed(cur.decimals);
     wireForm();
     wireChartRange();
+
+    // Phase 12 tidy-up: the "Test controls" card (force-trigger, simulate
+    // source-down, etc.) is QA/demo tooling, not something a real user
+    // monitoring their own alert should see or be tempted to click. Hidden
+    // by default in index.html; reveal it only for whoever explicitly asks
+    // for it via ?debug=1 in the URL (e.g. for a live demo).
+    if (new URLSearchParams(window.location.search).get("debug") === "1" && $("testControlsSection")) {
+      $("testControlsSection").style.display = "block";
+    }
+
     loadLiveData(); // also calls tick() once it resolves (or fails)
     tick();
     setInterval(tick, 4000);

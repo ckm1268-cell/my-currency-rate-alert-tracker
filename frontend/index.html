@@ -22,7 +22,7 @@
   </div>
   <div style="display:flex; align-items:center; gap:10px;">
     <span class="brand-sub" id="clockLabel">—</span>
-    <span class="phase-chip">Phase 10 · email &amp; Telegram alerts, rate history</span>
+    <span class="phase-chip">Live rates · Email &amp; Telegram alerts</span>
   </div>
 </header>
 
@@ -139,7 +139,7 @@
     <article class="card" id="accountCard">
       <div class="card-head">
         <div>
-          <div class="card-eyebrow">Your account · Phase 7</div>
+          <div class="card-eyebrow">Your account</div>
           <h3>Save alerts to your account</h3>
         </div>
         <span class="status-pill mock" id="authStatusPill">Not signed in</span>
@@ -301,8 +301,13 @@
       <ul class="log-list" id="activityLog"></ul>
     </article>
 
-    <!-- Test controls -->
-    <article class="card test-controls">
+    <!-- Test controls — hidden from real users by default (Phase 12 tidy-up).
+         These are QA/demo tools for forcing simulated rows into each state;
+         they have no place on the page real multi-users land on, but stay in
+         the code and are revealed by appending ?debug=1 to the URL, so
+         they're still there for a demo or for future debugging without
+         cluttering the production experience. See app.js's init(). -->
+    <article class="card test-controls" id="testControlsSection" style="display:none;">
       <div class="card-eyebrow">Test controls — simulated sources only</div>
       <p>These buttons force the SIMULATED sources into each state so you can see it without waiting for the demo to land on it naturally. They only affect simulated rows — they cannot fake a real My Money Master, Taj Muhabath, or Merchantrade Asia LIVE reading.</p>
       <div class="btn-row">
@@ -317,7 +322,7 @@
 </main>
 
 <footer class="site-footer">
-  MY Currency Rate Tracker — track any currency pair across multiple Malaysian money changers, compare rates side by side, and get alerted the moment your target is reached · My Money Master, Taj Muhabath, and Merchantrade Asia are real live connections today; other combinations are simulated and clearly labeled while more are added · optional accounts (Phase 7) let you save alerts, isolated per user · saved alerts are checked server-side and can notify you by email or Telegram (Phase 8/10), and signed-in users see real recorded rate history, not just this session's readings.
+  MY Currency Rate Tracker — track any currency pair across multiple Malaysian money changers, compare rates side by side, and get alerted the moment your target is reached · My Money Master, Taj Muhabath, and Merchantrade Asia are real live connections today; other combinations are simulated and clearly labeled while more are added · optional accounts let you save alerts, isolated per user · saved alerts are checked server-side and can notify you by email or Telegram, and signed-in users see real recorded rate history, not just this session's readings.
 </footer>
 
 <div id="toast" role="status" aria-live="polite"></div>
