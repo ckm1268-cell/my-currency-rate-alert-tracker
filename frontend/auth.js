@@ -136,10 +136,25 @@
     if (tabSignup) tabSignup.setAttribute("aria-pressed", activeTab === "signup" ? "true" : "false");
   }
 
+  // Empties every email/password input across all three auth forms. Needed
+  // because switching which form is visible (showActiveTab) only ever
+  // toggled CSS display — the actual <input> elements stayed in the DOM
+  // the whole time with whatever was last typed into them, so a password
+  // typed once would silently keep reappearing after sign-out or after
+  // flipping back to a tab, with nothing having actually cleared it.
+  function clearAuthForms() {
+    ["loginEmail", "loginPassword", "signupEmail", "signupPassword", "signupPasswordConfirm", "newPassword"]
+      .forEach((id) => {
+        const el = $(id);
+        if (el) el.value = "";
+      });
+  }
+
   function switchTab(tab) {
     activeTab = tab === "signup" ? "signup" : "login";
     setLoginStatus("");
     setSignupStatus("");
+    clearAuthForms();
     showActiveTab();
   }
 
@@ -342,6 +357,9 @@
   async function signOut() {
     await sb.auth.signOut();
     setSaveStatus("");
+    activeTab = "login";
+    clearAuthForms();
+    showActiveTab();
   }
 
   // -------------------------------------------------------------------------
