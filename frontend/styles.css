@@ -643,6 +643,24 @@ canvas#historyChart { width: 100%; height: 180px; display: block; }
 .alert-action:hover { border-color: var(--accent); color: var(--accent-strong); }
 .alert-action-danger:hover { border-color: var(--down); color: var(--down); }
 
+/* Phase 13 — shown above "Save current alert" while an existing saved
+   alert's settings are loaded into the form for editing (see auth.js's
+   startEditingAlert()/stopEditingAlert() and app.js's loadAlertIntoForm()). */
+.editing-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  margin-bottom: 10px;
+}
+.editing-banner #cancelEditBtn { background: var(--surface-raised); margin-left: auto; }
+
 /* ---------- Toast ---------- */
 #toast {
   position: fixed;

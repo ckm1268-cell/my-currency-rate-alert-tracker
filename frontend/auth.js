@@ -79,6 +79,13 @@
   let linkedAlertId = null; // most recently saved alert id, for the trigger bridge
   let activeTab = "login"; // "login" | "signup" — which form is showing when signed out
   let awaitingPasswordReset = false; // true between a PASSWORD_RECOVERY event and a successful updateUser({password})
+  // Phase 13 — the alert (row id) currently loaded into the form for
+  // editing, or null when "Save current alert" would create a NEW alert.
+  // myAlertsCache holds the last list loaded from Supabase so the Edit
+  // button can hand a full row straight to loadAlertIntoForm() without an
+  // extra round trip.
+  let editingAlertId = null;
+  let myAlertsCache = [];
 
   function isConfigured() {
     const url = window.CKM_SUPABASE_URL;
@@ -360,6 +367,8 @@
     activeTab = "login";
     clearAuthForms();
     showActiveTab();
+    myAlertsCache = [];
+    stopEditingAlert(); // clears editingAlertId and resets the Save button/banner for the next sign-in
   }
 
   // -------------------------------------------------------------------------
@@ -409,6 +418,7 @@
           <div class="alert-item-side">
             <span class="${statusPillClass(a.status)}" style="font-size:.7rem;">${a.status}</span>
             <div class="alert-item-actions">
+              <button type="button" class="alert-action" data-action="edit" data-id="${a.id}">Edit</button>
               ${a.status === "DISABLED"
                 ? `<button type="button" class="alert-action" data-action="enable" data-id="${a.id}">Enable</button>`
                 : `<button type="button" class="alert-action" data-action="disable" data-id="${a.id}">Disable</button>`}
@@ -422,11 +432,26 @@
       btn.addEventListener("click", async () => {
         const id = btn.dataset.id;
         const action = btn.dataset.action;
+
+        // Edit is a pure client-side form-fill — no network call, so it
+        // doesn't go through the disable/try/catch dance below (and must
+        // NOT disable the button, since nothing async happens to re-enable
+        // it afterwards).
+        if (action === "edit") {
+          startEditingAlert(id);
+          return;
+        }
+
         btn.disabled = true;
         try {
           if (action === "delete") {
             if (!window.confirm("Delete this saved alert? This can't be undone.")) { btn.disabled = false; return; }
             await sb.from("alerts").delete().eq("id", id);
+            // Editing an alert that just got deleted (e.g. from another tab,
+            // or the user deleted the very one they had open) would leave
+            // the form silently pointed at a row that no longer exists —
+            // the next Save would fail with a confusing "0 rows updated".
+            if (String(editingAlertId) === String(id)) stopEditingAlert();
           } else if (action === "disable") {
             await sb.from("alerts").update({ status: "DISABLED" }).eq("id", id);
           } else if (action === "enable") {
@@ -441,6 +466,58 @@
     });
   }
 
+  // -------------------------------------------------------------------------
+  // Editing an existing saved alert (Phase 13)
+  // -------------------------------------------------------------------------
+  // "Edit" loads a saved alert's settings back into the form panel on the
+  // left (via app.js's window.CKM.loadAlertIntoForm — see that file) so the
+  // user can change them and save OVER the same alert, instead of only ever
+  // being able to Disable/Delete and build a fresh one from scratch.
+
+  function formatAlertLabel(a) {
+    if (!a) return "";
+    const target = Number(a.target_rate).toFixed(4).replace(/0+$/, "").replace(/\.$/, "");
+    return `${a.currency} ${a.rate_type} ${target}`;
+  }
+
+  function updateEditingBanner() {
+    const banner = $("editingBanner");
+    const label = $("editingBannerLabel");
+    const saveBtn = $("saveAlertBtn");
+    if (editingAlertId) {
+      const alert = myAlertsCache.find((a) => String(a.id) === String(editingAlertId));
+      if (banner) banner.style.display = "flex";
+      if (label) label.textContent = formatAlertLabel(alert);
+      if (saveBtn) saveBtn.textContent = "💾 Update this alert";
+    } else {
+      if (banner) banner.style.display = "none";
+      if (saveBtn) saveBtn.textContent = "💾 Save current alert to my account";
+    }
+  }
+
+  function startEditingAlert(id) {
+    const alert = myAlertsCache.find((a) => String(a.id) === String(id));
+    if (!alert) {
+      setSaveStatus("Could not find that alert to edit — try reloading the page.");
+      return;
+    }
+    if (typeof window.CKM === "undefined" || typeof window.CKM.loadAlertIntoForm !== "function") {
+      setSaveStatus("Could not load the alert into the form — the dashboard script may not have loaded yet.");
+      return;
+    }
+    editingAlertId = id;
+    window.CKM.loadAlertIntoForm(alert);
+    updateEditingBanner();
+    setSaveStatus("");
+    const formPanel = $("formPanel");
+    if (formPanel) formPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function stopEditingAlert() {
+    editingAlertId = null;
+    updateEditingBanner();
+  }
+
   async function loadMyAlerts() {
     if (!sb || !currentSession) return;
     const { data, error } = await sb.from("alerts").select("*").order("created_at", { ascending: false });
@@ -448,7 +525,12 @@
       setSaveStatus(`Could not load your alerts: ${error.message}`);
       return;
     }
-    renderAlertsList(data);
+    myAlertsCache = data || [];
+    renderAlertsList(myAlertsCache);
+    // The alert being edited may have changed shape (e.g. the background
+    // trigger bridge just marked it TRIGGERED) — refresh the banner's label
+    // so it never shows stale info, without disturbing the form itself.
+    if (editingAlertId) updateEditingBanner();
   }
 
   async function saveCurrentAlert() {
@@ -480,7 +562,6 @@
       return;
     }
 
-    setSaveStatus("Saving…");
     const row = {
       currency: state.currency,
       rate_type: state.rateType,
@@ -495,9 +576,29 @@
       // of the checked channels — never write a stray chat ID onto an
       // alert that didn't select Telegram.
       telegram_chat_id: notificationMethods.includes("telegram") ? state.telegramChatId.trim() : null,
+      // Re-arm on every save, including an edit of a DISABLED/TRIGGERED
+      // alert — matches how the rest of this app treats "save"/"reset" as
+      // meaning "start watching again from here" (see handleAlertReset()).
       status: "ACTIVE",
     };
 
+    // Phase 13: editingAlertId set means this save is an UPDATE to an
+    // existing alert (via the "Edit" button below), not a new INSERT.
+    if (editingAlertId) {
+      setSaveStatus("Updating…");
+      const { data, error } = await sb.from("alerts").update(row).eq("id", editingAlertId).select().single();
+      if (error) {
+        setSaveStatus(`Could not update: ${error.message}`);
+        return;
+      }
+      linkedAlertId = data.id;
+      setSaveStatus("Updated. Your changes are saved.");
+      stopEditingAlert();
+      await loadMyAlerts();
+      return;
+    }
+
+    setSaveStatus("Saving…");
     const { data, error } = await sb.from("alerts").insert(row).select().single();
     if (error) {
       setSaveStatus(`Could not save: ${error.message}`);
@@ -593,6 +694,9 @@
 
     const saveBtn = $("saveAlertBtn");
     if (saveBtn) saveBtn.addEventListener("click", saveCurrentAlert);
+
+    const cancelEditBtn = $("cancelEditBtn");
+    if (cancelEditBtn) cancelEditBtn.addEventListener("click", stopEditingAlert);
   }
 
   function init() {

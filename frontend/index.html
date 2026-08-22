@@ -200,6 +200,10 @@
 
         <div class="account-divider"></div>
 
+        <div id="editingBanner" class="editing-banner" style="display:none;">
+          ✏️ Editing <strong id="editingBannerLabel"></strong> — change settings on the left, then click Update.
+          <button type="button" id="cancelEditBtn" class="alert-action">Cancel edit</button>
+        </div>
         <button type="button" class="btn-primary" id="saveAlertBtn">💾 Save current alert to my account</button>
         <p class="hint">Uses the settings from the panel on the left — currency, rate type, target, sources, branch, condition, interval, notification method(s), and Telegram chat ID (if applicable).</p>
         <p class="form-status" id="saveAlertStatus"></p>

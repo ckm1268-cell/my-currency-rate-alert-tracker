@@ -185,6 +185,84 @@
   // exists by the time this line runs.
   window.CKM.renderDefaultChart = renderSimulatedChart;
 
+  // Phase 13 — lets auth.js's new "Edit" button on a saved alert push that
+  // alert's saved settings back into this form (currency, rate type, target,
+  // sources, branch, condition, interval, notification methods, Telegram
+  // chat ID), so the user can change them and save over the SAME alert
+  // instead of only ever being able to Disable/Delete and start over. Both
+  // updates the closed-over `state` this file's own tick()/startMonitoring()
+  // read AND writes the visible form controls directly — updating state
+  // alone would leave the on-screen selects/checkboxes showing stale values
+  // until the user happened to touch each one.
+  window.CKM.loadAlertIntoForm = function (row) {
+    if (!row) return;
+
+    state.currency = row.currency;
+    if ($("currency")) $("currency").value = row.currency;
+    state.history = [];
+    lastSelectedValue = null;
+
+    state.rateType = row.rate_type;
+    document.querySelectorAll("#rateTypeSeg button").forEach((b) => {
+      b.setAttribute("aria-pressed", b.dataset.value === row.rate_type ? "true" : "false");
+    });
+    if ($("rateTypeHint")) $("rateTypeHint").textContent = RATE_TYPE_EXPLAINERS[state.rateType] || "";
+
+    const cur = CURRENCIES.find((c) => c.code === row.currency);
+    const decimals = cur ? cur.decimals : 4;
+    const target = Number(row.target_rate);
+    if (Number.isFinite(target) && target > 0) {
+      state.targetRate = target;
+      if ($("targetRate")) $("targetRate").value = target.toFixed(decimals);
+    }
+
+    const sourceList = Array.isArray(row.sources) ? row.sources : [];
+    state.sources = {
+      mymoneymaster: sourceList.includes("mymoneymaster"),
+      tajmuhabath: sourceList.includes("tajmuhabath"),
+      merchantradeasia: sourceList.includes("merchantradeasia"),
+    };
+    if ($("srcMMM")) $("srcMMM").checked = state.sources.mymoneymaster;
+    if ($("srcTM")) $("srcTM").checked = state.sources.tajmuhabath;
+    if ($("srcMTA")) $("srcMTA").checked = state.sources.merchantradeasia;
+    updateBranchAvailability();
+
+    if (row.branch) {
+      state.branch = row.branch;
+      if ($("branch")) $("branch").value = row.branch;
+    }
+
+    state.condition = row.condition || state.condition;
+    if ($("condition")) $("condition").value = state.condition;
+    if ($("pctChangeField")) $("pctChangeField").style.display = state.condition === "PCT_CHANGE" ? "block" : "none";
+    if (state.condition === "PCT_CHANGE" && row.pct_change_threshold != null) {
+      const pct = Number(row.pct_change_threshold);
+      if (Number.isFinite(pct) && pct > 0) {
+        state.pctChange = pct;
+        if ($("pctChange")) $("pctChange").value = pct;
+      }
+    }
+
+    if (row.monitoring_interval_minutes) {
+      state.interval = row.monitoring_interval_minutes;
+      if ($("interval")) $("interval").value = String(state.interval);
+    }
+
+    // browser stays permanently on (Phase 11.1 — no checkbox for it); only
+    // email/telegram reflect what this saved alert actually had checked.
+    const methods = Array.isArray(row.notification_methods)
+      ? row.notification_methods
+      : (row.notification_method ? [row.notification_method] : ["browser"]);
+    state.notifications.email = methods.includes("email");
+    state.notifications.telegram = methods.includes("telegram");
+    if ($("notifEmail")) $("notifEmail").checked = state.notifications.email;
+    if ($("notifTelegram")) $("notifTelegram").checked = state.notifications.telegram;
+    if ($("telegramChatIdField")) $("telegramChatIdField").style.display = state.notifications.telegram ? "block" : "none";
+
+    state.telegramChatId = row.telegram_chat_id || "";
+    if ($("telegramChatId")) $("telegramChatId").value = state.telegramChatId;
+  };
+
   function callHook(name, ...args) {
     const fn = window.CKM && window.CKM[name];
     if (typeof fn !== "function") return;
