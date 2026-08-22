@@ -173,6 +173,10 @@
     const signupForm = $("signupForm");
     const resetForm = $("resetPasswordForm");
     const signedInPanel = $("signedInPanel");
+    // Phase 13.1 — lives in the form panel now (right below "Reset alert"),
+    // not in this account card, but it's only meaningful once signed in, so
+    // it's shown/hidden in lockstep with signedInPanel everywhere below.
+    const saveAlertSection = $("saveAlertSection");
 
     // Password-recovery takes over the card regardless of session state —
     // Supabase issues a real (temporary) session as part of the recovery
@@ -186,6 +190,7 @@
       if (signupForm) signupForm.style.display = "none";
       if (resetForm) resetForm.style.display = "block";
       if (signedInPanel) signedInPanel.style.display = "none";
+      if (saveAlertSection) saveAlertSection.style.display = "none";
       return;
     }
 
@@ -196,6 +201,7 @@
       if (signupForm) signupForm.style.display = "none";
       if (resetForm) resetForm.style.display = "none";
       if (signedInPanel) signedInPanel.style.display = "block";
+      if (saveAlertSection) saveAlertSection.style.display = "block";
       const emailEl = $("authUserEmail");
       if (emailEl) emailEl.textContent = currentSession.user.email || "(no email on session)";
       loadMyAlerts();
@@ -205,7 +211,9 @@
       if (resetForm) resetForm.style.display = "none";
       showActiveTab();
       if (signedInPanel) signedInPanel.style.display = "none";
+      if (saveAlertSection) saveAlertSection.style.display = "none";
       linkedAlertId = null;
+      stopEditingAlert(); // signed out mid-edit shouldn't leave a stale "Editing..." banner for the next sign-in
     }
   }
 
