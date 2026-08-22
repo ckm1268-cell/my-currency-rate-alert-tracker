@@ -110,8 +110,13 @@
     // combination of channels may be checked at once, and all of them fire
     // simultaneously when the target is reached (see fireAlert() below and
     // backend/scheduler/run.js's resolveNotifyTargets()/Promise.all for the
-    // server-side equivalent).
-    notifications: { browser: true, email: false, telegram: false },
+    // server-side equivalent). browser has no checkbox in the UI (Phase 11.1)
+    // — it always fires automatically whenever this tab is open and
+    // monitoring, so it stays true unconditionally rather than being read
+    // from a form field. email now defaults to checked (Phase 11.1); the
+    // user must still add RESEND_API_KEY (see NOTIFICATIONS_SETUP.md) and be
+    // signed in for it to actually deliver.
+    notifications: { browser: true, email: true, telegram: false },
     telegramChatId: "", // Phase 10 — only meaningful when notifications.telegram is true
 
     monitoring: false,
@@ -819,7 +824,7 @@
     });
 
     $("interval").addEventListener("change", (e) => { state.interval = parseInt(e.target.value, 10); });
-    $("notifBrowser").addEventListener("change", (e) => { state.notifications.browser = e.target.checked; });
+    // No notifBrowser checkbox (Phase 11.1) — state.notifications.browser stays true unconditionally, set at init above.
     $("notifEmail").addEventListener("change", (e) => { state.notifications.email = e.target.checked; });
     $("notifTelegram").addEventListener("change", (e) => {
       state.notifications.telegram = e.target.checked;

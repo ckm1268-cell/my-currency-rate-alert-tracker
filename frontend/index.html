@@ -107,11 +107,7 @@
       <div class="field">
         <label>Notification</label>
         <div class="checkbox-row">
-          <input type="checkbox" id="notifBrowser" value="browser" checked>
-          <label for="notifBrowser">Browser notification (this tab only)</label>
-        </div>
-        <div class="checkbox-row">
-          <input type="checkbox" id="notifEmail" value="email">
+          <input type="checkbox" id="notifEmail" value="email" checked>
           <label for="notifEmail">Email — sent by the scheduled backend job</label>
         </div>
         <div class="checkbox-row">
@@ -122,7 +118,7 @@
           <input type="checkbox" id="notifWhatsapp" value="whatsapp" disabled>
           <label for="notifWhatsapp">WhatsApp — not yet built</label>
         </div>
-        <p class="hint">Check as many as you want — they all fire simultaneously when your target is reached, not just one. Email and Telegram are delivered server-side by <code>backend/scheduler/run.js</code> (Phase 8/10) — they work even with this tab closed, but only for a <strong>saved</strong> alert (sign in below to save one). Browser notification only fires while this tab is open and monitoring.</p>
+        <p class="hint">This tab also shows a browser notification automatically whenever it's open and actively monitoring — no checkbox needed for that. Check as many of the boxes above as you want — they all fire simultaneously when your target is reached, not just one. Email and Telegram are delivered server-side by <code>backend/scheduler/run.js</code> (Phase 8/10) — they work even with this tab closed, but only for a <strong>saved</strong> alert (sign in below to save one).</p>
       </div>
 
       <div class="field" id="telegramChatIdField" style="display:none;">
