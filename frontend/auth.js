@@ -579,6 +579,18 @@
   function init() {
     wireForm();
 
+    // Force every auth field empty on every fresh page load. Without this,
+    // the browser's own saved-password autofill (separate from anything
+    // this app's JS does — see clearAuthForms()'s other two call sites)
+    // can silently repopulate loginEmail/loginPassword as soon as the page
+    // renders, before any of this script has run. A page reload is a real
+    // navigation, so nothing about the earlier sign-out/tab-switch fix
+    // touches this case — it needs its own explicit clear. Runs twice: once
+    // immediately (covers the common case) and once after a short delay
+    // (covers browsers that apply autofill slightly after initial paint).
+    clearAuthForms();
+    setTimeout(clearAuthForms, 300);
+
     if (!isConfigured()) {
       showConfigNotice(
         'Supabase isn\'t configured yet — fill in frontend/supabaseConfig.js with your project URL and anon key ' +
