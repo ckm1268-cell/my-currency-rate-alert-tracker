@@ -43,7 +43,7 @@
 # interval matches the dashboard's own default monitoring interval). Every
 # other prerequisite is already satisfied as of this Phase 8 build.
 
-name: Monitor Exchange Rates (Phase 8 — manual trigger only, no cron yet)
+name: Monitor Exchange Rates
 
 on:
   workflow_dispatch: {} # manual "Run workflow" button only, until compliance item 4 above is cleared
