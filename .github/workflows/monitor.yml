@@ -1,15 +1,24 @@
-# Scheduled rate-monitoring workflow — Phase 8 (Supabase-backed)
-# ===================================================================
-# STATUS: real pipeline implemented (Phase 8, 22-Aug-2026). Every "Run
-# workflow" trigger now calls backend/scheduler/run.js, which: fetches
-# every ACTIVE alert from Supabase, checks both adapters (deduplicated —
-# one live check per distinct source+currency+branch combo, not one per
-# alert), writes every reading (success or failure) to the `rates` table,
-# evaluates each alert against the best rate across its selected sources
-# (backend/targetEngine/compareTarget.js), and — the moment a target is
-# met — marks that alert TRIGGERED and inserts a `notifications` row. See
-# backend/scheduler/run.js's own header comment for the full design
-# rationale (best-rate-across-sources, PENDING delivery status, etc.).
+# Scheduled rate-monitoring workflow — Phase 8/10 (Supabase-backed, real delivery)
+# =====================================================================================
+# STATUS: real pipeline implemented (Phase 8, 22-Aug-2026), real email/Telegram
+# delivery added (Phase 10, same day). Every "Run workflow" trigger now calls
+# backend/scheduler/run.js, which: fetches every ACTIVE alert from Supabase,
+# checks both adapters (deduplicated — one live check per distinct
+# source+currency+branch combo, not one per alert), writes every reading
+# (success or failure) to the `rates` table, evaluates each alert against the
+# best rate across its selected sources (backend/targetEngine/compareTarget.js),
+# and — the moment a target is met — marks that alert TRIGGERED, sends a real
+# notification via backend/notifications/notify.js (email via Resend, or
+# Telegram — whichever the alert's notification_method is set to), and inserts
+# a `notifications` row recording the actual DELIVERED/FAILED/PENDING outcome.
+# See backend/scheduler/run.js's own header comment for the full design
+# rationale (best-rate-across-sources, real delivery resolution, etc.).
+#
+# RESEND_API_KEY and TELEGRAM_BOT_TOKEN below are optional in the sense that
+# the run itself won't fail without them — but any active alert using
+# notification_method 'email' or 'telegram' will have its delivery recorded
+# as FAILED (with a clear reason) if the matching secret isn't set. See
+# NOTIFICATIONS_SETUP.md for how to obtain and add both.
 #
 # This workflow itself still runs on MANUAL TRIGGER ONLY — there is no
 # recurring cron yet. The original Phase 7/8 activation checklist:
@@ -64,4 +73,6 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: node scheduler/run.js
