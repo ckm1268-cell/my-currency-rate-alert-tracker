@@ -90,11 +90,13 @@ const { notify } = require('../notifications/notify');
 const ADAPTERS = {
   mymoneymaster: () => require('../scrapers/mymoneymaster.adapter'),
   tajmuhabath: () => require('../scrapers/tajmuhabath.adapter'),
+  merchantradeasia: () => require('../scrapers/merchantradeasia.adapter'),
 };
 
 const SOURCE_DISPLAY_NAMES = {
   mymoneymaster: 'My Money Master',
   tajmuhabath: 'Taj Muhabath',
+  merchantradeasia: 'Merchantrade Asia',
 };
 
 async function fetchPreviousRateRow(sb, combo) {

@@ -124,6 +124,55 @@ the optional one) as environment variables for the scheduled job.
    the Actions run log (`node scheduler/run.js`'s own console output) shows
    the same message.
 
+## Troubleshooting
+
+### `delivery_error` says: `Resend API error (HTTP 403): You can only send testing emails to your own email address...`
+
+Also seen in real testing (22-Aug-2026) — this is Resend's own sandbox
+restriction, not a bug here. Until you verify a domain you own in Resend,
+their free tier only allows sending to the email address that created the
+Resend account, regardless of which of this app's users the alert belongs
+to. Two ways to handle it:
+
+- **To just confirm email delivery works:** sign in to this app with the
+  same email address that owns your Resend account, and test with an alert
+  saved under that account. No changes needed — it'll send immediately.
+- **To let email work for every account (the real fix):** in Resend,
+  go to **Domains** → **Add Domain**, add the DNS records Resend gives you
+  for a domain you own, wait for it to verify, then add `NOTIFY_EMAIL_FROM`
+  as one more GitHub Actions secret set to an address on that domain (e.g.
+  `alerts@yourdomain.com`). `backend/notifications/email.js` already reads
+  this as an optional override — no code change needed once it's set.
+
+### `delivery_error` says: `Telegram API error: Bad Request: chat not found`
+
+This is the Telegram Bot API's way of saying "I don't have permission to
+message this chat ID" — seen in real testing (22-Aug-2026), and it's almost
+always one of two causes, not a bug in this app:
+
+1. **You haven't messaged the bot yet (or messaged a different one).**
+   Telegram bots can only send a message to a chat that has messaged *them*
+   first — this is a platform-level restriction, not something this app can
+   work around. Open a chat with the exact bot username you created via
+   BotFather and send it anything (`/start` is fine), then re-fetch
+   `getUpdates` and re-copy the chat ID.
+2. **A typo, or a stale/wrong ID pasted into the alert.** Re-copy the number
+   after `"chat":{"id":` carefully — no extra digits, no surrounding quotes.
+
+To fix an alert that already saved a bad chat ID: the dashboard doesn't
+have an in-place edit for this yet, so the fastest fix is directly in
+Supabase's **Table Editor** → `alerts` table → find the row → edit
+`telegram_chat_id` to the correct value → save. If the alert's `status` is
+now `TRIGGERED` (a real target hit, correctly detected, just undeliverable),
+also reset it to `ACTIVE` in the same place — or on the dashboard, click
+**Disable** then **Enable** on that alert — before re-running the workflow.
+
+### `delivery_error` says something about a missing API key
+
+`RESEND_API_KEY` or `TELEGRAM_BOT_TOKEN` isn't set as a GitHub Actions
+secret yet, or the secret name has a typo — see step 3 above. Secret names
+are case-sensitive and must match exactly.
+
 ## What this does and doesn't do yet
 
 - **Real:** email via Resend and Telegram via the Bot API are both actually

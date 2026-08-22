@@ -8,6 +8,7 @@
     "test": "cd .. && node --test",
     "check:mymoneymaster": "node scripts/checkRate.js mymoneymaster CNY",
     "check:tajmuhabath": "node scripts/checkRate.js tajmuhabath CNY \"LALAPORT BBCC\"",
+    "check:merchantradeasia": "node scripts/checkRate.js merchantradeasia CNY",
     "scheduler": "node scheduler/run.js"
   },
   "dependencies": {

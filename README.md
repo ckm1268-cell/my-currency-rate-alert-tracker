@@ -5,9 +5,14 @@ Malaysian money changers. Not a converter — this proves, with a timestamp,
 whether the live rate at a chosen money changer has reached your target
 *right now*, and alerts you the moment it does.
 
-Initial scope: **CNY/MYR, SELL rate**, from **My Money Master** and
-**Taj Muhabath**. Architecture supports adding more currencies, branches,
-and sources without a redesign.
+Initial scope: **CNY/MYR, SELL rate**, from **My Money Master**,
+**Taj Muhabath**, and (added 22-Aug-2026) **Merchantrade Asia**.
+Architecture supports adding more currencies, branches, and sources
+without a redesign — Merchantrade Asia is itself proof of that: it was
+added after the original Phase 1-10 build without touching the scheduler,
+validation, or target-comparison logic, only adding its own adapter +
+config file and a few registration lines (see the "Money changers" section
+below).
 
 ## Current status: Phase 10 of 10
 
@@ -21,32 +26,53 @@ and sources without a redesign.
 | 6 | Browser notifications wired to real alerts | ✅ live-tested end-to-end against a real trigger, not just read-through |
 | 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + magic-link sign-in + per-user saved alerts — **live-tested end-to-end**, including a real cross-account isolation check across three separate accounts (see `SUPABASE_SETUP.md`) |
 | 8 | Scheduled backend job (Supabase-backed) | ✅ implemented and **live-tested successfully** — `backend/scheduler/run.js` (wired into `.github/workflows/monitor.yml`) fetches every ACTIVE alert, checks both adapters, writes to the `rates` table, evaluates each alert against the **best rate across its selected sources**, and marks it TRIGGERED + logs a `notifications` row the moment a target is met — no browser tab required. Runs via manual "Run workflow" trigger only; **no recurring cron yet**, deliberately gated on the Terms of Use compliance review (see Compliance note below). |
-| 9 | Full test pass | 🟡 partial — unit tests for both adapters' parsing logic, the target-comparison engine, the scheduler's pure combo-selection and notify-target-resolution logic, and the notification-message formatting all exist and pass (49/49); no end-to-end/multi-user automated test pass yet beyond the manual proofs recorded for Phases 7/8 |
-| 10 | Email / Telegram, rate-history charts | ✅ implemented — real email (Resend) and Telegram delivery from `backend/scheduler/run.js` via `backend/notifications/notify.js` (see `NOTIFICATIONS_SETUP.md`), plus a real, Supabase-backed rate-history chart (`frontend/rateHistory.js`) for signed-in users, replacing the old session-only chart for anyone signed in. **Not yet live-tested against real Resend/Telegram accounts** — see the Phase 10 status write-up for what still needs a real end-to-end run. |
+| 9 | Full test pass | 🟡 partial — unit tests for all three adapters' parsing logic, the target-comparison engine, the scheduler's pure combo-selection and notify-target-resolution logic, and the notification-message formatting all exist and pass (55/55, updated 22-Aug-2026 with the Merchantrade Asia addition); no end-to-end/multi-user automated test pass yet beyond the manual proofs recorded for Phases 7/8 |
+| 10 | Email / Telegram, rate-history charts | ✅ implemented — real email (Resend) and Telegram delivery from `backend/scheduler/run.js` via `backend/notifications/notify.js` (see `NOTIFICATIONS_SETUP.md`), plus a real, Supabase-backed rate-history chart (`frontend/rateHistory.js`) for signed-in users, replacing the old session-only chart for anyone signed in. Telegram delivery has since been confirmed `DELIVERED` in a real test run; email is still blocked on Resend's sandbox-sending restriction — see `NOTIFICATIONS_SETUP.md`'s Troubleshooting section. |
+| — | Merchantrade Asia live retrieval (post-Phase 10, 22-Aug-2026) | ✅ live (CNY SELL/BUY) — added on request, alongside a documented look at three other money changers that could NOT be added yet (MaxMoney: blocked by a `403 Forbidden`; Spectrum Forex: domain does not resolve; Vital Rate: parked domain, likely absorbed into Merchantrade Asia) — see the "Money changers" section below for the full findings. |
 
-**CNY at both money changers is real.** My Money Master CNY and Taj
-Muhabath CNY (branch: LALAPORT BBCC) are retrieved live by a GitHub
-Actions job on every deploy — see `backend/scripts/checkRate.js` and
-`.github/workflows/pages.yml`. Every other currency, and any other Taj
-Muhabath branch, is still simulated by `frontend/app.js` and always
-labeled SIMULATED — never LIVE, per the project's core rule. See
-`config/websites/*.json` for the live-inspected extraction plan for each
-source (URLs, selectors, wait strategy — verified directly against the
-live sites, not guessed, and re-verified when a site's structure changed
-mid-build — see the "notes" fields in those config files for the full
-story of what changed and how it was caught).
+**CNY at all three money changers is real.** My Money Master CNY, Taj
+Muhabath CNY (branch: LALAPORT BBCC), and Merchantrade Asia CNY are
+retrieved live by a GitHub Actions job on every deploy — see
+`backend/scripts/checkRate.js` and `.github/workflows/pages.yml`. Every
+other currency, and any other Taj Muhabath branch, is still simulated by
+`frontend/app.js` and always labeled SIMULATED — never LIVE, per the
+project's core rule. See `config/websites/*.json` for the live-inspected
+extraction plan for each source (URLs, selectors, wait strategy — verified
+directly against the live sites, not guessed, and re-verified when a
+site's structure changed mid-build — see the "notes" fields in those
+config files for the full story of what changed and how it was caught).
+
+### Money changers — coverage and what was ruled out (22-Aug-2026)
+
+The user asked to add several money changers from a reference Python
+script. Per this project's non-negotiable rule against guessing selectors
+or trusting an unverified URL, each was independently checked live before
+any adapter code was written:
+
+| Money changer | Result |
+|---|---|
+| **Merchantrade Asia** | ✅ Added. URL from the script (`https://mtradeasia.com/exchange`) was correct; real CNY data confirmed live via direct browser automation; DOM structure captured and documented in `config/websites/merchantradeasia.json`. See `backend/scrapers/merchantradeasia.adapter.js`. |
+| **My Money Master** | Already implemented (Phase 2). Note: the reference script used `https://www.moneymaster.com.my/` — the real, working domain is `http://www.mymoneymaster.com.my/` (confirmed live back in Phase 2; the script's URL does not resolve to the real site). No action needed beyond this note. |
+| **MaxMoney** | ❌ Not added. Both `https://maxmoney.com.my/` and `https://www.maxmoney.com.my/` returned a server-level `403 Forbidden` (Apache `ErrorDocument`) on direct request, live-checked 22-Aug-2026 — this reads as an access control / anti-bot response, and per this project's compliance rules (and this assistant's own operating rules), that is not bypassed. If you have a different real URL for this money changer, or know this block is geo/IP-specific and not present from your own network, let the maintainer know and this can be re-attempted. |
+| **Spectrum Forex** | ❌ Not added. `spectrumforex.com.my` does not currently resolve (confirmed NXDOMAIN via an authoritative DNS lookup, 22-Aug-2026) — there is no live site at that address to build an adapter against. If you have an updated URL for this business, it can be re-attempted. |
+| **Vital Rate** | ❌ Not added. `vitalrate.com` is a parked/for-sale domain (redirects to a domain marketplace listing), not the real company. Public information indicates Vital Rate Sdn Bhd was acquired by Merchantrade Asia Sdn Bhd in 2017 and may no longer operate as an independent brand — some of its former branches (e.g. Pavilion KL) now appear as Merchantrade Asia branches on the page the new adapter above already covers. If Vital Rate still operates independently under a different real domain, share it and this can be reconsidered. |
 
 ### Compliance note (read before enabling any schedule)
 
-Neither `pages.yml` nor `monitor.yml` runs on a cron yet. Both
-`config/websites/mymoneymaster.json` and `config/websites/tajmuhabath.json`
-flag an open action item: a human should read each site's Terms of Use
-before this runs on a recurring, unattended schedule. Additionally, the
-Taj Muhabath adapter deliberately does NOT call the internal API endpoint
-its branch dropdown uses internally (discovered during the Phase 3 build) —
-that endpoint requires an authorization this adapter does not have and
-should not attempt to replicate. See the header comment in
-`backend/scrapers/tajmuhabath.adapter.js` for details.
+Neither `pages.yml` nor `monitor.yml` runs on a cron yet. All three of
+`config/websites/mymoneymaster.json`, `config/websites/tajmuhabath.json`,
+and `config/websites/merchantradeasia.json` flag an open action item: a
+human should read each site's Terms of Use before this runs on a
+recurring, unattended schedule. Additionally, the Taj Muhabath adapter
+deliberately does NOT call the internal API endpoint its branch dropdown
+uses internally (discovered during the Phase 3 build) — that endpoint
+requires an authorization this adapter does not have and should not
+attempt to replicate. See the header comment in
+`backend/scrapers/tajmuhabath.adapter.js` for details. The MaxMoney
+adapter that was NOT added (see the "Money changers" section above) is a
+related example of the same principle applied at the URL-access level
+rather than the API level — a `403 Forbidden` was treated as an access
+control to respect, not a puzzle to work around.
 
 As of Phase 8, `monitor.yml` runs a real, fully-implemented pipeline
 (`backend/scheduler/run.js`) on every manual trigger — this compliance
@@ -152,11 +178,13 @@ To set this up on a fresh fork/clone:
   logic, the multi-source "best rate" comparison, the rate-validation
   sanity checks, the responsive/mobile layout, the adapter configuration in
   `config/websites/*.json` (URLs and selectors were captured by directly
-  inspecting the live sites, not guessed) — **and, as of Phase 3, the CNY
-  rate itself from both My Money Master and Taj Muhabath**, retrieved live
-  by `backend/scrapers/mymoneymaster.adapter.js` and
-  `backend/scrapers/tajmuhabath.adapter.js`, validated, and published to
-  `frontend/data/latest-rates.json` on every deploy.
+  inspecting the live sites, not guessed) — **and, as of Phase 3 (My Money
+  Master + Taj Muhabath) and again as of 22-Aug-2026 (Merchantrade Asia),
+  the CNY rate itself from all three sources**, retrieved live by
+  `backend/scrapers/mymoneymaster.adapter.js`,
+  `backend/scrapers/tajmuhabath.adapter.js`, and
+  `backend/scrapers/merchantradeasia.adapter.js`, validated, and published
+  to `frontend/data/latest-rates.json` on every deploy.
 - **Simulated:** every other currency, and any Taj Muhabath branch other
   than LALAPORT BBCC. `frontend/app.js` generates these with a small random
   walk around realistic starting values and always labels them SIMULATED —

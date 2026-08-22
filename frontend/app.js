@@ -58,6 +58,7 @@
   const SOURCES = [
     { id: "mymoneymaster", name: "My Money Master", supportsBranch: false, spreadBias: 0 },
     { id: "tajmuhabath", name: "Taj Muhabath", supportsBranch: true, spreadBias: 0.06 },
+    { id: "merchantradeasia", name: "Merchantrade Asia", supportsBranch: false, spreadBias: 0.03 },
   ];
 
   const RATE_TYPE_EXPLAINERS = {
@@ -70,6 +71,7 @@
   const REAL_ADAPTER_SUPPORT = {
     mymoneymaster: ["CNY"],
     tajmuhabath: ["CNY"],
+    merchantradeasia: ["CNY"],
   };
 
   const LIVE_DATA_URL = "data/latest-rates.json";
@@ -85,7 +87,7 @@
     rateType: "SELL",
     targetRate: 60.5,
     pctChange: 1,
-    sources: { mymoneymaster: true, tajmuhabath: true },
+    sources: { mymoneymaster: true, tajmuhabath: true, merchantradeasia: true },
     branch: TM_BRANCHES[13], // LALAPORT BBCC — the branch the Phase 3 backend job explicitly
     // requests via checkRate.js (see .github/workflows/pages.yml). NOT the page's own
     // natural default when no branch is selected (that's "THE EXCHANGE TRX", confirmed
@@ -787,6 +789,7 @@
 
     $("srcMMM").addEventListener("change", (e) => { state.sources.mymoneymaster = e.target.checked; });
     $("srcTM").addEventListener("change", (e) => { state.sources.tajmuhabath = e.target.checked; updateBranchAvailability(); });
+    $("srcMTA").addEventListener("change", (e) => { state.sources.merchantradeasia = e.target.checked; });
 
     $("branch").addEventListener("change", (e) => { state.branch = e.target.value; });
 

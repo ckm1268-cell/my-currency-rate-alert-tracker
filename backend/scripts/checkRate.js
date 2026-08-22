@@ -5,14 +5,18 @@
  * Usage: node scripts/checkRate.js <source> <currencyCode> [branch]
  *   e.g. node scripts/checkRate.js mymoneymaster CNY
  *   e.g. node scripts/checkRate.js tajmuhabath CNY "LALAPORT BBCC"
+ *   e.g. node scripts/checkRate.js merchantradeasia CNY
  *
  * [branch] is optional and only meaningful for adapters whose config sets
- * branchSupport: true (Taj Muhabath). My Money Master ignores a branch
- * argument if one is passed, since it publishes one site-wide rate.
+ * branchSupport: true (Taj Muhabath). My Money Master and Merchantrade Asia
+ * ignore a branch argument if one is passed, since each publishes one
+ * site-wide rate (not per-branch — see config/websites/merchantradeasia.json's
+ * branchNotes for how that was confirmed for Merchantrade Asia specifically).
  *
  * Runs the named adapter's fetchRateWithFallback() (HTTP first, Playwright
- * fallback where applicable — Taj Muhabath's adapter is Playwright-only),
- * prints the StandardRateResult as JSON to stdout, and merges it
+ * fallback where applicable — Taj Muhabath's and Merchantrade Asia's
+ * adapters are both Playwright-only), prints the StandardRateResult as
+ * JSON to stdout, and merges it
  * into frontend/data/latest-rates.json — the flat-file "API" the static
  * GitHub Pages frontend reads (see frontend/app.js: loadLiveData()).
  *
@@ -36,6 +40,7 @@ const path = require('node:path');
 const ADAPTERS = {
   mymoneymaster: () => require('../scrapers/mymoneymaster.adapter'),
   tajmuhabath: () => require('../scrapers/tajmuhabath.adapter'),
+  merchantradeasia: () => require('../scrapers/merchantradeasia.adapter'),
 };
 
 const DATA_FILE = path.join(__dirname, '..', '..', 'frontend', 'data', 'latest-rates.json');
