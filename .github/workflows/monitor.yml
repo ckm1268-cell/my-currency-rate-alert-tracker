@@ -1,11 +1,13 @@
 # Scheduled rate-monitoring workflow — Phase 8/10 (Supabase-backed, real delivery)
 # =====================================================================================
 # STATUS: real pipeline implemented (Phase 8, 22-Aug-2026), real email/Telegram
-# delivery added (Phase 10, same day). Every "Run workflow" trigger now calls
+# delivery added (Phase 10, same day), Merchantrade Asia adapter added
+# (post-Phase 10, same day). Every "Run workflow" trigger now calls
 # backend/scheduler/run.js, which: fetches every ACTIVE alert from Supabase,
-# checks both adapters (deduplicated — one live check per distinct
-# source+currency+branch combo, not one per alert), writes every reading
-# (success or failure) to the `rates` table, evaluates each alert against the
+# checks every registered adapter as needed (deduplicated — one live check
+# per distinct source+currency+branch combo, not one per alert), writes
+# every reading (success or failure) to the `rates` table, evaluates each
+# alert against the
 # best rate across its selected sources (backend/targetEngine/compareTarget.js),
 # and — the moment a target is met — marks that alert TRIGGERED, sends a real
 # notification via backend/notifications/notify.js (email via Resend, or
@@ -20,8 +22,31 @@
 # as FAILED (with a clear reason) if the matching secret isn't set. See
 # NOTIFICATIONS_SETUP.md for how to obtain and add both.
 #
-# This workflow itself still runs on MANUAL TRIGGER ONLY — there is no
-# recurring cron yet. The original Phase 7/8 activation checklist:
+# RECURRING SCHEDULE — enabled Phase 14 (22-Aug-2026), at the project
+# owner's explicit request, on the SAME every-5-minute cadence that was
+# already sitting here commented out since Phase 8. Before flipping this on,
+# the compliance review item 4 below (a human actually reading each site's
+# Terms of Use) was checked as far as tooling allowed:
+#   - Merchantrade Asia: Terms & Conditions page WAS fetched and read
+#     (https://mtradeasia.com/legal/terms-and-conditions) — no clause
+#     addressing automated access/scraping/bots was found; robots.txt
+#     explicitly allows the /exchange page (see that config file).
+#   - My Money Master: no robots.txt restriction exists (404), but the
+#     site's own Terms of Use page could not actually be fetched — it has
+#     no working HTTPS (https:// redirects back to http://, and the
+#     redirect loops), which this tooling cannot follow. NOT independently
+#     read.
+#   - Taj Muhabath: no public Terms of Use page could be located at all —
+#     only a Privacy link and a registration-gated "terms" reference deeper
+#     in the site. NOT independently read.
+# In short: nothing found says "no," but two of the three were never
+# actually read, for reasons outside this tool's control rather than being
+# skipped. The project owner made an informed decision to proceed anyway,
+# at a modest 5-minute interval, having been told this. If you are that
+# owner and this reads differently than you intended, this schedule can be
+# re-commented out at any time — see item 4 below.
+#
+# The original Phase 7/8 activation checklist:
 #
 #   1. Taj Muhabath's adapter is real (Phase 3) — DONE.
 #   2. Rate validation is applied to both adapters (Phase 4) — DONE.
@@ -32,23 +57,27 @@
 #      -> New repository secret) before this workflow can succeed at all —
 #      see SUPABASE_SETUP.md step 6.
 #   4. The Terms of Use compliance review noted in
-#      config/websites/mymoneymaster.json and
-#      config/websites/tajmuhabath.json — STILL NOT DONE. This is the one
-#      remaining blocker before the `schedule:` block below is ever
-#      uncommented. A human should read both sites' Terms of Use and
-#      confirm continuous, unattended polling is permitted before this
-#      workflow runs on any recurring interval.
+#      config/websites/mymoneymaster.json,
+#      config/websites/tajmuhabath.json, and
+#      config/websites/merchantradeasia.json — see the note above this
+#      checklist for exactly what was and wasn't actually verified.
+#      OWNER DECIDED TO PROCEED, 22-Aug-2026 — the `schedule:` block below
+#      was uncommented on that basis, not because every site was fully
+#      cleared.
 #
-# Once item 4 is cleared: uncomment the `schedule:` block below (a 5-minute
-# interval matches the dashboard's own default monitoring interval). Every
-# other prerequisite is already satisfied as of this Phase 8 build.
+# Each alert's own monitoring_interval_minutes now actually matters (Phase
+# 14): every run of this workflow only re-evaluates an alert whose own
+# interval has elapsed since it was last checked — see run.js's
+# isDueForCheck(). The workflow itself still can't check any single alert
+# MORE often than this schedule runs (5 minutes), only less often. 
+# (Phase 14 — recurring schedule, every 5 minutes)
 
 name: Monitor Exchange Rates
 
 on:
-  workflow_dispatch: {} # manual "Run workflow" button only, until compliance item 4 above is cleared
-  # schedule:
-  #   - cron: '*/5 * * * *'
+  workflow_dispatch: {} # keep manual "Run workflow" available too, e.g. to test a change immediately
+  schedule:
+    - cron: '*/5 * * * *'
 
 jobs:
   monitor:
