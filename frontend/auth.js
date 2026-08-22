@@ -11,9 +11,22 @@
  * — it never breaks the Phase 1-6 dashboard, which works completely fine
  * signed out.
  *
+ * AUTH METHOD: email + password (switched 22-Aug-2026, replacing the
+ * original magic-link-only flow). A user's account IS their email address;
+ * they set their own password at sign-up. This still runs entirely through
+ * Supabase Auth (auth.signUp / auth.signInWithPassword) — Supabase hashes
+ * and stores the password server-side, this app never sees or stores a
+ * plaintext password anywhere, and no user table lives in this repo. See
+ * the "why not a repo-stored user table" note further down for the
+ * reasoning: a public GitHub repo has no real access control, so storing
+ * credentials as a committed file would defeat the point of having a
+ * password at all.
+ *
  * What this file does:
- *   - Renders a sign-in / signed-in panel in the "accountCard" markup in
- *     index.html, using Supabase Auth's magic-link (passwordless email) flow.
+ *   - Renders a log-in / sign-up / signed-in panel in the "accountCard"
+ *     markup in index.html, using Supabase Auth's email+password flow
+ *     (auth.signUp, auth.signInWithPassword, auth.resetPasswordForEmail /
+ *     auth.updateUser for the "forgot password" round trip).
  *   - Once signed in, lets the user save the CURRENT form configuration (the
  *     panel on the left — same fields app.js already reads into its own
  *     `state`) as a persistent, per-user row in the `alerts` table.
@@ -64,6 +77,8 @@
   let sb = null; // Supabase client, once configured
   let currentSession = null;
   let linkedAlertId = null; // most recently saved alert id, for the trigger bridge
+  let activeTab = "login"; // "login" | "signup" — which form is showing when signed out
+  let awaitingPasswordReset = false; // true between a PASSWORD_RECOVERY event and a successful updateUser({password})
 
   function isConfigured() {
     const url = window.CKM_SUPABASE_URL;
@@ -77,15 +92,27 @@
 
   function showConfigNotice(message) {
     const notice = $("authConfigNotice");
-    const form = $("signInForm");
     const pill = $("authStatusPill");
     if (notice) { notice.style.display = "block"; notice.textContent = message; }
-    if (form) form.style.display = "none";
+    ["authTabs", "loginForm", "signupForm", "resetPasswordForm"].forEach((id) => {
+      const el = $(id);
+      if (el) el.style.display = "none";
+    });
     if (pill) { pill.className = "status-pill mock"; pill.textContent = "Not configured"; }
   }
 
-  function setAuthFormStatus(msg) {
-    const el = $("authFormStatus");
+  function setLoginStatus(msg) {
+    const el = $("loginFormStatus");
+    if (el) el.textContent = msg || "";
+  }
+
+  function setSignupStatus(msg) {
+    const el = $("signupFormStatus");
+    if (el) el.textContent = msg || "";
+  }
+
+  function setResetStatus(msg) {
+    const el = $("resetPasswordStatus");
     if (el) el.textContent = msg || "";
   }
 
@@ -98,22 +125,63 @@
   // Auth UI
   // -------------------------------------------------------------------------
 
+  function showActiveTab() {
+    const loginForm = $("loginForm");
+    const signupForm = $("signupForm");
+    const tabLogin = $("authTabLogin");
+    const tabSignup = $("authTabSignup");
+    if (loginForm) loginForm.style.display = activeTab === "login" ? "block" : "none";
+    if (signupForm) signupForm.style.display = activeTab === "signup" ? "block" : "none";
+    if (tabLogin) tabLogin.setAttribute("aria-pressed", activeTab === "login" ? "true" : "false");
+    if (tabSignup) tabSignup.setAttribute("aria-pressed", activeTab === "signup" ? "true" : "false");
+  }
+
+  function switchTab(tab) {
+    activeTab = tab === "signup" ? "signup" : "login";
+    setLoginStatus("");
+    setSignupStatus("");
+    showActiveTab();
+  }
+
   function updateAuthUI(session) {
     currentSession = session || null;
     const pill = $("authStatusPill");
-    const signInForm = $("signInForm");
+    const authTabs = $("authTabs");
+    const loginForm = $("loginForm");
+    const signupForm = $("signupForm");
+    const resetForm = $("resetPasswordForm");
     const signedInPanel = $("signedInPanel");
+
+    // Password-recovery takes over the card regardless of session state —
+    // Supabase issues a real (temporary) session as part of the recovery
+    // link, which would otherwise make this function think the user is
+    // just normally signed in and show the alerts panel instead of letting
+    // them actually set a new password.
+    if (awaitingPasswordReset) {
+      if (pill) { pill.className = "status-pill mock"; pill.textContent = "Set new password"; }
+      if (authTabs) authTabs.style.display = "none";
+      if (loginForm) loginForm.style.display = "none";
+      if (signupForm) signupForm.style.display = "none";
+      if (resetForm) resetForm.style.display = "block";
+      if (signedInPanel) signedInPanel.style.display = "none";
+      return;
+    }
 
     if (currentSession && currentSession.user) {
       if (pill) { pill.className = "status-pill live"; pill.textContent = "🟢 Signed in"; }
-      if (signInForm) signInForm.style.display = "none";
+      if (authTabs) authTabs.style.display = "none";
+      if (loginForm) loginForm.style.display = "none";
+      if (signupForm) signupForm.style.display = "none";
+      if (resetForm) resetForm.style.display = "none";
       if (signedInPanel) signedInPanel.style.display = "block";
       const emailEl = $("authUserEmail");
       if (emailEl) emailEl.textContent = currentSession.user.email || "(no email on session)";
       loadMyAlerts();
     } else {
       if (pill) { pill.className = "status-pill mock"; pill.textContent = "Not signed in"; }
-      if (signInForm) signInForm.style.display = "block";
+      if (authTabs) authTabs.style.display = "flex";
+      if (resetForm) resetForm.style.display = "none";
+      showActiveTab();
       if (signedInPanel) signedInPanel.style.display = "none";
       linkedAlertId = null;
     }
@@ -122,25 +190,27 @@
   // Clean base URL (origin + path only) — deliberately excludes any
   // hash/query from the current address bar. Using window.location.href
   // directly here was a real bug: once a callback ever lands on this page
-  // with #error=... (e.g. an expired/already-used magic link), that hash
-  // stays in the address bar (nothing was clearing it — see clearAuthHash()
-  // below, added at the same time as this fix). If a *second* magic link is
+  // with #error=... (e.g. an expired/already-used link), that hash stays
+  // in the address bar (nothing was clearing it — see clearAuthHash()
+  // below, added at the same time as this fix). If a *second* email is
   // then requested from the same tab without a manual reload,
   // window.location.href at that moment already contains the old
-  // "#error=..." fragment, so it gets sent to Supabase as emailRedirectTo.
-  // Supabase's own redirect then appends ITS "#access_token=..." (or
-  // "#error=...") onto a URL that already has a "#" in it — a URL can only
-  // have one real fragment, so everything after the second "#" is not
-  // parsed the way the Supabase JS client expects, and the callback can
-  // fail even on a click made within seconds of a genuinely fresh link.
+  // "#error=..." fragment, so it gets sent to Supabase as emailRedirectTo /
+  // redirectTo. Supabase's own redirect then appends ITS
+  // "#access_token=..." (or "#error=...") onto a URL that already has a
+  // "#" in it — a URL can only have one real fragment, so everything after
+  // the second "#" is not parsed the way the Supabase JS client expects,
+  // and the callback can fail even on a click made within seconds of a
+  // genuinely fresh link. Used both by sign-up's confirmation email and by
+  // "forgot password"'s reset email.
   function cleanRedirectUrl() {
     return window.location.origin + window.location.pathname;
   }
 
   // Strip any leftover #access_token=... / #error=... from the address bar
   // after we've handled it, so it can never be picked up by a later
-  // emailRedirectTo: window.location.href-style call (see above) or simply
-  // confuse the user into thinking a fresh attempt already failed.
+  // emailRedirectTo/redirectTo: window.location.href-style call (see above)
+  // or simply confuse the user into thinking a fresh attempt already failed.
   function clearAuthHash() {
     if (window.location.hash) {
       window.history.replaceState(null, "", window.location.pathname + window.location.search);
@@ -148,9 +218,10 @@
   }
 
   // Surface a Supabase auth callback error (e.g. #error=access_denied&
-  // error_code=otp_expired&error_description=...) in the sign-in form
+  // error_code=otp_expired&error_description=...) in the log-in form
   // instead of leaving the user staring at a raw URL fragment with no
-  // explanation in the UI.
+  // explanation in the UI. Applies to both an expired email-confirmation
+  // link and an expired password-reset link.
   function reportHashError() {
     const hash = window.location.hash;
     if (!hash || hash.indexOf("error=") === -1) return false;
@@ -158,23 +229,100 @@
     const code = params.get("error_code");
     const description = params.get("error_description");
     const friendly = code === "otp_expired"
-      ? "That magic link expired or was already used — request a new one below and click it right away (use the most recent email if you requested more than one)."
+      ? "That link expired or was already used — request a new one below."
       : `Sign-in failed: ${description ? description.replace(/\+/g, " ") : code || "unknown error"}.`;
-    setAuthFormStatus(friendly);
+    setLoginStatus(friendly);
     return true;
   }
 
-  async function sendMagicLink(email) {
-    setAuthFormStatus("Sending magic link…");
-    const { error } = await sb.auth.signInWithOtp({
+  async function logIn(email, password) {
+    setLoginStatus("Signing in…");
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) {
+      const friendly = /invalid login credentials/i.test(error.message)
+        ? "Incorrect email or password."
+        : /email not confirmed/i.test(error.message)
+          ? "Please confirm your email first — check your inbox for the confirmation link we sent when you signed up."
+          : error.message;
+      setLoginStatus(friendly);
+      return;
+    }
+    setLoginStatus("");
+    // No further action needed here — onAuthStateChange (wired in init())
+    // fires on a successful sign-in and calls updateAuthUI() itself.
+  }
+
+  // Why this is a plain Supabase Auth signUp() and NOT a user table stored
+  // as a file in this repo: a public GitHub repo has no real access
+  // control — anyone can read any committed file — so a repo-stored
+  // credentials table would be visible to the entire internet, which
+  // defeats the point of having a password at all and directly
+  // contradicts this project's own "never expose credentials" rule.
+  // Supabase Auth hashes and stores the password server-side, behind its
+  // own access controls; this app never sees or persists a plaintext
+  // password anywhere, in the repo or otherwise.
+  async function signUp(email, password, confirmPassword) {
+    if (password !== confirmPassword) {
+      setSignupStatus("Passwords don't match.");
+      return;
+    }
+    if (password.length < 6) {
+      setSignupStatus("Password must be at least 6 characters.");
+      return;
+    }
+    setSignupStatus("Creating account…");
+    const { data, error } = await sb.auth.signUp({
       email,
+      password,
       options: { emailRedirectTo: cleanRedirectUrl() },
     });
     if (error) {
-      setAuthFormStatus(`Could not send magic link: ${error.message}`);
+      const friendly = /already registered|already exists|user already/i.test(error.message)
+        ? "An account with that email already exists — switch to the Log in tab instead."
+        : error.message;
+      setSignupStatus(friendly);
       return;
     }
-    setAuthFormStatus(`Magic link sent to ${email} — check your inbox and click the link to sign in.`);
+    if (data && data.session) {
+      // This Supabase project has "Confirm email" turned off, so signUp()
+      // already returns a live session — the account is immediately usable.
+      setSignupStatus("Account created — you're signed in.");
+      return;
+    }
+    setSignupStatus(`Account created. Check ${email} for a confirmation link, then log in.`);
+    switchTab("login");
+  }
+
+  async function forgotPassword(email) {
+    if (!email) {
+      setLoginStatus('Enter your email above first, then click "Forgot password?".');
+      return;
+    }
+    setLoginStatus("Sending password reset link…");
+    const { error } = await sb.auth.resetPasswordForEmail(email, {
+      redirectTo: cleanRedirectUrl(),
+    });
+    if (error) {
+      setLoginStatus(`Could not send reset link: ${error.message}`);
+      return;
+    }
+    setLoginStatus(`Password reset link sent to ${email} — check your inbox.`);
+  }
+
+  async function submitNewPassword(password) {
+    if (password.length < 6) {
+      setResetStatus("Password must be at least 6 characters.");
+      return;
+    }
+    setResetStatus("Saving new password…");
+    const { error } = await sb.auth.updateUser({ password });
+    if (error) {
+      setResetStatus(`Could not update password: ${error.message}`);
+      return;
+    }
+    awaitingPasswordReset = false;
+    clearAuthHash();
+    updateAuthUI(currentSession);
   }
 
   async function signOut() {
@@ -342,15 +490,53 @@
   // -------------------------------------------------------------------------
 
   function wireForm() {
-    const form = $("signInForm");
-    if (form) {
-      form.addEventListener("submit", (e) => {
+    const tabLogin = $("authTabLogin");
+    const tabSignup = $("authTabSignup");
+    if (tabLogin) tabLogin.addEventListener("click", () => switchTab("login"));
+    if (tabSignup) tabSignup.addEventListener("click", () => switchTab("signup"));
+
+    const loginForm = $("loginForm");
+    if (loginForm) {
+      loginForm.addEventListener("submit", (e) => {
         e.preventDefault();
-        const email = ($("authEmail").value || "").trim();
-        if (!email) return;
-        sendMagicLink(email);
+        const email = ($("loginEmail").value || "").trim();
+        const password = $("loginPassword").value || "";
+        if (!email || !password) return;
+        logIn(email, password);
       });
     }
+
+    const signupForm = $("signupForm");
+    if (signupForm) {
+      signupForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const email = ($("signupEmail").value || "").trim();
+        const password = $("signupPassword").value || "";
+        const confirmPassword = $("signupPasswordConfirm").value || "";
+        if (!email || !password) return;
+        signUp(email, password, confirmPassword);
+      });
+    }
+
+    const forgotLink = $("forgotPasswordLink");
+    if (forgotLink) {
+      forgotLink.addEventListener("click", (e) => {
+        e.preventDefault();
+        const email = ($("loginEmail").value || "").trim();
+        forgotPassword(email);
+      });
+    }
+
+    const resetForm = $("resetPasswordForm");
+    if (resetForm) {
+      resetForm.addEventListener("submit", (e) => {
+        e.preventDefault();
+        const password = $("newPassword").value || "";
+        if (!password) return;
+        submitNewPassword(password);
+      });
+    }
+
     const signOutBtn = $("signOutBtn");
     if (signOutBtn) signOutBtn.addEventListener("click", signOut);
 
@@ -377,12 +563,21 @@
     }
 
     // Show a friendly message for a failed callback (e.g. expired/reused
-    // magic link) instead of leaving a raw #error=... in the address bar —
-    // then always strip the hash so it can't leak into a later
-    // emailRedirectTo (see cleanRedirectUrl()'s comment above).
+    // confirmation or reset link) instead of leaving a raw #error=... in
+    // the address bar — then always strip the hash so it can't leak into a
+    // later emailRedirectTo/redirectTo (see cleanRedirectUrl()'s comment
+    // above).
     const hadError = reportHashError();
 
-    sb.auth.onAuthStateChange((_event, session) => {
+    sb.auth.onAuthStateChange((event, session) => {
+      // Fires when the user lands here via a "forgot password" email link —
+      // Supabase's JS client parses the recovery token out of the URL and
+      // establishes a temporary session automatically; this flag makes
+      // updateAuthUI() show the "set new password" form instead of treating
+      // that temporary session as a normal sign-in.
+      if (event === "PASSWORD_RECOVERY") {
+        awaitingPasswordReset = true;
+      }
       updateAuthUI(session);
       clearAuthHash();
     });

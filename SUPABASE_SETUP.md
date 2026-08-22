@@ -33,24 +33,46 @@ If this step fails partway through, it's safe to re-run the whole file —
 every statement in it is written to be repeatable (`create table if not
 exists`, `drop policy if exists` before each `create policy`, etc.).
 
-## 3. Turn on email sign-in (magic link)
+## 3. Turn on email + password sign-in
 
 Supabase's email auth is on by default, but double-check:
 
 1. **Authentication** (left sidebar) → **Providers** → confirm **Email** is
    enabled.
-2. **Authentication** → **URL Configuration** → set **Site URL** to your
+2. Same **Email** provider settings — decide on **Confirm email**:
+   - **ON (default)**: after someone signs up, Supabase emails them a
+     confirmation link and they can't log in until they click it. This is
+     the safer default for a publicly reachable app (stops someone signing
+     up with an email address that isn't theirs).
+     - **OFF**: signUp() immediately returns a live session — a new
+       account can use the app right away, no email round trip. Simpler for
+       testing, but means an unverified email can create an account.
+   Either setting works with the app as built — `frontend/auth.js` handles
+   both cases (it shows "check your inbox" only when Supabase says
+   confirmation is required).
+3. **Authentication** → **URL Configuration** → set **Site URL** to your
    deployed GitHub Pages URL, e.g.
    `https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/`
-   This is where Supabase redirects a user back to after they click the
-   magic link in their email — if this is wrong, sign-in will silently send
-   them to the wrong page (or Supabase's own default page).
-3. On the same **URL Configuration** page, add the same URL under **Redirect
+   This is where Supabase redirects a user back to after they click a
+   confirmation or password-reset link in their email — if this is wrong,
+   that link will silently send them to the wrong page (or Supabase's own
+   default page).
+4. On the same **URL Configuration** page, add the same URL under **Redirect
    URLs** as well (some Supabase project defaults require the exact URL to
    also be allow-listed there, not just set as the Site URL).
 
-You don't need to touch the email template for this to work — Supabase's
-default magic-link email is fine to start with.
+You don't need to touch the email templates for this to work — Supabase's
+default confirmation and password-reset emails are fine to start with.
+
+**Why email + password instead of a login table stored in this repo:** a
+public GitHub repo has no real access control — anyone can read any
+committed file — so a users/passwords table checked into the repo would be
+readable by the entire internet, which defeats the point of having a
+password and directly contradicts this project's own "never expose
+credentials" rule. Supabase Auth stores every password hashed, behind its
+own access controls, in a database this app's frontend code never directly
+touches — that's the whole reason to use it instead of hand-rolling
+authentication.
 
 ## 4. Get your keys
 
@@ -100,21 +122,29 @@ When that day comes:
    5 above) the same way you've pushed every other change this project —
    `git add`, `git commit`, `git push`.
 2. Once GitHub Pages redeploys, open the live site. The new **"Your
-   account · Phase 7"** card near the top should show a **Send magic
-   link** form instead of the "Supabase isn't configured yet" notice.
-3. Enter your own email, click **Send magic link**, check your inbox, and
-   click the link. It should bring you back to the site signed in (the card
-   will show "Signed in as you@example.com").
+   account · Phase 7"** card near the top should show **Log in** / **Sign
+   up** tabs instead of the "Supabase isn't configured yet" notice.
+3. Click the **Sign up** tab, enter your own email and a password (at
+   least 6 characters), and click **Create account**. Depending on your
+   **Confirm email** setting from step 3 above, either you'll be signed in
+   immediately, or you'll need to check your inbox and click a
+   confirmation link first, then come back and log in with that email and
+   password.
 4. Build an alert in the panel on the left, then click **💾 Save current
    alert to my account** in the account card. It should appear under **My
    saved alerts** immediately.
 5. To confirm isolation actually works (not just "looks right in the UI"):
-   sign out, sign in with a *second*, different email address (a second
+   sign out, sign up with a *second*, different email address (a second
    inbox you control, or a "+alias" like `you+test@gmail.com` if your
    provider supports it), and confirm the alert from step 4 is **not**
    visible under this second account. Then check Supabase's **Table
    Editor** → `alerts` directly — you should see both rows, each with a
    different `user_id`, which is what the RLS policies are keying off of.
+6. Optional — test "Forgot password?": sign out, click **Forgot
+   password?** on the Log in tab with your first account's email in the
+   field, check your inbox, click the reset link, and set a new password
+   on the page it brings you back to. Then log in with the new password to
+   confirm it actually took.
 
 If step 5 ever shows one account's alerts to another account, something is
 wrong with the RLS policies (most likely: `database/schema.sql` wasn't run
@@ -126,7 +156,11 @@ not a nice-to-have.
 ## What this does and doesn't do yet
 
 **Works now (Phase 7):**
-- Sign in / sign out via magic link.
+- Sign up / log in / sign out with your own email address and password —
+  your account IS that email + password, no separate username, and no
+  credentials ever stored in this repo (see the "why email + password"
+  note above).
+- "Forgot password?" — request a reset link by email and set a new one.
 - Save the currently-configured alert to your account.
 - See, disable/re-enable, and delete your own saved alerts.
 - Per-user isolation, enforced by the database (Row-Level Security), not

@@ -24,9 +24,9 @@ below).
 | 4 | Rate validation wired into adapters | ✅ done for both adapters (`backend/validation/validateRate.js`) |
 | 5 | Target comparison engine wired to real data | ✅ done — `isTargetMet` (`frontend/app.js`) operates on real readings; `backend/targetEngine/compareTarget.js` is the tested server-side twin, now actually called by Phase 8's scheduler |
 | 6 | Browser notifications wired to real alerts | ✅ live-tested end-to-end against a real trigger, not just read-through |
-| 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + magic-link sign-in + per-user saved alerts — **live-tested end-to-end**, including a real cross-account isolation check across three separate accounts (see `SUPABASE_SETUP.md`) |
+| 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + email/password sign-up + log-in + password reset + per-user saved alerts — **live-tested end-to-end**, including a real cross-account isolation check across three separate accounts (see `SUPABASE_SETUP.md`) |
 | 8 | Scheduled backend job (Supabase-backed) | ✅ implemented and **live-tested successfully** — `backend/scheduler/run.js` (wired into `.github/workflows/monitor.yml`) fetches every ACTIVE alert, checks both adapters, writes to the `rates` table, evaluates each alert against the **best rate across its selected sources**, and marks it TRIGGERED + logs a `notifications` row the moment a target is met — no browser tab required. Runs via manual "Run workflow" trigger only; **no recurring cron yet**, deliberately gated on the Terms of Use compliance review (see Compliance note below). |
-| 9 | Full test pass | 🟡 partial — unit tests for all three adapters' parsing logic, the target-comparison engine, the scheduler's pure combo-selection and notify-target-resolution logic, and the notification-message formatting all exist and pass (55/55, updated 22-Aug-2026 with the Merchantrade Asia addition); no end-to-end/multi-user automated test pass yet beyond the manual proofs recorded for Phases 7/8 |
+| 9 | Full test pass | 🟡 partial — unit tests for all three adapters' parsing logic, the target-comparison engine, the scheduler's pure combo-selection and notify-target-resolution logic, and the notification-message formatting all exist and pass (60/60, updated 22-Aug-2026 with the Merchantrade Asia VND/TWD addition); no end-to-end/multi-user automated test pass yet beyond the manual proofs recorded for Phases 7/8 |
 | 10 | Email / Telegram, rate-history charts | ✅ implemented — real email (Resend) and Telegram delivery from `backend/scheduler/run.js` via `backend/notifications/notify.js` (see `NOTIFICATIONS_SETUP.md`), plus a real, Supabase-backed rate-history chart (`frontend/rateHistory.js`) for signed-in users, replacing the old session-only chart for anyone signed in. Telegram delivery has since been confirmed `DELIVERED` in a real test run; email is still blocked on Resend's sandbox-sending restriction — see `NOTIFICATIONS_SETUP.md`'s Troubleshooting section. |
 | — | Merchantrade Asia live retrieval (post-Phase 10, 22-Aug-2026) | ✅ live (CNY SELL/BUY) — added on request, alongside a documented look at three other money changers that could NOT be added yet (MaxMoney: blocked by a `403 Forbidden`; Spectrum Forex: domain does not resolve; Vital Rate: parked domain, likely absorbed into Merchantrade Asia) — see the "Money changers" section below for the full findings. |
 
@@ -92,9 +92,13 @@ of Use review above has actually been done.
 ### Accounts (Phase 7 — optional)
 
 The dashboard works fully without signing in, exactly as it did in Phases
-1-6. Signing in (magic-link email, no password) additionally lets you save
-your current alert configuration to your own account, isolated from every
-other user by Postgres Row-Level Security — see `database/schema.sql`. This
+1-6. Signing in (your own email address + a password you set — "Forgot
+password?" is supported too) additionally lets you save your current alert
+configuration to your own account, isolated from every other user by
+Postgres Row-Level Security — see `database/schema.sql`. Credentials are
+never stored in this repo — Supabase Auth hashes and stores each password
+server-side (see `SUPABASE_SETUP.md`'s "why email + password instead of a
+login table in the repo" note). This
 requires a Supabase project, which you provision yourself; **see
 `SUPABASE_SETUP.md` for the full step-by-step walkthrough.** Until that's
 done, the account card on the dashboard shows a small "not configured yet"

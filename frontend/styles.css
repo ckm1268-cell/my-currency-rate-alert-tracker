@@ -240,7 +240,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text
 }
 .field .hint.dynamic { color: var(--accent-strong); font-weight: 500; }
 
-select, input[type="number"], input[type="text"] {
+select, input[type="number"], input[type="text"], input[type="email"], input[type="password"] {
   width: 100%;
   font-family: var(--font-body);
   font-size: 0.95rem;
@@ -501,6 +501,30 @@ canvas#historyChart { width: 100%; height: 180px; display: block; }
 /* ---------- Account card (Phase 7 — Supabase, optional) ---------- */
 .account-form .field:last-of-type { margin-bottom: 8px; }
 .account-divider { border-top: 1px dashed var(--line-strong); margin: 16px 0; }
+
+.auth-tabs {
+  display: flex;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+.auth-tab {
+  flex: 1;
+  border: none;
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 0.85rem;
+  padding: 9px 6px;
+  cursor: pointer;
+}
+.auth-tab + .auth-tab { border-left: 1px solid var(--line-strong); }
+.auth-tab[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.auth-tab:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+
+#forgotPasswordLink { color: var(--accent-strong); font-size: 0.8rem; }
 .account-subhead {
   font-family: var(--font-body);
   font-size: 0.78rem;
