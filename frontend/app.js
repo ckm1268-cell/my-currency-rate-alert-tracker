@@ -106,8 +106,13 @@
     // exercise the branch-selection code path in backend/scrapers/tajmuhabath.adapter.js.
     condition: "AT_OR_BELOW",
     interval: 5,
-    notification: "browser",
-    telegramChatId: "", // Phase 10 — only meaningful when notification === "telegram"
+    // Phase 11 — an object of booleans, not one selected value: any
+    // combination of channels may be checked at once, and all of them fire
+    // simultaneously when the target is reached (see fireAlert() below and
+    // backend/scheduler/run.js's resolveNotifyTargets()/Promise.all for the
+    // server-side equivalent).
+    notifications: { browser: true, email: false, telegram: false },
+    telegramChatId: "", // Phase 10 — only meaningful when notifications.telegram is true
 
     monitoring: false,
     triggered: false,
@@ -712,7 +717,7 @@
     logActivity(msg);
     showToast(msg);
     playBeep();
-    if (state.notification === "browser" && "Notification" in window && Notification.permission === "granted") {
+    if (state.notifications.browser && "Notification" in window && Notification.permission === "granted") {
       new Notification(`Currency Rate Alert${isReal ? "" : " (Simulated)"}`, {
         body: `${state.currency} ${state.rateType} = ${formatRate(value)} — target ${formatRate(state.targetRate)} reached.\n` +
           `Money changer: ${reading.sourceName}${reading.branch ? ` (${reading.branch})` : ""}\n` +
@@ -814,9 +819,11 @@
     });
 
     $("interval").addEventListener("change", (e) => { state.interval = parseInt(e.target.value, 10); });
-    $("notification").addEventListener("change", (e) => {
-      state.notification = e.target.value;
-      $("telegramChatIdField").style.display = state.notification === "telegram" ? "block" : "none";
+    $("notifBrowser").addEventListener("change", (e) => { state.notifications.browser = e.target.checked; });
+    $("notifEmail").addEventListener("change", (e) => { state.notifications.email = e.target.checked; });
+    $("notifTelegram").addEventListener("change", (e) => {
+      state.notifications.telegram = e.target.checked;
+      $("telegramChatIdField").style.display = state.notifications.telegram ? "block" : "none";
     });
     $("telegramChatId").addEventListener("input", (e) => { state.telegramChatId = e.target.value.trim(); });
 
@@ -875,7 +882,7 @@
       : "Simulated monitoring is running — see the Activity log below.";
     logActivity(`Monitoring started: ${state.currency} ${state.rateType}, target ${formatRate(state.targetRate)}, condition ${state.condition}.`);
 
-    if (state.notification === "browser" && "Notification" in window && Notification.permission === "default") {
+    if (state.notifications.browser && "Notification" in window && Notification.permission === "default") {
       Notification.requestPermission();
     }
     callHook("onMonitoringStarted");

@@ -7,8 +7,11 @@ Everything else (the code that sends the message, the database columns, the
 GitHub Actions wiring) is already written and waiting for your two secrets.
 
 Budget about 10 minutes for both. You don't need to do both — pick whichever
-channel(s) you actually want; the notification select on the dashboard lets
-each saved alert choose independently.
+channel(s) you actually want; the notification checkboxes on the dashboard
+let each saved alert choose any combination independently, and (as of
+Phase 11) deliver to every checked channel at once when the alert
+triggers — check both Email and Telegram and you'll get both messages, not
+just whichever one is checked "first."
 
 ## Before you start: these are real credentials
 
@@ -80,7 +83,8 @@ per-alert ones (see `alerts.telegram_chat_id` in `database/schema.sql`).
    public).
 3. In the JSON response, find `"chat":{"id":`, followed by a number — that
    number is your chat ID.
-4. On the dashboard, select **Telegram** as the notification method and
+4. On the dashboard, check **Telegram** under Notification (you can leave
+   Email and/or Browser checked too — they'll all fire together) and
    paste that number into the **Telegram chat ID** field before saving the
    alert.
 

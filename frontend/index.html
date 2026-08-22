@@ -105,14 +105,24 @@
       </div>
 
       <div class="field">
-        <label for="notification">Notification</label>
-        <select id="notification" name="notification">
-          <option value="browser" selected>Browser notification (this tab only)</option>
-          <option value="email">Email — sent by the scheduled backend job</option>
-          <option value="telegram">Telegram — sent by the scheduled backend job</option>
-          <option value="whatsapp" disabled>WhatsApp — not yet built</option>
-        </select>
-        <p class="hint">Email and Telegram are delivered server-side by <code>backend/scheduler/run.js</code> (Phase 8/10) — they work even with this tab closed, but only for a <strong>saved</strong> alert (sign in below to save one). Browser notification only fires while this tab is open and monitoring.</p>
+        <label>Notification</label>
+        <div class="checkbox-row">
+          <input type="checkbox" id="notifBrowser" value="browser" checked>
+          <label for="notifBrowser">Browser notification (this tab only)</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="notifEmail" value="email">
+          <label for="notifEmail">Email — sent by the scheduled backend job</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="notifTelegram" value="telegram">
+          <label for="notifTelegram">Telegram — sent by the scheduled backend job</label>
+        </div>
+        <div class="checkbox-row is-disabled">
+          <input type="checkbox" id="notifWhatsapp" value="whatsapp" disabled>
+          <label for="notifWhatsapp">WhatsApp — not yet built</label>
+        </div>
+        <p class="hint">Check as many as you want — they all fire simultaneously when your target is reached, not just one. Email and Telegram are delivered server-side by <code>backend/scheduler/run.js</code> (Phase 8/10) — they work even with this tab closed, but only for a <strong>saved</strong> alert (sign in below to save one). Browser notification only fires while this tab is open and monitoring.</p>
       </div>
 
       <div class="field" id="telegramChatIdField" style="display:none;">
@@ -196,7 +206,7 @@
         <div class="account-divider"></div>
 
         <button type="button" class="btn-primary" id="saveAlertBtn">💾 Save current alert to my account</button>
-        <p class="hint">Uses the settings from the panel on the left — currency, rate type, target, sources, branch, condition, interval, notification method, and Telegram chat ID (if applicable).</p>
+        <p class="hint">Uses the settings from the panel on the left — currency, rate type, target, sources, branch, condition, interval, notification method(s), and Telegram chat ID (if applicable).</p>
         <p class="form-status" id="saveAlertStatus"></p>
 
         <h4 class="account-subhead">My saved alerts</h4>

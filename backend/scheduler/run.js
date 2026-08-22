@@ -18,9 +18,11 @@
  * Run manually: `node scheduler/run.js` (from backend/), with SUPABASE_URL
  * and SUPABASE_SERVICE_ROLE_KEY set in the environment (see .env.example).
  * As of Phase 10, RESEND_API_KEY and/or TELEGRAM_BOT_TOKEN are also needed
- * in the environment if any active alert actually uses notification_method
- * 'email' or 'telegram' — a run with neither set still completes normally
- * for alerts using 'browser' (or no active alert at all); it only affects
+ * in the environment if any active alert actually has 'email' or 'telegram'
+ * among its notification_methods (Phase 11: an array — an alert can select
+ * any combination and gets delivered to all of them at once) — a run with
+ * neither set still completes normally for alerts using only 'browser' (or
+ * no active alert at all); it only affects
  * delivery for the channels that need it, recorded honestly as FAILED (with
  * the missing-key message from notify.js) rather than crashing the run.
  * Wired into .github/workflows/monitor.yml on a manual "Run workflow"
@@ -58,18 +60,21 @@
  *   section 24 logging requirement; a failed check is exactly as much a
  *   fact worth recording as a successful one, never silently dropped.
  *
- * - A triggered alert's `notifications` row now reflects a REAL delivery
+ * - A triggered alert's `notifications` row(s) now reflect a REAL delivery
  *   attempt, as of Phase 10 (22-Aug-2026) — backend/notifications/notify.js
- *   is no longer a throwing scaffold. For notification_method 'email' or
- *   'telegram', this file resolves the actual destination (the signed-in
+ *   is no longer a throwing scaffold. As of Phase 11, an alert's
+ *   notification_methods is an ARRAY: for each of 'email'/'telegram' it
+ *   contains, this file resolves the actual destination (the signed-in
  *   user's own auth email via the Supabase Auth admin API, or the alert's
- *   own saved telegram_chat_id) and calls notify(), which returns
- *   DELIVERED / FAILED / PENDING honestly based on what actually happened
- *   — never optimistically marked DELIVERED before a send is attempted.
- *   'browser' (Phase 1) and the still-unimplemented whatsapp/sms channels
- *   correctly stay PENDING: notify() has no server-side channel for them,
- *   same "never mislabel" principle the Phase 5 fireAlert() incident and
- *   every phase since has held to.
+ *   own saved telegram_chat_id) and calls notify() for every selected
+ *   channel at once (see resolveNotifyTargets() + the Promise.all in
+ *   evaluateAlert()), each returning DELIVERED / FAILED / PENDING honestly
+ *   based on what actually happened for THAT channel — never optimistically
+ *   marked DELIVERED before a send is attempted, and one channel's failure
+ *   never blocks another's delivery. 'browser' (Phase 1) and the still-
+ *   unimplemented whatsapp/sms channels correctly stay PENDING: notify()
+ *   has no server-side channel for them, same "never mislabel" principle
+ *   the Phase 5 fireAlert() incident and every phase since has held to.
  *
  * - Duplicate-alert suppression needs no extra bookkeeping here: this
  *   script only ever queries alerts with status = 'ACTIVE'. Once an alert
@@ -189,38 +194,60 @@ async function checkCombo(sb, combo) {
 }
 
 /**
- * Resolves where a triggered alert's notification should actually go, for
- * the two channels notify.js can deliver. Email addresses are never stored
- * on the `alerts` row itself — this alert's owner already has one, in
- * Supabase's own auth.users table, via the Auth admin API (only reachable
- * with the service-role client this scheduler already uses; the frontend's
- * anon-key client cannot call this). Results are cached per user_id for the
- * lifetime of one run, since one user can easily have several active
- * alerts and there's no reason to look up the same email twice in a single
- * pass.
+ * Resolves where a triggered alert's notification(s) should actually go —
+ * plural, as of Phase 11: an alert can have any combination of
+ * notification_methods selected (e.g. ['email','telegram'], or all three
+ * including 'browser'), and this returns one target per selected method so
+ * evaluateAlert() can deliver to every one of them simultaneously rather
+ * than picking just one channel. Email addresses are never stored on the
+ * `alerts` row itself — this alert's owner already has one, in Supabase's
+ * own auth.users table, via the Auth admin API (only reachable with the
+ * service-role client this scheduler already uses; the frontend's anon-key
+ * client cannot call this). Email lookups are cached per user_id for the
+ * lifetime of one run — across every alert AND every channel — since one
+ * user can easily have several active alerts (or one alert with 'email'
+ * among several selected methods) and there's no reason to look up the
+ * same email twice in a single pass.
+ *
+ * Falls back to the old singular `notification_method` column (wrapped in
+ * a one-element array) if `notification_methods` is missing — this should
+ * only matter mid-migration, if this code ever runs against a database
+ * that hasn't had database/schema.sql's Phase 11 migration applied yet;
+ * once that migration has run, the old column no longer exists and this
+ * fallback is simply unreachable.
  */
-async function resolveNotifyTarget(sb, alert, emailCache) {
-  if (alert.notification_method === 'telegram') {
-    return { channel: 'telegram', telegramChatId: alert.telegram_chat_id };
-  }
+async function resolveNotifyTargets(sb, alert, emailCache) {
+  const methods = Array.isArray(alert.notification_methods) && alert.notification_methods.length > 0
+    ? alert.notification_methods
+    : (alert.notification_method ? [alert.notification_method] : ['browser']);
 
-  if (alert.notification_method === 'email') {
-    if (!emailCache.has(alert.user_id)) {
-      try {
-        const { data, error } = await sb.auth.admin.getUserById(alert.user_id);
-        if (error) throw error;
-        emailCache.set(alert.user_id, (data && data.user && data.user.email) || null);
-      } catch (err) {
-        console.error(`[scheduler] could not resolve email for user ${alert.user_id}: ${err.message}`);
-        emailCache.set(alert.user_id, null);
-      }
+  const targets = [];
+  for (const method of methods) {
+    if (method === 'telegram') {
+      targets.push({ channel: 'telegram', telegramChatId: alert.telegram_chat_id });
+      continue;
     }
-    return { channel: 'email', email: emailCache.get(alert.user_id) };
-  }
 
-  // 'browser', 'whatsapp', 'sms' — notify() itself knows these have no
-  // server-side channel and will return PENDING; nothing to resolve here.
-  return { channel: alert.notification_method };
+    if (method === 'email') {
+      if (!emailCache.has(alert.user_id)) {
+        try {
+          const { data, error } = await sb.auth.admin.getUserById(alert.user_id);
+          if (error) throw error;
+          emailCache.set(alert.user_id, (data && data.user && data.user.email) || null);
+        } catch (err) {
+          console.error(`[scheduler] could not resolve email for user ${alert.user_id}: ${err.message}`);
+          emailCache.set(alert.user_id, null);
+        }
+      }
+      targets.push({ channel: 'email', email: emailCache.get(alert.user_id) });
+      continue;
+    }
+
+    // 'browser', 'whatsapp', 'sms' — notify() itself knows these have no
+    // server-side channel and will return PENDING; nothing to resolve here.
+    targets.push({ channel: method });
+  }
+  return targets;
 }
 
 async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, emailCache) {
@@ -266,30 +293,45 @@ async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, e
   const message =
     `${bestLabel} ${alert.currency} ${alert.rate_type} target reached: ${value} (target ${alert.target_rate}).`;
 
-  const notifyTarget = await resolveNotifyTarget(sb, alert, emailCache);
-  const notifyResult = await notify(notifyTarget, {
+  // Phase 11: deliver to every selected channel AT ONCE (Promise.all, not
+  // one after another) — an alert with both Email and Telegram checked
+  // gets both messages sent concurrently, not Telegram waiting on Email's
+  // network round trip first. Each channel still gets its own
+  // `notifications` row below, exactly as a single-channel alert always
+  // has — the `notifications` table's `notification_type` column stays a
+  // single value per row by design (see database/schema.sql), it's just
+  // that a multi-channel trigger now writes multiple rows in the same
+  // pass instead of always writing exactly one.
+  const notifyTargets = await resolveNotifyTargets(sb, alert, emailCache);
+  const payload = {
     currency: alert.currency,
     rateType: alert.rate_type,
     rate: value,
     targetRate: Number(alert.target_rate),
     source: bestLabel,
     retrievedAt: best.retrievedAt || new Date().toISOString(),
-  });
-  console.log(
-    `[scheduler]   notify via ${alert.notification_method}: ${notifyResult.deliveryStatus}` +
-      (notifyResult.error ? ` (${notifyResult.error})` : '')
-  );
+  };
+  const notifyResults = await Promise.all(notifyTargets.map((target) => notify(target, payload)));
 
-  const { error: notifyError } = await sb.from('notifications').insert({
-    alert_id: alert.id,
-    rate_id: record ? record.rateRowId : null,
-    notification_type: alert.notification_method,
-    delivery_status: notifyResult.deliveryStatus,
-    delivery_error: notifyResult.error,
-    message,
-  });
-  if (notifyError) {
-    console.error(`[scheduler] could not insert notification for alert ${alert.id}: ${notifyError.message}`);
+  for (let i = 0; i < notifyTargets.length; i++) {
+    const target = notifyTargets[i];
+    const result = notifyResults[i];
+    console.log(
+      `[scheduler]   notify via ${target.channel}: ${result.deliveryStatus}` +
+        (result.error ? ` (${result.error})` : '')
+    );
+
+    const { error: notifyError } = await sb.from('notifications').insert({
+      alert_id: alert.id,
+      rate_id: record ? record.rateRowId : null,
+      notification_type: target.channel,
+      delivery_status: result.deliveryStatus,
+      delivery_error: result.error,
+      message,
+    });
+    if (notifyError) {
+      console.error(`[scheduler] could not insert notification for alert ${alert.id} (${target.channel}): ${notifyError.message}`);
+    }
   }
 
   return { evaluated: true, triggered: true };
@@ -361,4 +403,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fetchPreviousRateRow, insertRateRow, checkCombo, evaluateAlert, resolveNotifyTarget };
+module.exports = { fetchPreviousRateRow, insertRateRow, checkCombo, evaluateAlert, resolveNotifyTargets };

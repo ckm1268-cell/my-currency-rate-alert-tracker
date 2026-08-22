@@ -370,7 +370,17 @@
     const sources = Array.isArray(a.sources) ? a.sources.map((s) => SOURCE_LABELS[s] || s).join(" + ") : "—";
     const branch = a.branch ? ` (${a.branch})` : "";
     const cond = CONDITION_LABELS[a.condition] || a.condition;
-    const notif = NOTIFICATION_LABELS[a.notification_method] || a.notification_method;
+    // Phase 11: notification_methods is an array — any combination may be
+    // selected, all delivered simultaneously (see backend/scheduler/run.js's
+    // resolveNotifyTargets()). Falls back to the old singular
+    // notification_method column so a row saved before the Phase 11 DB
+    // migration ran still displays something sensible instead of "—".
+    const methods = Array.isArray(a.notification_methods)
+      ? a.notification_methods
+      : (a.notification_method ? [a.notification_method] : []);
+    const notif = methods.length
+      ? methods.map((m) => NOTIFICATION_LABELS[m] || m).join(" + ")
+      : "—";
     return { sources: sources + branch, cond, notif };
   }
 
@@ -449,15 +459,23 @@
     }
     const state = window.CKM.getState();
     const sources = Object.keys(state.sources || {}).filter((k) => state.sources[k]);
+    // Phase 11: any combination of channels may be checked at once — this
+    // is now a filtered list, not a single selected value, matching
+    // `sources`' own pattern immediately above.
+    const notificationMethods = Object.keys(state.notifications || {}).filter((k) => state.notifications[k]);
     if (sources.length === 0) {
       setSaveStatus("Select at least one money changer in the panel on the left before saving.");
+      return;
+    }
+    if (notificationMethods.length === 0) {
+      setSaveStatus("Select at least one notification method in the panel on the left before saving.");
       return;
     }
     if (!(state.targetRate > 0)) {
       setSaveStatus("Enter a target rate greater than zero in the panel on the left before saving.");
       return;
     }
-    if (state.notification === "telegram" && !(state.telegramChatId || "").trim()) {
+    if (notificationMethods.includes("telegram") && !(state.telegramChatId || "").trim()) {
       setSaveStatus('Enter your Telegram chat ID in the panel on the left before saving a Telegram alert — see "Connecting Telegram" in NOTIFICATIONS_SETUP.md if you don\'t have it yet.');
       return;
     }
@@ -472,10 +490,11 @@
       sources,
       branch: sources.includes("tajmuhabath") ? state.branch : null,
       monitoring_interval_minutes: state.interval,
-      notification_method: state.notification,
-      // Phase 10: only meaningful (and only ever sent) when Telegram is the
-      // chosen channel — never write a stray chat ID onto a browser/email alert.
-      telegram_chat_id: state.notification === "telegram" ? state.telegramChatId.trim() : null,
+      notification_methods: notificationMethods,
+      // Phase 10: only meaningful (and only ever sent) when Telegram is one
+      // of the checked channels — never write a stray chat ID onto an
+      // alert that didn't select Telegram.
+      telegram_chat_id: notificationMethods.includes("telegram") ? state.telegramChatId.trim() : null,
       status: "ACTIVE",
     };
 

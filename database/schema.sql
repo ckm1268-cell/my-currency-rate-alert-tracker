@@ -71,13 +71,22 @@ create table if not exists public.alerts (
 
   monitoring_interval_minutes integer not null default 5
                            check (monitoring_interval_minutes in (1, 5, 10, 15, 30)),
-  notification_method    text not null default 'browser'
-                           check (notification_method in ('browser', 'email', 'telegram', 'whatsapp', 'sms')),
-                                                                    -- 'browser', 'email', and 'telegram' are all real as of
-                                                                    -- Phase 10 — see backend/notifications/notify.js.
-                                                                    -- 'whatsapp'/'sms' remain unimplemented (out of scope).
-  telegram_chat_id       text,                                     -- Phase 10: only meaningful when notification_method =
-                                                                    -- 'telegram'. Stored per-alert (not per-user) for
+  notification_methods   text[] not null default '{browser}'::text[]
+                           check (notification_methods <@ ARRAY['browser','email','telegram','whatsapp','sms']::text[]
+                                  and array_length(notification_methods, 1) > 0),
+                                                                    -- Phase 11: an ARRAY, not a single value — any combination
+                                                                    -- may be selected at once (e.g. ['email','telegram']),
+                                                                    -- and backend/scheduler/run.js delivers to every selected
+                                                                    -- channel simultaneously (Promise.all, not one-at-a-time)
+                                                                    -- when the alert triggers. Same array-column pattern as
+                                                                    -- `sources` above, for the same reason: a fixed small set
+                                                                    -- of independently-selectable options doesn't need a
+                                                                    -- join table. 'browser', 'email', and 'telegram' are all
+                                                                    -- real as of Phase 10 — see backend/notifications/notify.js.
+                                                                    -- 'whatsapp'/'sms' remain unimplemented (out of scope) but
+                                                                    -- stay in the allowed set for forward compatibility.
+  telegram_chat_id       text,                                     -- Phase 10: only meaningful when 'telegram' is one of
+                                                                    -- notification_methods. Stored per-alert (not per-user) for
                                                                     -- simplicity, matching this table's existing philosophy
                                                                     -- of not introducing a separate profile table until
                                                                     -- something actually needs one (see the header comment's
@@ -252,6 +261,58 @@ alter table public.alerts
 
 alter table public.notifications
   add column if not exists delivery_error text;
+
+-- -----------------------------------------------------------------------------
+-- Phase 11 migration — notification_method (single value) -> notification_
+-- methods (array), so an alert can deliver to Email and Telegram (and
+-- Browser) simultaneously instead of picking exactly one channel. Safe to
+-- re-run: every step below is idempotent, and existing rows are backfilled
+-- from their old single value BEFORE that old column is dropped, so no
+-- alert silently loses its notification setting. If you're running this
+-- file for the first time ever, the table above is already created with
+-- notification_methods in place and every step below becomes a no-op.
+-- -----------------------------------------------------------------------------
+
+alter table public.alerts
+  add column if not exists notification_methods text[];
+
+-- Backfill from the old single-value column, only for rows that don't
+-- already have an array value (re-running this file a second time must
+-- not clobber anything).
+update public.alerts
+set notification_methods = ARRAY[notification_method]
+where notification_methods is null
+  and notification_method is not null;
+
+-- Any row with neither an old value nor a new one yet (shouldn't happen
+-- given notification_method's own NOT NULL default, but this must never
+-- leave a row that fails the NOT NULL below) falls back to 'browser'.
+update public.alerts
+set notification_methods = '{browser}'::text[]
+where notification_methods is null or array_length(notification_methods, 1) is null;
+
+alter table public.alerts
+  alter column notification_methods set default '{browser}'::text[];
+
+alter table public.alerts
+  alter column notification_methods set not null;
+
+-- Postgres has no "ADD CONSTRAINT IF NOT EXISTS" for CHECK constraints, so
+-- this uses the same drop-then-create idempotency pattern already used for
+-- every policy in this file.
+alter table public.alerts
+  drop constraint if exists alerts_notification_methods_check;
+alter table public.alerts
+  add constraint alerts_notification_methods_check
+    check (notification_methods <@ ARRAY['browser','email','telegram','whatsapp','sms']::text[]
+           and array_length(notification_methods, 1) > 0);
+
+-- Now safe to drop — every row has been backfilled into notification_methods
+-- above, and every reader in the codebase (frontend/auth.js,
+-- backend/scheduler/run.js) was updated in the same change that added this
+-- migration to read the plural column instead.
+alter table public.alerts
+  drop column if exists notification_method;
 
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to
