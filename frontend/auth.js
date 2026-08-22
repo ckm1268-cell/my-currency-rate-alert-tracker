@@ -239,8 +239,15 @@
     setLoginStatus("Signing in…");
     const { error } = await sb.auth.signInWithPassword({ email, password });
     if (error) {
+      // Supabase returns the SAME generic "Invalid login credentials" for
+      // both a wrong password and an account that hasn't clicked its
+      // confirmation-email link yet — it deliberately doesn't say which,
+      // so a wrong guess here can't be used to probe whether an email is
+      // registered. Cover both real causes in one message rather than
+      // wrongly telling someone their password is bad when the actual
+      // issue is an unconfirmed account.
       const friendly = /invalid login credentials/i.test(error.message)
-        ? "Incorrect email or password."
+        ? "Incorrect email or password — or, if you just signed up, your account may still need email confirmation first (check your inbox)."
         : /email not confirmed/i.test(error.message)
           ? "Please confirm your email first — check your inbox for the confirmation link we sent when you signed up."
           : error.message;
@@ -289,8 +296,15 @@
       setSignupStatus("Account created — you're signed in.");
       return;
     }
-    setSignupStatus(`Account created. Check ${email} for a confirmation link, then log in.`);
+    // switchTab() clears both forms' status messages as its first step (so
+    // stale text from one form never lingers when you flip to the other) —
+    // that means setting this message BEFORE switching tabs got wiped out
+    // immediately, and the user landed on a blank Log in form with no
+    // explanation of why signing in right away wouldn't work yet. Setting
+    // it on the login form's own status line, after the switch, is what
+    // actually keeps it on screen.
     switchTab("login");
+    setLoginStatus(`Account created. Check ${email} for a confirmation link, then log in.`);
   }
 
   async function forgotPassword(email) {
