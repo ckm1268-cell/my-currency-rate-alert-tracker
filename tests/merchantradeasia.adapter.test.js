@@ -75,3 +75,67 @@ test('the extracted CNY reading passes validateRate() against the configured exp
 test('config.id matches the adapter module name convention used elsewhere (mymoneymaster, tajmuhabath)', () => {
   assert.equal(config.id, 'merchantradeasia');
 });
+
+// VND and TWD added 22-Aug-2026 (same day, currency-selection follow-up) —
+// no adapter code changed for this, only config/websites/merchantradeasia.json's
+// currencyDisplayNames + validation.expectedRange, since parseHtml() is
+// already currency-agnostic. These tests exist to prove that addition
+// actually works end-to-end against real captured markup, not just that
+// the config file parses as valid JSON.
+
+test('parseHtml extracts the real captured VND row (quoted per 1,000,000 units, not per 100 like CNY)', () => {
+  const result = parseHtml(html, 'VND');
+  assert.ok(result, 'expected a parsed result for VND, got null');
+  assert.equal(result.buyRate, 150.71);
+  assert.equal(result.sellRate, 158.8);
+});
+
+test('parseHtml extracts the real captured TWD row', () => {
+  const result = parseHtml(html, 'TWD');
+  assert.ok(result, 'expected a parsed result for TWD, got null');
+  assert.equal(result.buyRate, 12.3189);
+  assert.equal(result.sellRate, 12.755);
+});
+
+test('parseHtml does not confuse VND and TWD with each other or with CNY', () => {
+  const vnd = parseHtml(html, 'VND');
+  const twd = parseHtml(html, 'TWD');
+  const cny = parseHtml(html, 'CNY');
+  assert.notEqual(vnd.buyRate, twd.buyRate);
+  assert.notEqual(vnd.buyRate, cny.buyRate);
+  assert.notEqual(twd.buyRate, cny.buyRate);
+});
+
+test('the extracted VND and TWD readings each pass validateRate() against their OWN configured expected range', () => {
+  for (const currency of ['VND', 'TWD']) {
+    const result = parseHtml(html, currency);
+    const validation = validateRate({
+      currency,
+      buyRate: result.buyRate,
+      sellRate: result.sellRate,
+      retrievedAt: new Date().toISOString(),
+      expectedRange: config.validation.expectedRange[currency],
+    });
+    assert.equal(
+      validation.passed,
+      true,
+      `expected ${currency} validation to pass, reasons: ${validation.reasons.join('; ')}`
+    );
+  }
+});
+
+test('VND fails validation if (incorrectly) checked against CNY\'s expected range — proving the per-currency range actually matters, not just present', () => {
+  const result = parseHtml(html, 'VND');
+  const validation = validateRate({
+    currency: 'VND',
+    buyRate: result.buyRate,
+    sellRate: result.sellRate,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: config.validation.expectedRange.CNY, // deliberately the WRONG range for this currency
+  });
+  // VND's real values (~150-159) fall outside CNY's [40, 80] range, so this
+  // must fail — if it passed, that would mean expectedRange isn't actually
+  // being enforced per-currency, which is exactly the "0.6053 instead of
+  // 60.53" decimal-placement bug class this check exists to catch.
+  assert.equal(validation.passed, false);
+});

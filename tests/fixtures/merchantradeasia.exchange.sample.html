@@ -22,6 +22,14 @@
   some currencies (e.g. "USD BIG" / "USD MEDIUM" / "USD SMALL") which are
   deliberately NOT included here since this adapter only targets CNY, which
   has a single row.
+
+  VND and TWD were added 22-Aug-2026 (same day, currency-selection
+  follow-up request) — also real captured markup/values, confirming this
+  page quotes VND per 1,000,000 units ("1000000 VND") and TWD per 100
+  units ("100 TWD"), NOT the same per-100 convention as CNY. This matters
+  for the validateRate() test below, which uses each currency's own
+  expectedRange from config/websites/merchantradeasia.json rather than a
+  shared one.
 -->
 <!DOCTYPE html>
 <html>
@@ -34,6 +42,10 @@
     <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-jp fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">100 JPY</span><small class="text-muted lh-1 fs-6">/ JAPANESE YEN</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">2.4399</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">2.6830</span></div></div>
 
     <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-cn fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">100 CNY</span><small class="text-muted lh-1 fs-6">/ CHINESE RENMINBI</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">59.2199</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">61.8000</span></div></div>
+
+    <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-vn fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">1000000 VND</span><small class="text-muted lh-1 fs-6">/ VIETNAMESE DONG</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">150.7100</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">158.8000</span></div></div>
+
+    <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-tw fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">100 TWD</span><small class="text-muted lh-1 fs-6">/ NEW TAIWAN DOLLAR</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">12.3189</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">12.7550</span></div></div>
   </div>
 </body>
 </html>

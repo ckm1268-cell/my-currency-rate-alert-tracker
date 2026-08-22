@@ -57,6 +57,12 @@ any adapter code was written:
 | **Spectrum Forex** | ❌ Not added. `spectrumforex.com.my` does not currently resolve (confirmed NXDOMAIN via an authoritative DNS lookup, 22-Aug-2026) — there is no live site at that address to build an adapter against. If you have an updated URL for this business, it can be re-attempted. |
 | **Vital Rate** | ❌ Not added. `vitalrate.com` is a parked/for-sale domain (redirects to a domain marketplace listing), not the real company. Public information indicates Vital Rate Sdn Bhd was acquired by Merchantrade Asia Sdn Bhd in 2017 and may no longer operate as an independent brand — some of its former branches (e.g. Pavilion KL) now appear as Merchantrade Asia branches on the page the new adapter above already covers. If Vital Rate still operates independently under a different real domain, share it and this can be reconsidered. |
 
+### Currency coverage — VND and TWD added (22-Aug-2026, same day)
+
+Requested via the dashboard's currency dropdown. Both are now selectable, and **both are real/LIVE at Merchantrade Asia** (`config/websites/merchantradeasia.json`'s `currencyDisplayNames` and `validation.expectedRange` now cover `VND` and `TWD` alongside `CNY`; no adapter code changed, since `parseHtml()` was already currency-agnostic — only the config entries were new). My Money Master and Taj Muhabath were not re-checked for VND/TWD coverage, so those two sources still simulate them if selected — same honest LIVE/SIMULATED split already used for every other non-CNY currency.
+
+One thing worth knowing if you're reading a target rate for either: **Merchantrade Asia doesn't quote every currency per 1 unit.** CNY and TWD are per 100 units (label reads "100 CNY" / "100 TWD"), but VND is quoted per **1,000,000** units ("1000000 VND") — confirmed live, not assumed (see the `validation.notes` field in the config file). The currency dropdown's VND/TWD labels spell out the unit denomination for exactly this reason, and the simulated fallback values for both are scaled to match, so a multi-source alert comparing a simulated My Money Master reading against a real Merchantrade Asia one stays apples-to-apples.
+
 ### Compliance note (read before enabling any schedule)
 
 Neither `pages.yml` nor `monitor.yml` runs on a cron yet. All three of

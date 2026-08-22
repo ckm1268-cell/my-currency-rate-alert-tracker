@@ -20,17 +20,23 @@
     "sellSelector": ".col-3.text-end .currency",
     "matchStrategy": "Enumerate all '.exchange-arrow-row' elements. For each, read the row's full text content and check it contains '/ ' followed by config.currencyDisplayNames[currencyCode] (case-insensitive) — e.g. '/ CHINESE RENMINBI' for CNY. Within the matching row, read the first '.currency' span found under a '.col-3.text-center' ancestor as buyRate, and the first '.currency' span found under a '.col-3.text-end' ancestor as sellRate.",
     "sampleMatchedHtml": "<div class=\"row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4\"><div class=\"col-6 py-3 px-2 px-lg-4\"><span class=\"d-flex align-items-center gap-2\"><span class=\"d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32\"><span class=\"fi fi-cn fis  h-100 w-100 position-absolute top-0 start-0\"></span></span><span class=\"d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2\"><span class=\"text-dark lh-1 fw-semibold\">100 CNY</span><small class=\"text-muted lh-1 fs-6\">/ CHINESE RENMINBI</small></span></span></div><div class=\"col-3 py-3 px-4 text-center\"><span class=\"currency text-dark ftw-400\">59.2199</span></div><div class=\"col-3 py-3 px-4 text-end\"><span class=\"currency text-dark ftw-400\">61.8000</span></div></div>",
-    "liveSampleObservedAt": "2026-08-22: CNY (100 CNY unit) We Buy 59.2199 / We Sell 61.8000"
+    "liveSampleObservedAt": "2026-08-22: CNY (100 CNY unit) We Buy 59.2199 / We Sell 61.8000. Also 2026-08-22 (same session, currency-selection follow-up): VND (1000000 VND unit) We Buy 150.7100 / We Sell 158.8000; TWD (100 TWD unit) We Buy 12.3189 / We Sell 12.7550 — same row structure and selector strategy, just a different currencyDisplayNames entry, no adapter code change needed."
   },
   "currencyDisplayNames": {
-    "CNY": "CHINESE RENMINBI"
+    "CNY": "CHINESE RENMINBI",
+    "VND": "VIETNAMESE DONG",
+    "TWD": "NEW TAIWAN DOLLAR"
   },
   "waitStrategy": {
     "initialLoad": "navigate to liveRateUrl, wait for '.exchange-arrow-row' to be attached (the row skeleton is present quickly since it's part of the raw HTML — see 'notes'), THEN wait an additional settle window (recommend 4-5s, matching the window used during live verification) before reading, since the actual currency name / buy / sell text inside each row arrives via a later JS/data call, not merely DOM-attachment of the row shell itself. A naive 'row exists' check without this settle window will read empty/placeholder cells."
   },
   "validation": {
-    "expectedRange": { "CNY": { "min": 40, "max": 80 } },
-    "notes": "Same scale/reasoning as the other two sources: this page quotes CNY per 100 units (label reads '100 CNY'), so BUY/SELL values are directly comparable in scale to My Money Master and Taj Muhabath's CNY figures without any /100 or *100 adjustment. Reject a reading where buyRate > sellRate, or where the value looks like it's missing this unit scaling."
+    "expectedRange": {
+      "CNY": { "min": 40, "max": 80 },
+      "VND": { "min": 100, "max": 250 },
+      "TWD": { "min": 8, "max": 20 }
+    },
+    "notes": "Same scale/reasoning as the other two sources for CNY: this page quotes CNY per 100 units (label reads '100 CNY'), so BUY/SELL values are directly comparable in scale to My Money Master and Taj Muhabath's CNY figures without any /100 or *100 adjustment. VND and TWD were added 22-Aug-2026 alongside a currency-selection request — unlike CNY, these two are ONLY live at Merchantrade Asia (My Money Master and Taj Muhabath were not re-checked for VND/TWD coverage, so they remain simulated for those two currencies). Each currency here uses whatever per-unit denomination this page itself quotes, not a uniform per-1 or per-100 basis: VND is quoted per 1,000,000 units (label reads '1000000 VND') and TWD per 100 units (label reads '100 TWD') — confirmed live, not assumed. frontend/app.js's CURRENCIES.base values for VND and TWD are deliberately scaled to match these same per-unit conventions, since a simulated reading at a different scale than the one real source would break the multi-source 'best rate' comparison. Reject a reading where buyRate > sellRate, or where the value looks like it's missing the relevant unit scaling for that currency."
   },
   "compliance": {
     "robotsTxt": "Checked live 22-Aug-2026 at https://mtradeasia.com/robots.txt — 'User-Agent: *  Allow: /  Disallow: /private/'. The /exchange page is not under /private/, so it is not disallowed.",

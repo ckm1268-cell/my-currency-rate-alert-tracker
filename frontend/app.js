@@ -42,6 +42,17 @@
     { code: "EUR", name: "Euro", base: 4.71, decimals: 3 },
     { code: "GBP", name: "British Pound", base: 5.51, decimals: 3 },
     { code: "AUD", name: "Australian Dollar", base: 2.88, decimals: 3 },
+    // VND and TWD added 22-Aug-2026. Unlike every currency above, these two
+    // are quoted per a specific unit denomination rather than per-1 (see
+    // config/websites/merchantradeasia.json's validation.notes) — "base"
+    // here is deliberately scaled to match Merchantrade Asia's own real
+    // quoted unit for each (VND per 1,000,000; TWD per 100), since that's
+    // currently the only real source for either, and a simulated reading
+    // at a mismatched scale would break the multi-source "best rate"
+    // comparison the moment Merchantrade Asia is one of the selected
+    // sources.
+    { code: "VND", name: "Vietnamese Dong (per 1,000,000)", base: 154.5, decimals: 2 },
+    { code: "TWD", name: "New Taiwan Dollar (per 100)", base: 12.5, decimals: 3 },
   ];
 
   // Verified 21-Aug-2026 by opening the live branch dropdown on
@@ -71,7 +82,7 @@
   const REAL_ADAPTER_SUPPORT = {
     mymoneymaster: ["CNY"],
     tajmuhabath: ["CNY"],
-    merchantradeasia: ["CNY"],
+    merchantradeasia: ["CNY", "VND", "TWD"],
   };
 
   const LIVE_DATA_URL = "data/latest-rates.json";
