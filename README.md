@@ -9,7 +9,7 @@ Initial scope: **CNY/MYR, SELL rate**, from **My Money Master** and
 **Taj Muhabath**. Architecture supports adding more currencies, branches,
 and sources without a redesign.
 
-## Current status: Phase 7 of 10
+## Current status: Phase 8 of 10
 
 | Phase | What | Status |
 |---|---|---|
@@ -17,11 +17,11 @@ and sources without a redesign.
 | 2 | My Money Master live retrieval | ✅ live (CNY SELL/BUY) |
 | 3 | Taj Muhabath live retrieval | ✅ live (CNY SELL/BUY, branch: LALAPORT BBCC) |
 | 4 | Rate validation wired into adapters | ✅ done for both adapters (`backend/validation/validateRate.js`) |
-| 5 | Target comparison engine wired to real data | ✅ done — `isTargetMet` (`frontend/app.js`) operates on real readings; `backend/targetEngine/compareTarget.js` is the tested server-side twin, not yet called anywhere (Phase 8) |
+| 5 | Target comparison engine wired to real data | ✅ done — `isTargetMet` (`frontend/app.js`) operates on real readings; `backend/targetEngine/compareTarget.js` is the tested server-side twin, now actually called by Phase 8's scheduler |
 | 6 | Browser notifications wired to real alerts | ✅ live-tested end-to-end against a real trigger, not just read-through |
-| 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + magic-link sign-in + per-user saved alerts built — **requires you to provision your own Supabase project**, see `SUPABASE_SETUP.md` |
-| 8 | GitHub Pages + GitHub Actions scheduler live in production | 🟡 partial — the live-rate checks run on every deploy (push/manual) via `pages.yml`, no cron yet (see Compliance below); the Supabase-backed scheduled evaluation in `monitor.yml` is still a placeholder |
-| 9 | Full test pass | 🟡 partial — unit tests for both adapters' parsing logic and the target-comparison engine exist and pass; no end-to-end/multi-user test pass yet (see `SUPABASE_SETUP.md` step 7 for a manual multi-user isolation test) |
+| 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + magic-link sign-in + per-user saved alerts — **live-tested end-to-end**, including a real cross-account isolation check across three separate accounts (see `SUPABASE_SETUP.md`) |
+| 8 | Scheduled backend job (Supabase-backed) | ✅ implemented — `backend/scheduler/run.js` (wired into `.github/workflows/monitor.yml`) fetches every ACTIVE alert, checks both adapters, writes to the `rates` table, evaluates each alert against the **best rate across its selected sources**, and marks it TRIGGERED + logs a `notifications` row the moment a target is met — no browser tab required. Runs via manual "Run workflow" trigger only; **no recurring cron yet**, deliberately gated on the Terms of Use compliance review (see Compliance note below). **Not yet live-tested against a real Supabase project** — this sandbox cannot reach either money-changer site or a real Supabase instance; the first real run needs to happen via the Actions tab, see the note in the Phase 8 status write-up. |
+| 9 | Full test pass | 🟡 partial — unit tests for both adapters' parsing logic, the target-comparison engine (including Phase 8's `pickBestReading`), and the scheduler's pure combo-selection logic all exist and pass (38/38); no end-to-end/multi-user test pass yet beyond Phase 7's manual isolation check |
 | 10 | Email / Telegram, rate-history charts | ⏳ not started |
 
 **CNY at both money changers is real.** My Money Master CNY and Taj
@@ -47,6 +47,12 @@ its branch dropdown uses internally (discovered during the Phase 3 build) —
 that endpoint requires an authorization this adapter does not have and
 should not attempt to replicate. See the header comment in
 `backend/scrapers/tajmuhabath.adapter.js` for details.
+
+As of Phase 8, `monitor.yml` runs a real, fully-implemented pipeline
+(`backend/scheduler/run.js`) on every manual trigger — this compliance
+blocker now gates a functional job, not a placeholder. Do not uncomment
+the `schedule:` block in that file until the Terms of Use review above has
+actually been done.
 
 ### Accounts (Phase 7 — optional)
 
@@ -86,6 +92,7 @@ currency-rate-alert/
 │   ├── validation/
 │   ├── targetEngine/
 │   ├── notifications/
+│   ├── scheduler/              # Phase 8 — the real scheduled job (run.js) + its pure combo-selection helpers
 │   └── db/                    # Supabase service-role client (backend-only)
 ├── database/
 │   └── schema.sql             # Phase 7 — tables + Row-Level Security policies
@@ -149,15 +156,24 @@ To set this up on a fresh fork/clone:
   than LALAPORT BBCC. `frontend/app.js` generates these with a small random
   walk around realistic starting values and always labels them SIMULATED —
   never LIVE, per the project's core rule.
-- **Real, as of Phase 7 (once you provision Supabase):** account sign-in,
-  saved per-user alerts, and their isolation — enforced by the database
-  itself (`database/schema.sql`'s Row-Level Security policies), not just by
-  the UI. See `SUPABASE_SETUP.md`.
-- **Not yet built:** the scheduled server-side job that checks a *saved*
-  alert in the background (Phase 8 — today, a saved alert is only actually
-  evaluated while the matching browser tab is open and monitoring, same as
-  every phase before it), and every notification channel beyond the
-  browser demo (Phase 10).
+- **Real, confirmed live (Phase 7):** account sign-in, saved per-user
+  alerts, and their isolation — enforced by the database itself
+  (`database/schema.sql`'s Row-Level Security policies), not just by the
+  UI. Live-tested end-to-end, including cross-account isolation across
+  three separate accounts. See `SUPABASE_SETUP.md`.
+- **Real, as of Phase 8:** a saved alert's target condition IS evaluated
+  server-side — independent of any open browser tab — by
+  `backend/scheduler/run.js`, using the best rate across the alert's
+  selected sources. It marks the alert TRIGGERED and logs a
+  `notifications` row the moment a target is met. The gap is no longer
+  "this doesn't exist" — it's "this only runs when a maintainer manually
+  triggers the 'Monitor Exchange Rates' GitHub Actions workflow"; there is
+  no recurring schedule yet (see the Compliance note above).
+- **Not yet built:** an automatic recurring schedule for the Phase 8 job
+  (compliance review pending — see above), and every notification channel
+  beyond the browser demo (Phase 10) — a `notifications` row from Phase 8
+  is logged with `delivery_status: "PENDING"` today, honestly reflecting
+  that nothing server-side actually pushes it to the user yet.
 
 ## Environment variables
 

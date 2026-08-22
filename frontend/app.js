@@ -337,6 +337,42 @@
     }
   }
 
+  /**
+   * pickBestReading() — Phase 8 fix (22-Aug-2026)
+   * =================================================
+   * Mirrors backend/targetEngine/compareTarget.js's pickBestReading()
+   * exactly, same relationship isTargetMet() above already has with its
+   * own backend twin. Added to fix a real inconsistency found while
+   * building Phase 8: renderCompareTable() below already computed "the
+   * best row" purely for display (the "Best"/"REACHED" badge), but tick()
+   * separately picked a hardcoded "primary" source (My Money Master if
+   * selected, else Taj Muhabath) for the actual alerting decision — so a
+   * multi-source alert could show 🔴 REACHED on Taj Muhabath's row while
+   * never firing, because the primary-source logic was checking My Money
+   * Master. Confirmed with the user (an explicit choice, not assumed)
+   * that alerting should follow the best rate across every selected
+   * source, matching what the badge already visually promised. tick(),
+   * renderHero(), and renderCompareTable() below now all share this one
+   * function instead of computing "best" three different ways.
+   *
+   * @param {object[]} readings - annotated readings (StandardRateResult
+   *   shape + sourceName/valid/invalidReason, as tick() below builds them)
+   * @param {"BUY"|"SELL"} rateType
+   * @returns {object|null} the best valid reading, or the first reading in
+   *   the list (still useful for showing *an* error state) if none are
+   *   valid — never null when readings is non-empty, so callers can
+   *   render an honest error state for whichever reading is returned.
+   */
+  function pickBestReading(readings, rateType) {
+    const validReadings = readings.filter((r) => r.valid);
+    if (!validReadings.length) return readings[0] || null;
+    const key = rateType === "SELL" ? "sellRate" : "buyRate";
+    const better = (a, b) => (rateType === "SELL" ? a[key] < b[key] : a[key] > b[key]);
+    let best = validReadings[0];
+    validReadings.forEach((r) => { if (better(r, best)) best = r; });
+    return best;
+  }
+
   // ---------------------------------------------------------------------
   // Rendering
   // ---------------------------------------------------------------------
@@ -369,16 +405,17 @@
       return { ...r, sourceName: s.name, valid: v.passed, invalidReason: v.reason };
     });
 
-    renderCompareTable(readings);
+    // Best rate across every currently selected source drives both the
+    // hero display and the actual alerting decision — see
+    // pickBestReading()'s comment above for why this replaced a
+    // hardcoded "primary source" pick (Phase 8 fix, 22-Aug-2026).
+    const best = pickBestReading(readings, state.rateType);
 
-    // Pick the "selected" reading = first checked source, preferring the one
-    // matching the currently configured branch for Taj Muhabath.
-    const primaryId = state.sources.mymoneymaster ? "mymoneymaster" : "tajmuhabath";
-    const primary = readings.find((r) => r.source === primaryId) || readings[0];
-    renderHero(primary, readings);
+    renderCompareTable(readings, best);
+    renderHero(best, readings);
 
-    if (state.monitoring && primary.valid) {
-      const value = state.rateType === "SELL" ? primary.sellRate : primary.buyRate;
+    if (state.monitoring && best.valid) {
+      const value = state.rateType === "SELL" ? best.sellRate : best.buyRate;
       const met = isTargetMet(value, state.targetRate, state.condition, lastSelectedValue);
       lastSelectedValue = value;
 
@@ -387,14 +424,14 @@
 
       if (met && !state.triggered) {
         state.triggered = true;
-        fireAlert(primary, value);
+        fireAlert(best, value);
       } else if (!met && state.triggered && state.condition !== "PCT_CHANGE") {
         // condition no longer met after a reset — nothing to do, suppression
         // only matters while state.triggered stays true until user resets.
       }
-      logActivity(`${primary.sourceName} ${state.currency} ${state.rateType} = ${formatRate(value)} — ${met ? (state.triggered ? "TARGET REACHED" : "target check") : "waiting"}`);
-    } else if (state.monitoring && !primary.valid) {
-      logActivity(`${primary.sourceName} ${state.currency} — ${primary.status === "SOURCE_UNAVAILABLE" ? "SOURCE UNAVAILABLE" : "VALIDATION ERROR (" + primary.invalidReason + ")"}`);
+      logActivity(`${best.sourceName} ${state.currency} ${state.rateType} = ${formatRate(value)} — ${met ? (state.triggered ? "TARGET REACHED" : "target check") : "waiting"}`);
+    } else if (state.monitoring && !best.valid) {
+      logActivity(`${best.sourceName} ${state.currency} — ${best.status === "SOURCE_UNAVAILABLE" ? "SOURCE UNAVAILABLE" : "VALIDATION ERROR (" + best.invalidReason + ")"}`);
     }
   }
 
@@ -405,9 +442,9 @@
     $("compareBody").innerHTML = `<tr><td colspan="6" style="color:var(--ink-faint);">Select at least one money changer.</td></tr>`;
   }
 
-  function renderHero(primary, allReadings) {
+  function renderHero(best, allReadings) {
     const cur = CURRENCIES.find((c) => c.code === state.currency);
-    const isReal = primary.origin === "REAL";
+    const isReal = best.origin === "REAL";
     $("heroPair").textContent = `${state.currency} / MYR`;
 
     const diffEl = $("heroDiff");
@@ -415,27 +452,27 @@
     let rateText = "--.--";
     let rateLabel = isReal ? `${state.rateType} RATE` : `SIMULATED ${state.rateType} RATE`;
 
-    if (primary.status === "SOURCE_UNAVAILABLE" || primary.status === "EXTRACTION_ERROR") {
+    if (best.status === "SOURCE_UNAVAILABLE" || best.status === "EXTRACTION_ERROR") {
       pillClass = "error";
-      const reason = primary.status === "EXTRACTION_ERROR" ? "EXTRACTION ERROR" : "SOURCE UNAVAILABLE";
+      const reason = best.status === "EXTRACTION_ERROR" ? "EXTRACTION ERROR" : "SOURCE UNAVAILABLE";
       pillText = isReal ? `⚠ ${reason}` : `⚠ SIMULATED: ${reason}`;
       diffEl.textContent = "—"; diffEl.className = "hero-metric-value tabular";
       // If we have a prior successful value cached (only possible for real
       // sources, from an earlier — now overwritten — entry) we still don't
       // show it here on purpose: the current live-data file has no prior
       // value to fall back to, so honestly there's nothing to show.
-    } else if (primary.status === "STALE") {
+    } else if (best.status === "STALE") {
       pillClass = "error"; pillText = "🟠 STALE";
       rateLabel = `${state.rateType} RATE — last successful check`;
-      const value = state.rateType === "SELL" ? primary.sellRate : primary.buyRate;
+      const value = state.rateType === "SELL" ? best.sellRate : best.buyRate;
       rateText = value != null ? formatRate(value) : "--.--";
       diffEl.textContent = "—"; diffEl.className = "hero-metric-value tabular";
-    } else if (!primary.valid) {
+    } else if (!best.valid) {
       pillClass = "error";
       pillText = isReal ? "⚠ VALIDATION ERROR" : "⚠ SIMULATED: VALIDATION ERROR";
       diffEl.textContent = "—"; diffEl.className = "hero-metric-value tabular";
     } else {
-      const value = state.rateType === "SELL" ? primary.sellRate : primary.buyRate;
+      const value = state.rateType === "SELL" ? best.sellRate : best.buyRate;
       rateText = formatRate(value);
       if (isReal) rateLabel = `LIVE ${state.rateType} RATE — retrieved directly from source`;
       if (state.monitoring) {
@@ -456,31 +493,33 @@
     $("heroRateLabel").textContent = rateLabel;
     $("heroRateValue").textContent = rateText;
     $("heroTarget").textContent = state.targetRate ? formatRate(state.targetRate) : "—";
-    $("heroSourceLabel").textContent = `Primary source: ${primary.sourceName}${primary.branch ? " — " + primary.branch : ""}`;
-    $("lastChecked").textContent = primary.retrievedAt ? "Last checked: " + primary.retrievedAt.toLocaleTimeString() : "Last checked: —";
+    // "Best available" only when there's genuinely a valid rate to call
+    // best — when nothing validated this run, this is just showing
+    // whichever selected source happens to be first, so it says so
+    // plainly rather than mislabeling it as "best" (Phase 8 fix).
+    const sourceLabel = best.valid ? "Best available source" : "Source";
+    $("heroSourceLabel").textContent = `${sourceLabel}: ${best.sourceName}${best.branch ? " — " + best.branch : ""}`;
+    $("lastChecked").textContent = best.retrievedAt ? "Last checked: " + best.retrievedAt.toLocaleTimeString() : "Last checked: —";
   }
 
-  function renderCompareTable(readings) {
-    const cur = CURRENCIES.find((c) => c.code === state.currency);
-    const validReadings = readings.filter((r) => r.valid);
-    let bestIdx = -1;
-    if (validReadings.length) {
-      const key = state.rateType === "SELL" ? "sellRate" : "buyRate";
-      const better = (a, b) => (state.rateType === "SELL" ? a[key] < b[key] : a[key] > b[key]);
-      let best = validReadings[0];
-      validReadings.forEach((r) => { if (better(r, best)) best = r; });
-      bestIdx = readings.indexOf(best);
-    }
+  function renderCompareTable(readings, best) {
+    const bestIdx = best ? readings.indexOf(best) : -1;
 
     $("compareBody").innerHTML = readings.map((r, i) => {
       const originTag = r.origin === "REAL"
         ? '<span class="origin-tag origin-live">LIVE SOURCE</span>'
         : '<span class="origin-tag origin-sim">SIMULATED</span>';
+      // The REACHED badge now reads directly off state.triggered — the
+      // same flag that actually decided whether fireAlert() ran — instead
+      // of a separately recomputed "<= target" check that didn't know
+      // about the alert's real condition (ABOVE, PCT_CHANGE, etc.) or
+      // duplicate-suppression state. One source of truth for "did this
+      // fire," not two that could disagree (Phase 8 fix).
       const statusBadge = r.status === "SOURCE_UNAVAILABLE" ? `<span class="status-pill error" style="font-size:.72rem;">⚠ UNAVAILABLE</span>`
         : r.status === "EXTRACTION_ERROR" ? `<span class="status-pill error" style="font-size:.72rem;">⚠ EXTRACTION ERROR</span>`
         : r.status === "STALE" ? `<span class="status-pill error" style="font-size:.72rem;">🟠 STALE</span>`
         : !r.valid ? `<span class="status-pill error" style="font-size:.72rem;">⚠ INVALID</span>`
-        : state.monitoring && i === bestIdx && (state.rateType === "SELL" ? r.sellRate : r.buyRate) <= state.targetRate ? `<span class="status-pill reached" style="font-size:.72rem;">🔴 REACHED</span>`
+        : state.monitoring && i === bestIdx && state.triggered ? `<span class="status-pill reached" style="font-size:.72rem;">🔴 REACHED</span>`
         : r.origin === "REAL" ? `<span class="status-pill live" style="font-size:.72rem;">🟢 LIVE</span>`
         : `<span class="status-pill waiting" style="font-size:.72rem;">🟡 WAITING</span>`;
       return `<tr class="${i === bestIdx ? "is-best" : ""}">
@@ -764,11 +803,14 @@
     lastSelectedValue = null;
     $("startBtn").textContent = "✓ Monitoring active";
     $("startBtn").dataset.active = "true";
-    // Same rule as tick()'s own primary-source pick and fireAlert()'s origin
-    // check: never claim "simulated" over a real source, or vice versa.
-    const primaryId = state.sources.mymoneymaster ? "mymoneymaster" : "tajmuhabath";
-    const isRealPrimary = hasRealAdapter(primaryId, state.currency);
-    $("formStatus").textContent = isRealPrimary
+    // Same rule as tick()'s own best-source pick (see pickBestReading()) and
+    // fireAlert()'s origin check: never claim "simulated" when a real source
+    // is in play, or vice versa. Checks every currently selected source,
+    // not just one hardcoded "primary" — a Phase 8 fix alongside the
+    // best-rate change, since a single fixed source no longer reflects
+    // which reading might actually end up driving the alert.
+    const isRealAny = activeSourceList().some((s) => hasRealAdapter(s.id, state.currency));
+    $("formStatus").textContent = isRealAny
       ? "Monitoring live data — see the Activity log below."
       : "Simulated monitoring is running — see the Activity log below.";
     logActivity(`Monitoring started: ${state.currency} ${state.rateType}, target ${formatRate(state.targetRate)}, condition ${state.condition}.`);

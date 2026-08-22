@@ -2,12 +2,13 @@
   "name": "currency-rate-alert-backend",
   "version": "0.1.0",
   "private": true,
-  "description": "Scheduled live-rate retrieval, validation, target comparison, and notifications for the MY Currency Rate Tracker app. Phase 1: scaffold only.",
+  "description": "Scheduled live-rate retrieval, validation, target comparison, and notifications for the MY Currency Rate Tracker app. Phase 8: real Supabase-backed scheduler implemented.",
   "main": "index.js",
   "scripts": {
     "test": "cd .. && node --test",
     "check:mymoneymaster": "node scripts/checkRate.js mymoneymaster CNY",
-    "check:tajmuhabath": "node scripts/checkRate.js tajmuhabath CNY \"LALAPORT BBCC\""
+    "check:tajmuhabath": "node scripts/checkRate.js tajmuhabath CNY \"LALAPORT BBCC\"",
+    "scheduler": "node scheduler/run.js"
   },
   "dependencies": {
     "cheerio": "^1.0.0",

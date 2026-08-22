@@ -9,7 +9,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isTargetMet } = require('../backend/targetEngine/compareTarget');
+const { isTargetMet, pickBestReading } = require('../backend/targetEngine/compareTarget');
 
 test('AT_OR_BELOW triggers when live rate is below, at, but not above target', () => {
   assert.equal(isTargetMet({ liveRate: 60.45, targetRate: 60.50, condition: 'AT_OR_BELOW' }), true);
@@ -90,4 +90,56 @@ test('non-numeric or missing liveRate/targetRate never triggers', () => {
   assert.equal(isTargetMet({ liveRate: NaN, targetRate: 60.50, condition: 'AT_OR_BELOW' }), false);
   assert.equal(isTargetMet({ liveRate: 60.50, targetRate: undefined, condition: 'AT_OR_BELOW' }), false);
   assert.equal(isTargetMet(undefined), false);
+});
+
+/**
+ * Phase 8 tests — pickBestReading(). See compareTarget.js's own doc
+ * comment on this function for the real inconsistency (visual "Best"/
+ * "REACHED" badge vs. a hardcoded single-source alerting decision) this
+ * was written to fix.
+ */
+
+test('pickBestReading (SELL): picks the lowest sellRate among LIVE readings', () => {
+  const readings = [
+    { source: 'mymoneymaster', branch: null, sellRate: 60.60, buyRate: 60.30, status: 'LIVE' },
+    { source: 'tajmuhabath', branch: 'LALAPORT BBCC', sellRate: 60.45, buyRate: 60.20, status: 'LIVE' },
+  ];
+  const best = pickBestReading(readings, 'SELL');
+  assert.equal(best.source, 'tajmuhabath');
+  assert.equal(best.sellRate, 60.45);
+});
+
+test('pickBestReading (BUY): picks the highest buyRate among LIVE readings', () => {
+  const readings = [
+    { source: 'mymoneymaster', branch: null, sellRate: 60.60, buyRate: 60.30, status: 'LIVE' },
+    { source: 'tajmuhabath', branch: 'LALAPORT BBCC', sellRate: 60.45, buyRate: 60.35, status: 'LIVE' },
+  ];
+  const best = pickBestReading(readings, 'BUY');
+  assert.equal(best.source, 'tajmuhabath');
+  assert.equal(best.buyRate, 60.35);
+});
+
+test('pickBestReading ignores any reading that is not exactly status "LIVE"', () => {
+  const readings = [
+    { source: 'mymoneymaster', branch: null, sellRate: 60.10, buyRate: 60.00, status: 'STALE' },
+    { source: 'tajmuhabath', branch: null, sellRate: 60.45, buyRate: 60.20, status: 'LIVE' },
+  ];
+  // My Money Master's sellRate (60.10) would win numerically, but it's
+  // STALE, not LIVE — must never be picked over a genuinely LIVE reading
+  // just because its number looks better.
+  const best = pickBestReading(readings, 'SELL');
+  assert.equal(best.source, 'tajmuhabath');
+});
+
+test('pickBestReading returns null when nothing is LIVE', () => {
+  const readings = [
+    { source: 'mymoneymaster', branch: null, sellRate: null, buyRate: null, status: 'SOURCE_UNAVAILABLE' },
+    { source: 'tajmuhabath', branch: null, sellRate: null, buyRate: null, status: 'EXTRACTION_ERROR' },
+  ];
+  assert.equal(pickBestReading(readings, 'SELL'), null);
+});
+
+test('pickBestReading returns null for an empty or missing readings list', () => {
+  assert.equal(pickBestReading([], 'SELL'), null);
+  assert.equal(pickBestReading(undefined, 'SELL'), null);
 });
