@@ -372,10 +372,16 @@
    * Never upgrades a stale or failed check to look LIVE — that is exactly
    * the false-freshness bug the project's Error Handling section warns
    * against ("do not display the last known rate as if it were live").
+   *
+   * Phase 16 (23-Aug-2026): `currencyCode` is now an explicit parameter
+   * (defaulting to `state.currency`, so every existing call site behaves
+   * exactly as before) rather than always reading `state.currency` — this
+   * lets computeAlertReading() below compute a reading for a saved alert
+   * whose currency differs from whatever is currently loaded in the form.
    */
-  function getRealReading(sourceId, branch) {
+  function getRealReading(sourceId, branch, currencyCode = state.currency) {
     const now = new Date();
-    const base = { source: sourceId, branch: branch || null, currency: state.currency, origin: "REAL" };
+    const base = { source: sourceId, branch: branch || null, currency: currencyCode, origin: "REAL" };
 
     if (state.liveDataFetchFailed) {
       return { ...base, buyRate: null, sellRate: null, retrievedAt: null, sourceTimestamp: null,
@@ -383,7 +389,7 @@
         errorMessage: `Could not load ${LIVE_DATA_URL} — the site may not have completed its first deploy yet.` };
     }
 
-    const entry = findLiveResult(sourceId, state.currency, branch);
+    const entry = findLiveResult(sourceId, currencyCode, branch);
     if (!entry) {
       return { ...base, buyRate: null, sellRate: null, retrievedAt: null, sourceTimestamp: null,
         status: "SOURCE_UNAVAILABLE", validationStatus: "NOT_RUN",
@@ -414,25 +420,26 @@
       status: "LIVE", validationStatus: entry.validationStatus };
   }
 
-  /** Dispatcher: real reading if this source+currency has a real adapter, simulated otherwise. */
-  function getReading(sourceId, branch) {
-    return hasRealAdapter(sourceId, state.currency)
-      ? getRealReading(sourceId, branch)
-      : simulateReading(sourceId, branch);
+  /** Dispatcher: real reading if this source+currency has a real adapter, simulated otherwise.
+   *  Phase 16: currencyCode is optional, defaulting to state.currency. */
+  function getReading(sourceId, branch, currencyCode = state.currency) {
+    return hasRealAdapter(sourceId, currencyCode)
+      ? getRealReading(sourceId, branch, currencyCode)
+      : simulateReading(sourceId, branch, currencyCode);
   }
 
   // ---------------------------------------------------------------------
   // Mock rate simulation (clearly separated from everything else)
   // ---------------------------------------------------------------------
 
-  function walkKey(sourceId, branch) {
-    return `${sourceId}::${state.currency}::${branch || ""}`;
+  function walkKey(sourceId, branch, currencyCode = state.currency) {
+    return `${sourceId}::${currencyCode}::${branch || ""}`;
   }
 
-  function seedWalk(sourceId, branch) {
-    const cur = CURRENCIES.find((c) => c.code === state.currency);
+  function seedWalk(sourceId, branch, currencyCode = state.currency) {
+    const cur = CURRENCIES.find((c) => c.code === currencyCode);
     const src = SOURCES.find((s) => s.id === sourceId);
-    const key = walkKey(sourceId, branch);
+    const key = walkKey(sourceId, branch, currencyCode);
     if (!state.walk[key]) {
       const branchJitter = branch ? (hashString(branch) % 40) / 1000 : 0; // small per-branch offset
       state.walk[key] = cur.base + src.spreadBias + branchJitter;
@@ -446,9 +453,9 @@
     return h;
   }
 
-  function stepWalk(sourceId, branch) {
-    const key = walkKey(sourceId, branch);
-    const current = seedWalk(sourceId, branch);
+  function stepWalk(sourceId, branch, currencyCode = state.currency) {
+    const key = walkKey(sourceId, branch, currencyCode);
+    const current = seedWalk(sourceId, branch, currencyCode);
     const drift = (Math.random() - 0.5) * 0.06;
     const next = Math.max(0.01, current + drift);
     state.walk[key] = next;
@@ -460,31 +467,40 @@
    * the real StandardRateResult contract in
    * backend/scrapers/rateAdapter.interface.js on purpose, so swapping this
    * out for a real backend call in Phase 2/3 is a drop-in change.
+   *
+   * Phase 16 (23-Aug-2026): `currencyCode` is now an explicit parameter
+   * (defaulting to `state.currency`) for the same reason as
+   * getRealReading() above — see that function's comment. `state.forcedMode`
+   * (the ?debug=1 test-controls panel) intentionally still applies
+   * regardless of currencyCode: it's a manual override for whatever is
+   * currently being demoed, and a tester flipping it on expects every
+   * reading on screen — including other saved alerts' own live-rate display
+   * — to reflect it, not just the currently loaded alert.
    */
-  function simulateReading(sourceId, branch) {
+  function simulateReading(sourceId, branch, currencyCode = state.currency) {
     const now = new Date();
     const src = SOURCES.find((s) => s.id === sourceId);
 
     if (state.forcedMode === "SOURCE_DOWN") {
-      return { source: sourceId, branch: branch || null, currency: state.currency, origin: "SIMULATED",
+      return { source: sourceId, branch: branch || null, currency: currencyCode, origin: "SIMULATED",
         buyRate: null, sellRate: null, retrievedAt: now, sourceTimestamp: null,
         status: "SOURCE_UNAVAILABLE", validationStatus: "NOT_RUN" };
     }
     if (state.forcedMode === "VALIDATION_ERROR") {
       // deliberately return an out-of-range value, e.g. missing the /100 unit scale
-      const bad = seedWalk(sourceId, branch) / 100;
-      return { source: sourceId, branch: branch || null, currency: state.currency, origin: "SIMULATED",
+      const bad = seedWalk(sourceId, branch, currencyCode) / 100;
+      return { source: sourceId, branch: branch || null, currency: currencyCode, origin: "SIMULATED",
         buyRate: bad, sellRate: bad, retrievedAt: now, sourceTimestamp: now,
         status: "RATE_VALIDATION_ERROR", validationStatus: "FAILED" };
     }
 
-    const sellBase = stepWalk(sourceId, branch);
+    const sellBase = stepWalk(sourceId, branch, currencyCode);
     const spread = 0.28 + (src.spreadBias * 0.5);
-    const sellRate = round(sellBase, decimalsFor(state.currency));
-    const buyRate = round(sellBase - spread, decimalsFor(state.currency));
+    const sellRate = round(sellBase, decimalsFor(currencyCode));
+    const buyRate = round(sellBase - spread, decimalsFor(currencyCode));
 
     return {
-      source: sourceId, branch: branch || null, currency: state.currency, origin: "SIMULATED",
+      source: sourceId, branch: branch || null, currency: currencyCode, origin: "SIMULATED",
       buyRate, sellRate, retrievedAt: now, sourceTimestamp: now,
       status: "SIMULATED", validationStatus: "PASSED",
     };
@@ -500,15 +516,21 @@
   // eventual server-side twin of this; kept intentionally simple here)
   // ---------------------------------------------------------------------
 
-  function validateReading(reading) {
+  // Phase 16 (23-Aug-2026): rateType/currencyCode are now optional explicit
+  // parameters (each defaulting to the matching `state.*` value, so every
+  // existing call site — which never passes them — behaves exactly as
+  // before) rather than always reading off `state`. Lets
+  // computeAlertReading() below validate a reading for a saved alert whose
+  // rate type/currency differ from whatever is currently loaded in the form.
+  function validateReading(reading, rateType = state.rateType, currencyCode = state.currency) {
     if (reading.status === "SOURCE_UNAVAILABLE") return { passed: false, reason: reading.errorMessage || "Source unavailable" };
     if (reading.status === "EXTRACTION_ERROR") return { passed: false, reason: reading.errorMessage || "Extraction error" };
     if (reading.status === "RATE_VALIDATION_ERROR" && reading.origin === "REAL") return { passed: false, reason: reading.errorMessage || "Rate failed validation" };
     if (reading.status === "STALE") return { passed: false, reason: reading.errorMessage || "Last successful check is too old to treat as current" };
-    const value = state.rateType === "SELL" ? reading.sellRate : reading.buyRate;
+    const value = rateType === "SELL" ? reading.sellRate : reading.buyRate;
     if (typeof value !== "number" || Number.isNaN(value)) return { passed: false, reason: "Non-numeric value" };
     if (value <= 0) return { passed: false, reason: "Value not greater than zero" };
-    const cur = CURRENCIES.find((c) => c.code === state.currency);
+    const cur = CURRENCIES.find((c) => c.code === currencyCode);
     const lowGuard = cur.base * 0.5;
     const highGuard = cur.base * 2;
     if (value < lowGuard || value > highGuard) return { passed: false, reason: "Outside expected range — possible decimal/unit error" };
@@ -588,6 +610,7 @@
   }
 
   let lastSelectedValue = null;
+  let lastHeroReading = null; // see the comment where this is set, below
 
   function tick() {
     const now = new Date();
@@ -595,6 +618,7 @@
 
     const active = activeSourceList();
     if (active.length === 0) {
+      lastHeroReading = null;
       renderEmptyState();
       return;
     }
@@ -610,6 +634,26 @@
     // pickBestReading()'s comment above for why this replaced a
     // hardcoded "primary source" pick (Phase 8 fix, 22-Aug-2026).
     const best = pickBestReading(readings, state.rateType);
+
+    // Phase 16 (23-Aug-2026): stash this tick's own best reading so
+    // updateAlertLiveRates() (auth.js's per-saved-alert-card live rate,
+    // see window.CKM.computeAlertReading()'s comment) can reuse it for
+    // whichever saved alert happens to be the one currently loaded into
+    // this form/hero, instead of computing a second, independent reading
+    // for it. That matters for SIMULATED sources specifically: each call
+    // to getReading() advances that source+currency's random walk one
+    // step (see stepWalk()) — computing a second reading for the same
+    // currency/source/branch combo on the same 4-second cadence would
+    // silently double-advance the walk shared with the hero, making it
+    // visibly jumpier than every other currency's alert card. Reusing this
+    // tick's own result keeps the hero and that one matching card always
+    // in perfect agreement, with only one walk step per tick either way.
+    lastHeroReading = {
+      currency: state.currency, rateType: state.rateType, branch: state.branch,
+      sourceIds: active.map((s) => s.id).slice().sort(),
+      best, valid: !!best.valid,
+      formatted: best.valid ? formatRate(state.rateType === "SELL" ? best.sellRate : best.buyRate) : null,
+    };
 
     renderCompareTable(readings, best);
     renderHero(best, readings);
@@ -733,10 +777,59 @@
     }).join("");
   }
 
-  function formatRate(v) {
-    const d = decimalsFor(state.currency);
+  function formatRate(v, currencyCode = state.currency) {
+    const d = decimalsFor(currencyCode);
     return Number(v).toFixed(d);
   }
+
+  /**
+   * Phase 16 (23-Aug-2026): computes a live/simulated reading for an
+   * ARBITRARY saved alert — not just whichever one is currently loaded into
+   * the form on the left. Added after user feedback: with two saved alerts
+   * for two different currencies (e.g. VND and CNY), "Best Available Rate
+   * For Your Alert" could only ever show ONE of them live at a time (the
+   * one auto-synced into the form, or whichever was last clicked "Edit")
+   * even though "My Saved Alerts" correctly showed both alerts' real
+   * ACTIVE/TRIGGERED status (that status comes straight from the database,
+   * kept current by the independent backend scheduler — see
+   * backend/scheduler/run.js — regardless of what's loaded in this tab).
+   * This reuses the exact same getReading() / validateReading() /
+   * pickBestReading() pipeline tick() already uses for the hero, just
+   * parameterized by THIS alert's own currency/rateType/sources/branch
+   * instead of reading them off the shared `state` object, so each saved
+   * alert's card can show its own current number without disturbing
+   * whichever alert is actually loaded into the form/hero/chart.
+   */
+  function computeAlertReading(alertRow) {
+    const currencyCode = alertRow.currency;
+    const rateType = alertRow.rate_type;
+    const sourceIds = Array.isArray(alertRow.sources) ? alertRow.sources : [];
+    if (!currencyCode || !rateType || sourceIds.length === 0) return null;
+
+    const readings = sourceIds.map((sourceId) => {
+      const src = SOURCES.find((s) => s.id === sourceId);
+      const branch = src && src.supportsBranch ? alertRow.branch || null : null;
+      const r = getReading(sourceId, branch, currencyCode);
+      const v = validateReading(r, rateType, currencyCode);
+      return { ...r, sourceName: src ? src.name : sourceId, valid: v.passed, invalidReason: v.reason };
+    });
+
+    const best = pickBestReading(readings, rateType);
+    if (!best) return null;
+    const value = best.valid ? (rateType === "SELL" ? best.sellRate : best.buyRate) : null;
+
+    return {
+      best,
+      value,
+      valid: !!best.valid,
+      formatted: value != null ? formatRate(value, currencyCode) : null,
+      origin: best.origin, // "REAL" | "SIMULATED"
+      invalidReason: best.invalidReason || null,
+    };
+  }
+  window.CKM.computeAlertReading = computeAlertReading;
+  // See the comment where `lastHeroReading` is set inside tick() above.
+  window.CKM.getLastHeroReading = () => lastHeroReading;
 
   // ---------------------------------------------------------------------
   // History chart (hand-drawn canvas, no charting library needed)

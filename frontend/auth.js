@@ -86,6 +86,14 @@
   // extra round trip.
   let editingAlertId = null;
   let myAlertsCache = [];
+  // Phase 16 (23-Aug-2026) — the alert (row id) currently loaded into the
+  // form/hero/chart, whether that happened via startEditingAlert() (the
+  // user clicked "Edit") or the loadMyAlerts() auto-sync (see that
+  // function's own comment). Lets updateAlertLiveRates() below recognize
+  // "this saved-alert card IS the one driving the hero right now" and
+  // reuse the hero's own already-computed reading for it instead of
+  // independently re-computing one — see that function's comment for why.
+  let loadedAlertId = null;
 
   function isConfigured() {
     const url = window.CKM_SUPABASE_URL;
@@ -376,6 +384,7 @@
     clearAuthForms();
     showActiveTab();
     myAlertsCache = [];
+    loadedAlertId = null;
     stopEditingAlert(); // clears editingAlertId and resets the Save button/banner for the next sign-in
     // Bug fix (23-Aug-2026): without this, state.userEditedForm stays true
     // for the rest of the browser tab's life once any field has ever been
@@ -431,6 +440,7 @@
             <div class="alert-item-title">${a.currency} ${a.rate_type} <span class="tabular">${Number(a.target_rate).toFixed(4).replace(/0+$/,"").replace(/\.$/,"")}</span></div>
             <div class="alert-item-sub">${cond} · ${sources}</div>
             <div class="alert-item-sub">${notif}</div>
+            <div class="alert-item-live" data-live-for="${a.id}">Checking live rate…</div>
           </div>
           <div class="alert-item-side">
             <span class="${statusPillClass(a.status)}" style="font-size:.7rem;">${a.status}</span>
@@ -444,6 +454,13 @@
           </div>
         </li>`;
     }).join("");
+    // NOTE: updateAlertLiveRates() is deliberately NOT called here. It's
+    // called at the end of loadMyAlerts() instead, AFTER the auto-sync
+    // block below has had a chance to set `loadedAlertId` and load this
+    // alert's config into `state` — calling it this early would run before
+    // that happens on a fresh sign-in, so the alert that's ABOUT to become
+    // the hero's alert would briefly be treated as "not the loaded one" and
+    // get an extra, independent (walk-diverging) reading computed for it.
 
     list.querySelectorAll(".alert-action").forEach((btn) => {
       btn.addEventListener("click", async () => {
@@ -480,6 +497,69 @@
           btn.disabled = false;
         }
       });
+    });
+  }
+
+  /**
+   * Phase 16 (23-Aug-2026): fills in each saved-alert card's own live/
+   * simulated rate — see window.CKM.computeAlertReading()'s comment in
+   * app.js for why this exists (previously only whichever ONE alert was
+   * loaded into the hero ever showed a live number, even with several
+   * saved alerts for different currencies). Updates just the one
+   * `[data-live-for]` node per alert rather than re-rendering the whole
+   * list, so this can run on a timer without disturbing button state or
+   * in-flight click handlers, and is called once right after every
+   * renderAlertsList() plus on its own short interval (see init() below)
+   * so the numbers keep moving between full list refreshes too.
+   */
+  function updateAlertLiveRates() {
+    if (typeof window.CKM === "undefined" || typeof window.CKM.computeAlertReading !== "function") return;
+    const list = $("myAlertsList");
+    if (!list) return;
+    const heroReading = typeof window.CKM.getLastHeroReading === "function" ? window.CKM.getLastHeroReading() : null;
+
+    myAlertsCache.forEach((a) => {
+      const el = list.querySelector(`[data-live-for="${a.id}"]`);
+      if (!el) return;
+
+      if (a.status === "DISABLED") {
+        el.textContent = "Disabled — not currently being checked.";
+        el.className = "alert-item-live";
+        return;
+      }
+
+      // If this card is the one currently loaded into the hero/chart,
+      // reuse tick()'s own already-computed reading instead of calling
+      // computeAlertReading() a second time for it — see the comment where
+      // lastHeroReading is set in app.js's tick() for why (avoids
+      // double-advancing a shared simulated-source random walk).
+      const alertSourceIds = (Array.isArray(a.sources) ? a.sources : []).slice().sort();
+      const isLoadedAlert =
+        String(a.id) === String(loadedAlertId) &&
+        heroReading &&
+        heroReading.currency === a.currency &&
+        heroReading.rateType === a.rate_type &&
+        heroReading.branch === (a.branch || null) &&
+        JSON.stringify(heroReading.sourceIds) === JSON.stringify(alertSourceIds);
+
+      const result = isLoadedAlert
+        ? { valid: heroReading.valid, formatted: heroReading.formatted, origin: heroReading.best.origin,
+            invalidReason: heroReading.best.invalidReason, best: heroReading.best }
+        : window.CKM.computeAlertReading(a);
+
+      if (!result) {
+        el.textContent = "No money changer selected.";
+        el.className = "alert-item-live";
+        return;
+      }
+      if (!result.valid) {
+        el.textContent = `⚠ ${result.invalidReason || "Could not get a valid rate right now"}`;
+        el.className = "alert-item-live alert-item-live-error";
+        return;
+      }
+      const isReal = result.origin === "REAL";
+      el.textContent = `${isReal ? "🟢 LIVE" : "🧪 SIMULATED"} ${a.rate_type} ${result.formatted} · ${result.best.sourceName}`;
+      el.className = "alert-item-live" + (isReal ? " alert-item-live-real" : " alert-item-live-sim");
     });
   }
 
@@ -523,6 +603,7 @@
       return;
     }
     editingAlertId = id;
+    loadedAlertId = id;
     window.CKM.loadAlertIntoForm(alert);
     updateEditingBanner();
     setSaveStatus("");
@@ -590,9 +671,17 @@
       !window.CKM.getState().userEditedForm;
     if (canAutoSync && myAlertsCache.length > 0 && typeof window.CKM.loadAlertIntoForm === "function") {
       window.CKM.loadAlertIntoForm(myAlertsCache[0]);
+      loadedAlertId = myAlertsCache[0].id;
     } else if (canAutoSync && myAlertsCache.length === 0 && typeof window.CKM.resetFormToDefaults === "function") {
       window.CKM.resetFormToDefaults();
+      loadedAlertId = null;
     }
+
+    // Now that loadedAlertId (and, via loadAlertIntoForm's own trailing
+    // tick() call, the hero's own reading) are both settled for this
+    // refresh, it's safe to fill in every card's live-rate line — see this
+    // function's own comment above for why this can't happen any earlier.
+    updateAlertLiveRates();
   }
 
   async function saveCurrentAlert() {
@@ -654,6 +743,7 @@
         return;
       }
       linkedAlertId = data.id;
+      loadedAlertId = data.id;
       setSaveStatus("Updated. Your changes are saved.");
       stopEditingAlert();
       await loadMyAlerts();
@@ -667,6 +757,7 @@
       return;
     }
     linkedAlertId = data.id;
+    loadedAlertId = data.id;
     setSaveStatus("Saved. This alert is now yours, isolated from any other account.");
     await loadMyAlerts();
   }
@@ -814,6 +905,13 @@
       updateAuthUI(data ? data.session : null);
       if (hadError) clearAuthHash();
     });
+
+    // Phase 16 (23-Aug-2026): keep every saved alert's own live-rate line
+    // moving between full loadMyAlerts() refreshes, same 4-second cadence
+    // as app.js's own tick() so nothing on the page feels out of sync. A
+    // no-op whenever there are no saved alerts or nothing is signed in —
+    // see updateAlertLiveRates()'s own early returns.
+    setInterval(updateAlertLiveRates, 4000);
   }
 
   document.addEventListener("DOMContentLoaded", init);

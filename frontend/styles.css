@@ -629,6 +629,14 @@ canvas#historyChart { width: 100%; height: 180px; display: block; }
 }
 .alert-item-title { font-family: var(--font-mono); font-weight: 600; font-size: 0.92rem; overflow-wrap: break-word; }
 .alert-item-sub { font-size: 0.76rem; color: var(--ink-faint); margin-top: 2px; }
+/* Phase 16 (23-Aug-2026) — each saved alert's own live/simulated rate line,
+   so a user with several alerts isn't limited to seeing only one of them
+   live at a time (see window.CKM.computeAlertReading()'s comment in app.js
+   and updateAlertLiveRates() in auth.js). */
+.alert-item-live { font-family: var(--font-mono); font-size: 0.78rem; margin-top: 6px; color: var(--ink-soft); }
+.alert-item-live-real { color: var(--status-live-fg); }
+.alert-item-live-sim { color: var(--status-mock-fg); }
+.alert-item-live-error { color: var(--down); }
 .alert-item-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
 .alert-item-actions { display: flex; gap: 6px; }
 .alert-action {
