@@ -220,39 +220,72 @@
       </div>
     </article>
 
-    <!-- Hero rate card -->
+    <!-- Hero rate card. Two mutually-exclusive display modes, toggled by
+         auth.js's renderHeroRows() (see that function's comment):
+           - heroSingle: the original single-alert big-number view — shown
+             signed out, or signed in with zero saved alerts (nothing to
+             list, so this still previews whatever's in the form below).
+           - heroRows: one row per SAVED alert — shown as soon as the user
+             has at least one, so every currency they're watching (VND,
+             CNY, and anything added later) is visible at a glance without
+             picking one to load into the form. -->
     <article class="card" id="heroCard">
       <div class="card-head">
         <div>
-          <div class="card-eyebrow">Best available rate for your alert</div>
+          <div class="card-eyebrow" id="heroEyebrow">Best available rate for your alert</div>
           <div class="hero-pair" id="heroPair">CNY / MYR</div>
+          <div class="hero-pair" id="heroRowsHeading" style="display:none;">Your saved alerts</div>
         </div>
         <span class="status-pill mock" id="statusPill">🧪 SIMULATED</span>
       </div>
 
-      <div class="hero-grid">
-        <div>
-          <div class="hero-rate-label" id="heroRateLabel">SIMULATED SELL RATE</div>
-          <div class="hero-rate-value tabular" id="heroRateValue">--.--</div>
-        </div>
-        <div class="hero-sub">
+      <div id="heroSingle">
+        <div class="hero-grid">
           <div>
-            <div class="hero-metric-label">Target</div>
-            <div class="hero-metric-value tabular" id="heroTarget">—</div>
+            <div class="hero-rate-label" id="heroRateLabel">SIMULATED SELL RATE</div>
+            <div class="hero-rate-value tabular" id="heroRateValue">--.--</div>
+          </div>
+          <div class="hero-sub">
+            <div>
+              <div class="hero-metric-label">Target</div>
+              <div class="hero-metric-value tabular" id="heroTarget">—</div>
+            </div>
+          </div>
+          <div class="hero-sub">
+            <div>
+              <div class="hero-metric-label">Difference</div>
+              <div class="hero-metric-value tabular" id="heroDiff">—</div>
+            </div>
           </div>
         </div>
-        <div class="hero-sub">
-          <div>
-            <div class="hero-metric-label">Difference</div>
-            <div class="hero-metric-value tabular" id="heroDiff">—</div>
-          </div>
+
+        <div class="hero-footer">
+          <span id="heroSourceLabel">Best of your selected sources</span>
+          <span class="last-checked" id="lastChecked">Last checked: —</span>
+          <a href="#formPanel" class="mobile-edit-link">✏️ Edit alert</a>
         </div>
       </div>
 
-      <div class="hero-footer">
-        <span id="heroSourceLabel">Best of your selected sources</span>
-        <span class="last-checked" id="lastChecked">Last checked: —</span>
-        <a href="#formPanel" class="mobile-edit-link">✏️ Edit alert</a>
+      <div id="heroRows" style="display:none;">
+        <div class="table-scroll">
+          <table class="compare" id="heroRowsTable">
+            <thead>
+              <tr>
+                <th>Alert</th>
+                <th>Live rate</th>
+                <th>Target</th>
+                <th>Diff</th>
+                <th>Status</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="heroRowsBody"></tbody>
+          </table>
+        </div>
+        <div class="hero-footer">
+          <span>Every saved alert's own current rate, refreshed automatically.</span>
+          <a href="#formPanel" class="mobile-edit-link">✏️ Edit / add an alert</a>
+        </div>
       </div>
     </article>
 

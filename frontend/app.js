@@ -652,6 +652,7 @@
       currency: state.currency, rateType: state.rateType, branch: state.branch,
       sourceIds: active.map((s) => s.id).slice().sort(),
       best, valid: !!best.valid,
+      value: best.valid ? (state.rateType === "SELL" ? best.sellRate : best.buyRate) : null,
       formatted: best.valid ? formatRate(state.rateType === "SELL" ? best.sellRate : best.buyRate) : null,
     };
 
@@ -830,6 +831,11 @@
   window.CKM.computeAlertReading = computeAlertReading;
   // See the comment where `lastHeroReading` is set inside tick() above.
   window.CKM.getLastHeroReading = () => lastHeroReading;
+  // Phase 17 (23-Aug-2026): lets auth.js format a number to the correct
+  // number of decimals for an arbitrary currency (matching formatRate()'s
+  // own rule) without duplicating decimalsFor()'s lookup table itself —
+  // used by the new per-alert "Best available rate" rows.
+  window.CKM.formatRateFor = (v, currencyCode) => formatRate(v, currencyCode);
 
   // ---------------------------------------------------------------------
   // History chart (hand-drawn canvas, no charting library needed)

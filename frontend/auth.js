@@ -222,6 +222,24 @@
       if (saveAlertSection) saveAlertSection.style.display = "none";
       linkedAlertId = null;
       stopEditingAlert(); // signed out mid-edit shouldn't leave a stale "Editing..." banner for the next sign-in
+
+      // Bug fix (23-Aug-2026, Phase 17): this is the ONE place that runs
+      // whenever the session becomes null, for ANY reason — the user
+      // clicking "Sign out" (signOut() below ALSO does this immediately,
+      // for instant UI feedback without waiting on the round trip), a token
+      // expiring, or another tab signing the same account out. Before this
+      // fix, myAlertsCache/loadedAlertId only got cleared inside signOut()
+      // itself — so any OTHER path to a null session left the "Best
+      // available rate" rows and "My Saved Alerts" list showing the
+      // PREVIOUS account's stale data even though the page now correctly
+      // says "Not signed in" everywhere else. Clearing it here instead
+      // closes that gap for every cause, not just the one button.
+      if (myAlertsCache.length > 0 || loadedAlertId !== null) {
+        myAlertsCache = [];
+        loadedAlertId = null;
+        renderAlertsList([]);
+        renderHeroRows();
+      }
     }
   }
 
@@ -385,6 +403,7 @@
     showActiveTab();
     myAlertsCache = [];
     loadedAlertId = null;
+    renderHeroRows(); // switches "Best available rate" back to the single-alert view now that myAlertsCache is empty
     stopEditingAlert(); // clears editingAlertId and resets the Save button/banner for the next sign-in
     // Bug fix (23-Aug-2026): without this, state.userEditedForm stays true
     // for the rest of the browser tab's life once any field has ever been
@@ -501,6 +520,44 @@
   }
 
   /**
+   * Phase 16/17 (23-Aug-2026) — shared by both updateAlertLiveRates() (the
+   * one-line live rate on each "My Saved Alerts" card) and renderHeroRows()
+   * (the multi-alert "Best available rate" table): computes what to show
+   * for ONE saved alert right now. Returns `{ disabled: true }` for a
+   * disabled alert, `null` when the alert has no money changer selected,
+   * or `{ valid, formatted, value, origin, invalidReason, best }` — same
+   * shape computeAlertReading() itself returns.
+   *
+   * If this alert is the one currently loaded into the hero/chart (see
+   * loadedAlertId), reuses tick()'s own already-computed reading instead of
+   * calling computeAlertReading() a second time for it — see the comment
+   * where lastHeroReading is set in app.js's tick() for why (avoids
+   * double-advancing a shared simulated-source random walk, which would
+   * otherwise make the exact same alert show two different numbers in two
+   * different places on the page at once).
+   */
+  function getAlertDisplayReading(a) {
+    if (a.status === "DISABLED") return { disabled: true };
+    if (typeof window.CKM === "undefined" || typeof window.CKM.computeAlertReading !== "function") return null;
+
+    const heroReading = typeof window.CKM.getLastHeroReading === "function" ? window.CKM.getLastHeroReading() : null;
+    const alertSourceIds = (Array.isArray(a.sources) ? a.sources : []).slice().sort();
+    const isLoadedAlert =
+      String(a.id) === String(loadedAlertId) &&
+      heroReading &&
+      heroReading.currency === a.currency &&
+      heroReading.rateType === a.rate_type &&
+      heroReading.branch === (a.branch || null) &&
+      JSON.stringify(heroReading.sourceIds) === JSON.stringify(alertSourceIds);
+
+    if (isLoadedAlert) {
+      return { valid: heroReading.valid, formatted: heroReading.formatted, value: heroReading.value,
+        origin: heroReading.best.origin, invalidReason: heroReading.best.invalidReason, best: heroReading.best };
+    }
+    return window.CKM.computeAlertReading(a);
+  }
+
+  /**
    * Phase 16 (23-Aug-2026): fills in each saved-alert card's own live/
    * simulated rate — see window.CKM.computeAlertReading()'s comment in
    * app.js for why this exists (previously only whichever ONE alert was
@@ -513,40 +570,19 @@
    * so the numbers keep moving between full list refreshes too.
    */
   function updateAlertLiveRates() {
-    if (typeof window.CKM === "undefined" || typeof window.CKM.computeAlertReading !== "function") return;
     const list = $("myAlertsList");
     if (!list) return;
-    const heroReading = typeof window.CKM.getLastHeroReading === "function" ? window.CKM.getLastHeroReading() : null;
 
     myAlertsCache.forEach((a) => {
       const el = list.querySelector(`[data-live-for="${a.id}"]`);
       if (!el) return;
 
-      if (a.status === "DISABLED") {
+      const result = getAlertDisplayReading(a);
+      if (result && result.disabled) {
         el.textContent = "Disabled — not currently being checked.";
         el.className = "alert-item-live";
         return;
       }
-
-      // If this card is the one currently loaded into the hero/chart,
-      // reuse tick()'s own already-computed reading instead of calling
-      // computeAlertReading() a second time for it — see the comment where
-      // lastHeroReading is set in app.js's tick() for why (avoids
-      // double-advancing a shared simulated-source random walk).
-      const alertSourceIds = (Array.isArray(a.sources) ? a.sources : []).slice().sort();
-      const isLoadedAlert =
-        String(a.id) === String(loadedAlertId) &&
-        heroReading &&
-        heroReading.currency === a.currency &&
-        heroReading.rateType === a.rate_type &&
-        heroReading.branch === (a.branch || null) &&
-        JSON.stringify(heroReading.sourceIds) === JSON.stringify(alertSourceIds);
-
-      const result = isLoadedAlert
-        ? { valid: heroReading.valid, formatted: heroReading.formatted, origin: heroReading.best.origin,
-            invalidReason: heroReading.best.invalidReason, best: heroReading.best }
-        : window.CKM.computeAlertReading(a);
-
       if (!result) {
         el.textContent = "No money changer selected.";
         el.className = "alert-item-live";
@@ -561,6 +597,88 @@
       el.textContent = `${isReal ? "🟢 LIVE" : "🧪 SIMULATED"} ${a.rate_type} ${result.formatted} · ${result.best.sourceName}`;
       el.className = "alert-item-live" + (isReal ? " alert-item-live-real" : " alert-item-live-sim");
     });
+  }
+
+  /**
+   * Phase 17 (23-Aug-2026) — user request: "I want all the currencies in
+   * My Saved Alerts ... also showing row by row in the Best Available Rate
+   * For Your Alert section." The hero card used to be able to show only
+   * ONE alert's live number at a time (whichever was "loaded" — see
+   * loadedAlertId). This replaces that single view with one row per SAVED
+   * alert whenever the user has any, so every currency they're watching
+   * (now and anything added later — this iterates myAlertsCache, nothing
+   * here is hardcoded to a specific currency or count) is visible at once
+   * without picking one. Falls back to the original single-alert view
+   * (see index.html's #heroSingle) when signed out or with zero saved
+   * alerts, since there's nothing yet to list and that view still serves
+   * its original purpose: a live preview of whatever's in the form below
+   * while composing a first alert.
+   */
+  function renderHeroRows() {
+    const single = $("heroSingle");
+    const rows = $("heroRows");
+    const rowsHeading = $("heroRowsHeading");
+    const pairEl = $("heroPair");
+    const pillEl = $("statusPill");
+    const body = $("heroRowsBody");
+    if (!single || !rows || !body) return;
+
+    const hasAlerts = myAlertsCache.length > 0;
+    single.style.display = hasAlerts ? "none" : "";
+    rows.style.display = hasAlerts ? "" : "none";
+    if (pairEl) pairEl.style.display = hasAlerts ? "none" : "";
+    if (pillEl) pillEl.style.display = hasAlerts ? "none" : "";
+    if (rowsHeading) {
+      rowsHeading.style.display = hasAlerts ? "" : "none";
+      rowsHeading.textContent = `${myAlertsCache.length} saved alert${myAlertsCache.length === 1 ? "" : "s"}`;
+    }
+    if (!hasAlerts) return;
+
+    const fmt = (typeof window.CKM !== "undefined" && typeof window.CKM.formatRateFor === "function")
+      ? window.CKM.formatRateFor
+      : (v) => Number(v).toFixed(2);
+
+    body.innerHTML = myAlertsCache.map((a) => {
+      const { sources } = describeAlert(a);
+      const target = Number(a.target_rate);
+      const targetText = Number.isFinite(target) ? fmt(target, a.currency) : "—";
+      const statusText = `<span class="${statusPillClass(a.status)}" style="font-size:.72rem;">${a.status}</span>`;
+
+      const result = getAlertDisplayReading(a);
+      let rateCell = "—", diffCell = "—", sourceCell = "—";
+
+      if (result && result.disabled) {
+        rateCell = `<span style="color:var(--ink-faint);">Disabled</span>`;
+      } else if (!result) {
+        rateCell = `<span style="color:var(--ink-faint);">No source selected</span>`;
+      } else if (!result.valid) {
+        rateCell = `<span class="alert-item-live-error" title="${(result.invalidReason || "").replace(/"/g, "&quot;")}">⚠ Unavailable</span>`;
+      } else {
+        const isReal = result.origin === "REAL";
+        const originTag = isReal
+          ? '<span class="origin-tag origin-live">LIVE</span>'
+          : '<span class="origin-tag origin-sim">SIM</span>';
+        rateCell = `${fmt(result.value, a.currency)} ${originTag}`;
+        sourceCell = result.best.sourceName + (result.best.branch ? ` — ${result.best.branch}` : "");
+        if (Number.isFinite(target)) {
+          const diff = result.value - target;
+          const diffColor = diff <= 0 ? "var(--up)" : "var(--down)";
+          diffCell = `<span style="color:${diffColor};">${diff >= 0 ? "+" : ""}${fmt(diff, a.currency)}</span>`;
+        }
+      }
+
+      return `<tr>
+        <td>
+          <div style="font-weight:600;">${a.currency} ${a.rate_type} <span class="tabular">${targetText}</span></div>
+          <div style="font-size:.72rem;color:var(--ink-faint);">${sources}</div>
+        </td>
+        <td class="num">${rateCell}</td>
+        <td class="num">${targetText}</td>
+        <td class="num">${diffCell}</td>
+        <td>${statusText}</td>
+        <td style="font-size:.78rem;">${sourceCell}</td>
+      </tr>`;
+    }).join("");
   }
 
   // -------------------------------------------------------------------------
@@ -697,6 +815,7 @@
     // refresh, it's safe to fill in every card's live-rate line — see this
     // function's own comment above for why this can't happen any earlier.
     updateAlertLiveRates();
+    renderHeroRows();
   }
 
   async function saveCurrentAlert() {
@@ -921,12 +1040,14 @@
       if (hadError) clearAuthHash();
     });
 
-    // Phase 16 (23-Aug-2026): keep every saved alert's own live-rate line
-    // moving between full loadMyAlerts() refreshes, same 4-second cadence
-    // as app.js's own tick() so nothing on the page feels out of sync. A
-    // no-op whenever there are no saved alerts or nothing is signed in —
-    // see updateAlertLiveRates()'s own early returns.
-    setInterval(updateAlertLiveRates, 4000);
+    // Phase 16/17 (23-Aug-2026): keep every saved alert's own live-rate
+    // line — both on its "My Saved Alerts" card and its row in the
+    // "Best available rate" table — moving between full loadMyAlerts()
+    // refreshes, same 4-second cadence as app.js's own tick() so nothing on
+    // the page feels out of sync. A no-op whenever there are no saved
+    // alerts or nothing is signed in — see updateAlertLiveRates()'s and
+    // renderHeroRows()'s own early returns.
+    setInterval(() => { updateAlertLiveRates(); renderHeroRows(); }, 4000);
   }
 
   document.addEventListener("DOMContentLoaded", init);
