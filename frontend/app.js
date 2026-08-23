@@ -855,7 +855,26 @@
   function logActivity(msg) {
     state.log.unshift({ t: new Date(), msg });
     state.log = state.log.slice(0, 40);
-    $("activityLog").innerHTML = state.log.map((e) =>
+    renderActivityLog();
+  }
+
+  // Bug fix (23-Aug-2026): this card previously rendered nothing at all until
+  // the very first call to logActivity() — which only ever happens once the
+  // user clicks "Start monitoring" (or hits Reset) in THIS browser tab. A
+  // signed-in user who relies entirely on the Phase 14 server-side scheduled
+  // job (never clicking "Start monitoring" locally) would see a permanently,
+  // silently blank <ul>, indistinguishable from a broken card — which is
+  // exactly what was reported. Every other card on the dashboard explains its
+  // own empty state; this one now does too, and renders it immediately at
+  // startup rather than waiting for the first log entry.
+  function renderActivityLog() {
+    const el = $("activityLog");
+    if (!el) return;
+    if (state.log.length === 0) {
+      el.innerHTML = `<li class="log-empty">No activity yet — click "Start monitoring" below to begin locally, or sign in above: alerts checked by the scheduled backend job will still be reflected on this dashboard even without local monitoring running.</li>`;
+      return;
+    }
+    el.innerHTML = state.log.map((e) =>
       `<li><span class="log-time">${e.t.toLocaleTimeString()}</span><span class="log-msg">${escapeHtml(e.msg)}</span></li>`
     ).join("");
   }
@@ -1083,6 +1102,7 @@
     $("targetRate").value = cur.base.toFixed(cur.decimals);
     wireForm();
     wireChartRange();
+    renderActivityLog(); // show the empty-state placeholder immediately, before any activity happens
 
     // Phase 12 tidy-up: the "Test controls" card (force-trigger, simulate
     // source-down, etc.) is QA/demo tooling, not something a real user

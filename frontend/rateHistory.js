@@ -51,7 +51,7 @@
   let sb = null;
   let signedIn = false;
   let currentRange = "1h";
-  let cache = { key: null, points: [], loading: false, error: null };
+  let cache = { key: null, points: [], loading: false, loadingKey: null, error: null };
 
   // -------------------------------------------------------------------------
   // Config / setup (mirrors auth.js's own isConfigured() check exactly)
@@ -131,6 +131,37 @@
   // happened this session", per-source colored series, target line)
   // -------------------------------------------------------------------------
 
+  // Bug fix (23-Aug-2026) — reported: the empty-state message in this card
+  // was showing up visibly cut off mid-word (e.g. "...manual trigger or").
+  // Root cause: canvas fillText() never wraps — it just silently clips
+  // anything past the canvas edge, and this particular message had grown
+  // long enough to overflow the available width. Word-wraps `text` to fit
+  // within `maxWidth`, returning an array of lines for the caller to draw
+  // one by one; every multi-word status message in draw() below now goes
+  // through this instead of a single unwrapped fillText() call.
+  function wrapText(ctx, text, maxWidth) {
+    const words = text.split(" ");
+    const lines = [];
+    let current = "";
+    for (const word of words) {
+      const attempt = current ? `${current} ${word}` : word;
+      if (ctx.measureText(attempt).width > maxWidth && current) {
+        lines.push(current);
+        current = word;
+      } else {
+        current = attempt;
+      }
+    }
+    if (current) lines.push(current);
+    return lines;
+  }
+
+  function drawWrappedMessage(ctx, text, x, centerY, maxWidth, lineHeight) {
+    const lines = wrapText(ctx, text, maxWidth);
+    const startY = centerY - ((lines.length - 1) * lineHeight) / 2;
+    lines.forEach((line, i) => ctx.fillText(line, x, startY + i * lineHeight));
+  }
+
   function draw(canvas, sel, range, points, loading, error) {
     const ctx = canvas.getContext("2d");
     const dpr = window.devicePixelRatio || 1;
@@ -150,7 +181,7 @@
     ctx.fillStyle = inkFaint;
 
     if (error) {
-      ctx.fillText(`⚠ Could not load real history: ${error}`, pad.l, h / 2);
+      drawWrappedMessage(ctx, `⚠ Could not load real history: ${error}`, pad.l, h / 2, plotW, 18);
       return;
     }
     if (loading && points.length === 0) {
@@ -159,11 +190,23 @@
     }
     if (points.length < 2) {
       const n = points.length;
-      ctx.fillText(
+      drawWrappedMessage(
+        ctx,
         n === 0
-          ? `No recorded history yet for ${RANGE_LABELS[range]} — the scheduled backend check currently runs on manual trigger only, not a recurring schedule yet. Try a wider range, or check back after the next run.`
+          // Bug fix (23-Aug-2026): this used to say "...currently runs on
+          // manual trigger only, not a recurring schedule yet" — true when
+          // it was written, but flatly WRONG since Phase 14 (22-Aug-2026)
+          // turned the recurring schedule on. Left uncorrected, it told
+          // users the exact opposite of what was actually happening and
+          // read as if the fix documented in README/monitor.yml had never
+          // shipped. It's still entirely possible for this card to show no
+          // data for a while even with the schedule running: history only
+          // accumulates for a currency/source/branch combo that matches an
+          // ACTIVE saved alert (see backend/scheduler/comboSelection.js),
+          // and the schedule may simply not have run enough times yet.
+          ? `No recorded history yet for ${RANGE_LABELS[range]}. The scheduled backend check now runs automatically every 5 minutes for whichever combinations match an active saved alert — it may just need a little more time to build up history for this one. Try 1 hour, or check back shortly.`
           : `Only ${n} recorded point in ${RANGE_LABELS[range]} — not enough to draw a line yet.`,
-        pad.l, h / 2
+        pad.l, h / 2, plotW, 18
       );
       return;
     }
@@ -254,23 +297,54 @@
     }
 
     const key = cacheKey(sel, currentRange);
-    if (cache.key !== key && !cache.loading) {
-      cache = { key, points: cache.key === key ? cache.points : [], loading: true, error: null };
+    // Bug fix (23-Aug-2026): `cache.loading` used to be a single flag shared
+    // across every possible key, not scoped to which key was actually being
+    // fetched. If the user changed range/selection a SECOND time while a
+    // fetch for the first key was still in flight, this guard (`!cache.
+    // loading`) blocked starting the new fetch entirely — the chart was left
+    // stuck showing "Loading real history…" until something unrelated
+    // happened to call render() again (a window resize, another click, or a
+    // local monitoring tick). A signed-in user who never clicks "Start
+    // monitoring" in this tab could see a permanently stuck loading state,
+    // which is exactly the kind of "card shows nothing useful" symptom this
+    // round of fixes is addressing. Tracking `loadingKey` lets a fetch for a
+    // NEW key start immediately even while a stale one for a different key
+    // is still resolving — that stale one is simply discarded by the
+    // superseded-result guard below once it does resolve.
+    if (cache.key !== key && cache.loadingKey !== key) {
+      cache = { key: cache.key, points: cache.points, loading: true, loadingKey: key, error: null };
+      // Bug fix (23-Aug-2026): snapshot `sel`/`currentRange` at the moment this
+      // fetch starts. The previous code read the live, module-level `sel`/
+      // `currentRange` variables inside the .then()/.catch() callbacks instead —
+      // if the user changed the range or money-changer selection while this
+      // request was still in flight, a slow/superseded response could resolve
+      // AFTER a newer one and redraw the chart with data that no longer matches
+      // what's currently selected (wrong range label, wrong points). Capturing
+      // immutable snapshots here, and re-checking below that this response is
+      // still the one the user actually wants before touching the canvas,
+      // closes that race.
+      const selAtFetch = sel;
+      const rangeAtFetch = currentRange;
       fetchHistory(sel, currentRange)
         .then((points) => {
-          cache = { key, points, loading: false, error: null };
+          cache = { key, points, loading: false, loadingKey: null, error: null };
+          // Superseded-result guard: if the user has since changed selection
+          // or range, the current cache key no longer matches this fetch's
+          // key — skip drawing so we never paint stale data over fresh state.
+          if (cacheKey(currentSelection(), currentRange) !== key) return;
           const c = $("historyChart");
-          if (c) draw(c, sel, currentRange, points, false, null);
+          if (c) draw(c, selAtFetch, rangeAtFetch, points, false, null);
         })
         .catch((err) => {
-          cache = { key, points: [], loading: false, error: err.message };
+          cache = { key, points: [], loading: false, loadingKey: null, error: err.message };
+          if (cacheKey(currentSelection(), currentRange) !== key) return;
           const c = $("historyChart");
-          if (c) draw(c, sel, currentRange, [], false, err.message);
+          if (c) draw(c, selAtFetch, rangeAtFetch, [], false, err.message);
         });
     }
 
     setModeHint(`🟢 Showing real recorded history for your signed-in account — ${RANGE_LABELS[currentRange]}.`);
-    draw(canvas, sel, currentRange, cache.key === key ? cache.points : [], cache.loading, cache.error);
+    draw(canvas, sel, currentRange, cache.key === key ? cache.points : [], cache.loadingKey === key, cache.error);
     return true;
   }
 
@@ -297,8 +371,20 @@
   }
 
   function wireRangeButtons() {
+    // Bug fix (23-Aug-2026): this listener used to only update `currentRange`
+    // and rely on app.js's separate listener on the same buttons (registered
+    // earlier, so it fires first) to actually trigger a redraw. That meant
+    // the visible chart/label always lagged one click behind — e.g. clicking
+    // "6 hours" would highlight the button correctly but the footer text and
+    // drawn chart would still reflect whatever range was active *before* the
+    // click, because this file's own re-render didn't run until the NEXT
+    // click. Calling rerenderNow() here makes this module responsible for
+    // its own redraw immediately after the range actually changes.
     document.querySelectorAll(".chart-range button").forEach((btn) => {
-      btn.addEventListener("click", () => { currentRange = btn.dataset.range; });
+      btn.addEventListener("click", () => {
+        currentRange = btn.dataset.range;
+        rerenderNow();
+      });
     });
   }
 
@@ -316,7 +402,7 @@
 
     sb.auth.onAuthStateChange((_event, session) => {
       signedIn = !!(session && session.user);
-      cache = { key: null, points: [], loading: false, error: null };
+      cache = { key: null, points: [], loading: false, loadingKey: null, error: null };
       rerenderNow();
     });
     sb.auth.getSession().then(({ data }) => {

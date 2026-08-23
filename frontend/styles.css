@@ -555,6 +555,7 @@ canvas#historyChart { width: 100%; height: 180px; display: block; }
 .log-list li:last-child { border-bottom: none; }
 .log-time { font-family: var(--font-mono); color: var(--ink-faint); flex-shrink: 0; }
 .log-msg { color: var(--ink-soft); }
+.log-list li.log-empty { display: block; color: var(--ink-faint); border-bottom: none; padding: 6px 0; }
 
 /* ---------- Test controls (Phase 1 demo only) ---------- */
 .test-controls {
