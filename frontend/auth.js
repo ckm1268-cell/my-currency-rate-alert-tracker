@@ -79,7 +79,6 @@
 
   let sb = null; // Supabase client, once configured
   let currentSession = null;
-  let linkedAlertId = null; // most recently saved alert id, for the trigger bridge
   let activeTab = "login"; // "login" | "signup" — which form is showing when signed out
   let awaitingPasswordReset = false; // true between a PASSWORD_RECOVERY event and a successful updateUser({password})
   // Phase 13 — the alert (row id) currently loaded into the form for
@@ -223,7 +222,6 @@
       showActiveTab();
       if (signedInPanel) signedInPanel.style.display = "none";
       if (saveAlertSection) saveAlertSection.style.display = "none";
-      linkedAlertId = null;
       stopEditingAlert(); // signed out mid-edit shouldn't leave a stale "Editing..." banner for the next sign-in
 
       // Bug fix (23-Aug-2026, Phase 17): this is the ONE place that runs
@@ -974,7 +972,6 @@
         setSaveStatus(`Could not update: ${error.message}`);
         return;
       }
-      linkedAlertId = data.id;
       loadedAlertId = data.id;
       setSaveStatus("Updated. Your changes are saved.");
       stopEditingAlert();
@@ -988,7 +985,6 @@
       setSaveStatus(`Could not save: ${error.message}`);
       return;
     }
-    linkedAlertId = data.id;
     loadedAlertId = data.id;
     setSaveStatus("Saved. This alert is now yours, isolated from any other account.");
     await loadMyAlerts();
@@ -999,12 +995,62 @@
   // via window.CKM — "Phase 7 integration bridge" comment in that file).
   // -------------------------------------------------------------------------
 
+  /**
+   * Phase 19 bug fix (23-Aug-2026) — reported: after the Phase 18
+   * saved-currency chips shipped, switching which saved alert was loaded
+   * into the form (via a chip, or via the pre-existing "Edit" button)
+   * without immediately re-saving could cause a trigger event for the
+   * alert actually being monitored to instead mark a DIFFERENT saved
+   * alert TRIGGERED in the database — specifically, whichever alert had
+   * most recently been explicitly saved via the Save/Update button. Real
+   * example from the report: a genuine CNY trigger got written onto a
+   * THB alert that was nowhere near its own target, because THB happened
+   * to be the last one saved.
+   *
+   * Root cause: handleAlertTriggered()/handleAlertReset() below used to
+   * write to `linkedAlertId`, a variable only ever updated at SAVE time.
+   * `loadedAlertId` (used elsewhere in this file, e.g.
+   * getAlertDisplayReading()'s isLoadedAlert check) IS updated at every
+   * LOAD — Edit, a saved-currency chip, or the sign-in auto-sync — but
+   * was never wired into the actual database write the trigger bridge
+   * performs. This resolves which alert a trigger/reset event applies to
+   * at the moment it fires, from `loadedAlertId`, but only after
+   * confirming that cached row's currency/rate type/branch/sources still
+   * match the LIVE form state — the same match check
+   * getAlertDisplayReading() already applies for its own display purposes,
+   * so the two can't drift apart again. If the form has since diverged
+   * from that alert (e.g. a field was tweaked without saving), this
+   * returns null and the caller cleanly skips the write rather than
+   * guessing and mislabeling a different alert — this project's core
+   * "never silently mislabel data" rule applies here just as much as it
+   * does to a scraped rate.
+   */
+  function resolveLoadedAlertId() {
+    if (!loadedAlertId) return null;
+    if (typeof window.CKM === "undefined" || typeof window.CKM.getState !== "function") return null;
+    const alert = myAlertsCache.find((a) => String(a.id) === String(loadedAlertId));
+    if (!alert) return null;
+
+    const state = window.CKM.getState();
+    const alertSourceIds = (Array.isArray(alert.sources) ? alert.sources : []).slice().sort();
+    const stateSourceIds = Object.keys(state.sources || {}).filter((k) => state.sources[k]).sort();
+
+    const matches =
+      alert.currency === state.currency &&
+      alert.rate_type === state.rateType &&
+      (alert.branch || null) === (state.branch || null) &&
+      JSON.stringify(alertSourceIds) === JSON.stringify(stateSourceIds);
+
+    return matches ? alert.id : null;
+  }
+
   async function handleAlertTriggered(reading, value) {
-    if (!sb || !currentSession || !linkedAlertId) return; // nothing to bridge if not signed in / nothing saved
+    const targetAlertId = resolveLoadedAlertId();
+    if (!sb || !currentSession || !targetAlertId) return; // not signed in, or the form no longer matches a saved alert
     try {
-      await sb.from("alerts").update({ status: "TRIGGERED" }).eq("id", linkedAlertId);
+      await sb.from("alerts").update({ status: "TRIGGERED" }).eq("id", targetAlertId);
       await sb.from("notifications").insert({
-        alert_id: linkedAlertId,
+        alert_id: targetAlertId,
         notification_type: "browser",
         delivery_status: "DELIVERED",
         message: `${reading.origin === "REAL" ? "LIVE" : "SIMULATED"} — ${reading.sourceName} ${reading.currency} target reached at ${value}.`,
@@ -1018,8 +1064,9 @@
   }
 
   function handleAlertReset() {
-    if (!sb || !currentSession || !linkedAlertId) return;
-    sb.from("alerts").update({ status: "ACTIVE" }).eq("id", linkedAlertId).then(() => loadMyAlerts());
+    const targetAlertId = resolveLoadedAlertId();
+    if (!sb || !currentSession || !targetAlertId) return;
+    sb.from("alerts").update({ status: "ACTIVE" }).eq("id", targetAlertId).then(() => loadMyAlerts());
   }
 
   // -------------------------------------------------------------------------
