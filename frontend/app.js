@@ -208,6 +208,12 @@
   window.CKM.onAlertTriggered = null; // (reading, value) => void
   window.CKM.onMonitoringStarted = null; // () => void
   window.CKM.onAlertReset = null; // () => void
+  // Phase 18 — fires whenever state.currency changes for ANY reason (the
+  // currency <select>, loadAlertIntoForm, resetFormToDefaults), not just
+  // when a saved-currency chip was clicked. Lets auth.js's chip row keep
+  // its aria-pressed highlighting correct even when the user switches
+  // currency the "old" way, via the form dropdown, instead of via a chip.
+  window.CKM.onCurrencyChanged = null; // () => void
   // Phase 10 — frontend/rateHistory.js sets this to a function that draws a
   // REAL, Supabase-backed history chart (signed-in users only — see that
   // file's own header comment) and returns true when it did. renderChart()
@@ -225,6 +231,17 @@
   // exists by the time this line runs.
   window.CKM.renderDefaultChart = renderSimulatedChart;
 
+  // Phase 18 — lets auth.js's saved-currency chips show a full, unit-aware
+  // name (e.g. "Vietnamese Dong (per 1,000,000)") as a hover tooltip on a
+  // compact "VND" chip, without duplicating the CURRENCIES list in a
+  // second file. Falls back to the bare code for anything not in the list.
+  window.CKM.getCurrencyName = (code) => (CURRENCIES.find((c) => c.code === code) || {}).name || code;
+  // Phase 18 — same bridge pattern as the rest of this section: lets
+  // auth.js reuse this file's one toast implementation (see showToast()
+  // below) instead of building a second one, e.g. to warn before a saved-
+  // currency chip click overwrites unsaved edits in the form.
+  window.CKM.showToast = (msg) => showToast(msg);
+
   // Phase 13 — lets auth.js's new "Edit" button on a saved alert push that
   // alert's saved settings back into this form (currency, rate type, target,
   // sources, branch, condition, interval, notification methods, Telegram
@@ -241,6 +258,7 @@
     if ($("currency")) $("currency").value = row.currency;
     state.history = [];
     lastSelectedValue = null;
+    callHook("onCurrencyChanged");
 
     state.rateType = row.rate_type;
     document.querySelectorAll("#rateTypeSeg button").forEach((b) => {
@@ -1071,6 +1089,7 @@
       state.targetRate = cur.base;
       state.history = [];
       lastSelectedValue = null;
+      callHook("onCurrencyChanged");
     });
 
     document.querySelectorAll("#rateTypeSeg button").forEach((btn) => {

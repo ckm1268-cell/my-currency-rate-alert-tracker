@@ -526,6 +526,31 @@ table.compare tr.is-best td:first-child { border-left: 3px solid var(--accent); 
   letter-spacing: 0.04em;
 }
 
+/* ---------- Saved-currency chips (Phase 18) ----------
+   Quick-switch row sourced from the signed-in user's own saved alerts.
+   Deliberately lighter/smaller than .chart-range so it reads as a
+   secondary, data-driven shortcut rather than competing with the
+   heavier BUY/SELL segmented control or the 1h/6h/24h/7d range picker.
+   :empty collapses the row to nothing (no stray gap) when signed out or
+   with zero saved alerts — see renderSavedCurrencyChips() in auth.js. */
+.saved-currency-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.saved-currency-chips:empty { display: none; margin: 0; }
+.chip-currency {
+  border: 1px solid var(--line-strong);
+  background: var(--surface-raised);
+  color: var(--ink-soft);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-radius: 999px;
+  padding: 5px 14px;
+  cursor: pointer;
+}
+.chip-currency:hover { border-color: var(--accent); color: var(--accent-strong); }
+.chip-currency:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+.chip-currency[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
 /* ---------- History chart ---------- */
 .chart-wrap { margin-top: 12px; }
 .chart-range { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }

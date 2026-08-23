@@ -297,6 +297,12 @@
           <h3>Every selected money changer, side by side</h3>
         </div>
       </div>
+      <!-- Phase 18 — quick currency switch, sourced from the signed-in
+           user's own saved alerts (myAlertsCache in auth.js). Empty and
+           collapsed (no gap) when signed out or with zero saved alerts —
+           see .saved-currency-chips:empty in styles.css. Populated/kept in
+           sync by auth.js's renderSavedCurrencyChips(). -->
+      <div class="saved-currency-chips" id="compareCurrencyChips" role="group" aria-label="My saved currencies"></div>
       <div class="table-scroll">
         <table class="compare" id="compareTable">
           <thead>
@@ -323,6 +329,12 @@
         </div>
       </div>
       <div class="chart-wrap">
+        <!-- Phase 18 — same saved-currency chips as the Multi-source
+             comparison card above (see that card's comment); a separate
+             DOM copy so each card stays self-contained, but painted by the
+             same renderSavedCurrencyChips() call so the two never drift
+             out of sync with each other or with myAlertsCache. -->
+        <div class="saved-currency-chips" id="historyCurrencyChips" role="group" aria-label="My saved currencies"></div>
         <div class="chart-range" role="group" aria-label="History range">
           <button type="button" data-range="1h" aria-pressed="true">1 hour</button>
           <button type="button" data-range="6h" aria-pressed="false">6 hours</button>

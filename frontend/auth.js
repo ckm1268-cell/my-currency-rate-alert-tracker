@@ -73,6 +73,9 @@
   };
 
   const $ = (id) => document.getElementById(id);
+  // Mirrors app.js's own escapeHtml() exactly — not exposed via window.CKM,
+  // so duplicated here rather than reaching into that file's closure.
+  const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
   let sb = null; // Supabase client, once configured
   let currentSession = null;
@@ -239,6 +242,7 @@
         loadedAlertId = null;
         renderAlertsList([]);
         renderHeroRows();
+        renderSavedCurrencyChips();
       }
     }
   }
@@ -404,6 +408,7 @@
     myAlertsCache = [];
     loadedAlertId = null;
     renderHeroRows(); // switches "Best available rate" back to the single-alert view now that myAlertsCache is empty
+    renderSavedCurrencyChips(); // empties and collapses both chip rows for the same reason
     stopEditingAlert(); // clears editingAlertId and resets the Save button/banner for the next sign-in
     // Bug fix (23-Aug-2026): without this, state.userEditedForm stays true
     // for the rest of the browser tab's life once any field has ever been
@@ -749,6 +754,98 @@
     updateEditingBanner();
   }
 
+  // ---------------------------------------------------------------------
+  // Saved-currency chips (Phase 18) — a quick-switch row, sourced from the
+  // signed-in user's own saved alerts, that drives what the Multi-source
+  // comparison table and Rate history chart are currently showing. Both
+  // of those cards read directly off app.js's `state.currency` (Rate
+  // history via currentSelection() in rateHistory.js; the comparison
+  // table via tick()/renderCompareTable() in app.js), so switching that
+  // one value — via the same loadAlertIntoForm() bridge "Edit" already
+  // uses — updates both cards from a single click.
+  //
+  // Deliberately NOT the same thing as startEditingAlert() above: this is
+  // a VIEW switch, not an edit intent. It does not set editingAlertId, does
+  // not show the "✏️ Editing…" banner, does not relabel Save as "Update
+  // this alert", and does not scroll to the form — a user browsing their
+  // CNY vs. VND comparison shouldn't look like (or accidentally become)
+  // mid-edit of a saved alert.
+  // ---------------------------------------------------------------------
+
+  /** Unique currency codes across the signed-in user's saved alerts, in
+   *  the same newest-first order loadMyAlerts() already sorts by. */
+  function getSavedCurrencies() {
+    const seen = new Set();
+    const codes = [];
+    myAlertsCache.forEach((a) => {
+      if (a.currency && !seen.has(a.currency)) { seen.add(a.currency); codes.push(a.currency); }
+    });
+    return codes;
+  }
+
+  function selectSavedCurrency(code) {
+    // If more than one saved alert shares this currency (e.g. CNY SELL and
+    // CNY BUY), take the newest one — myAlertsCache is sorted newest-first
+    // by loadMyAlerts()'s query, same "first match wins" convention the
+    // sign-in auto-sync above already uses, so this isn't a new rule.
+    const alert = myAlertsCache.find((a) => a.currency === code);
+    if (!alert || typeof window.CKM === "undefined" || typeof window.CKM.loadAlertIntoForm !== "function") return;
+
+    // One genuinely new risk this control introduces: unlike the sign-in
+    // auto-sync (which only ever fires before the user has touched
+    // anything), a chip is available to click AFTER the user has started
+    // composing an unsaved edit. Warn instead of silently overwriting it —
+    // same courtesy "Edit" gets implicitly, since clicking Edit is itself
+    // the user's own deliberate choice, whereas a currency chip further
+    // down the page is easy to click without remembering the form above
+    // has unsaved changes in it.
+    const state = window.CKM.getState ? window.CKM.getState() : null;
+    const hadUnsavedEdit = !!(state && state.userEditedForm && !editingAlertId);
+
+    window.CKM.loadAlertIntoForm(alert);
+    loadedAlertId = alert.id;
+    // loadAlertIntoForm() re-populates the form to match `alert`, which
+    // counts as "the form now reflects saved data," not an in-progress
+    // edit — so, unlike startEditingAlert(), userEditedForm is reset to
+    // false rather than forced true. This keeps the sign-in auto-sync
+    // (loadMyAlerts()'s canAutoSync check) able to keep following the
+    // newest alert on a later refresh, exactly as if the user had simply
+    // never touched the form at all.
+    if (state) state.userEditedForm = false;
+
+    if (hadUnsavedEdit && typeof window.CKM.showToast === "function") {
+      window.CKM.showToast(`Switched to your saved ${code} alert — your unsaved form changes were replaced.`);
+    }
+
+    renderSavedCurrencyChips();
+  }
+
+  function renderSavedCurrencyChips() {
+    const containers = [$("compareCurrencyChips"), $("historyCurrencyChips")].filter(Boolean);
+    if (containers.length === 0) return;
+
+    const codes = getSavedCurrencies();
+    const activeCurrency = (typeof window.CKM !== "undefined" && typeof window.CKM.getState === "function")
+      ? window.CKM.getState().currency
+      : null;
+    const getName = (typeof window.CKM !== "undefined" && typeof window.CKM.getCurrencyName === "function")
+      ? window.CKM.getCurrencyName
+      : (code) => code;
+
+    const html = codes.map((code) => {
+      const pressed = code === activeCurrency ? "true" : "false";
+      return `<button type="button" class="chip-currency" data-currency="${code}"
+                aria-pressed="${pressed}" title="${escapeHtml(getName(code))}">${escapeHtml(code)}</button>`;
+    }).join("");
+
+    containers.forEach((el) => { el.innerHTML = html; });
+    containers.forEach((el) => {
+      el.querySelectorAll(".chip-currency").forEach((btn) => {
+        btn.addEventListener("click", () => selectSavedCurrency(btn.dataset.currency));
+      });
+    });
+  }
+
   async function loadMyAlerts() {
     if (!sb || !currentSession) return;
     const { data, error } = await sb.from("alerts").select("*").order("created_at", { ascending: false });
@@ -816,6 +913,7 @@
     // function's own comment above for why this can't happen any earlier.
     updateAlertLiveRates();
     renderHeroRows();
+    renderSavedCurrencyChips();
   }
 
   async function saveCurrentAlert() {
@@ -1014,6 +1112,10 @@
     if (typeof window.CKM !== "undefined") {
       window.CKM.onAlertTriggered = handleAlertTriggered;
       window.CKM.onAlertReset = handleAlertReset;
+      // Phase 18 — keeps the saved-currency chips' aria-pressed highlighting
+      // correct even when currency changes via the plain form dropdown
+      // rather than via a chip click (see app.js's onCurrencyChanged calls).
+      window.CKM.onCurrencyChanged = renderSavedCurrencyChips;
     }
 
     // Show a friendly message for a failed callback (e.g. expired/reused
