@@ -377,6 +377,15 @@
     showActiveTab();
     myAlertsCache = [];
     stopEditingAlert(); // clears editingAlertId and resets the Save button/banner for the next sign-in
+    // Bug fix (23-Aug-2026): without this, state.userEditedForm stays true
+    // for the rest of the browser tab's life once any field has ever been
+    // touched, which would silently disable the loadMyAlerts() auto-sync
+    // fix above for whichever account signs in next in this same tab —
+    // reintroducing the exact hero/saved-alert mismatch this fix exists to
+    // prevent, just for the next user instead of the first.
+    if (typeof window.CKM !== "undefined" && typeof window.CKM.getState === "function") {
+      window.CKM.getState().userEditedForm = false;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -539,6 +548,51 @@
     // trigger bridge just marked it TRIGGERED) — refresh the banner's label
     // so it never shows stale info, without disturbing the form itself.
     if (editingAlertId) updateEditingBanner();
+
+    // Bug fix (23-Aug-2026) — reported: "My Saved Alerts" correctly showed
+    // a saved alert's real target (e.g. CNY SELL 60.90), but the "Best
+    // available rate for your alert" hero card right next to it showed
+    // target 60.50 — the app's hardcoded demo default, from
+    // frontend/app.js's `state.targetRate` initial value. Root cause: the
+    // hero card always renders directly from that live in-memory `state`
+    // object, which starts at the demo default and is otherwise only ever
+    // changed by the user's own form edits, or by clicking "Edit" on a
+    // saved alert (window.CKM.loadAlertIntoForm). A user who signs in and
+    // has not yet touched the form in this browser tab was left looking at
+    // two different numbers for what should be the same alert, with no
+    // visible reason for the mismatch.
+    //
+    // Fix: as long as the user hasn't typed/clicked into any form field
+    // this page load (state.userEditedForm — see wireForm() in app.js) and
+    // isn't already mid-edit of a specific alert, silently load their most
+    // recently created alert (myAlertsCache[0] — this query is sorted
+    // newest-first) into the form/hero via the same loadAlertIntoForm()
+    // the Edit button already uses. This runs every time this function
+    // does (sign-in, and after save/delete/disable/enable), but
+    // state.userEditedForm makes it a no-op the instant the user starts
+    // composing their own edit (a brand-new alert, or a change to an
+    // existing one), so it can never overwrite in-progress work.
+    //
+    // The mirror-image case (23-Aug-2026, part 2): if the count just
+    // dropped to ZERO — e.g. the user deleted their only saved alert —
+    // and they still haven't touched the form, reset it back to the plain
+    // demo defaults instead of silently leaving it on whatever the
+    // now-deleted alert's numbers were. Without this, the hero card would
+    // keep showing a "live"-looking target/rate for an alert that no
+    // longer exists, with My Saved Alerts right next to it correctly
+    // saying "No saved alerts yet" — the exact same kind of two-sources-
+    // of-truth mismatch as the original bug, just reached by a delete
+    // instead of a fresh sign-in.
+    const canAutoSync =
+      !editingAlertId &&
+      typeof window.CKM !== "undefined" &&
+      typeof window.CKM.getState === "function" &&
+      !window.CKM.getState().userEditedForm;
+    if (canAutoSync && myAlertsCache.length > 0 && typeof window.CKM.loadAlertIntoForm === "function") {
+      window.CKM.loadAlertIntoForm(myAlertsCache[0]);
+    } else if (canAutoSync && myAlertsCache.length === 0 && typeof window.CKM.resetFormToDefaults === "function") {
+      window.CKM.resetFormToDefaults();
+    }
   }
 
   async function saveCurrentAlert() {

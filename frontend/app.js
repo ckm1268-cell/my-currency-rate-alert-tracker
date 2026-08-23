@@ -123,12 +123,52 @@
     triggered: false,
     forcedMode: null, // null | "TRIGGER" | "SOURCE_DOWN" | "VALIDATION_ERROR"
 
+    // Phase 15 bug fix (23-Aug-2026) — true the moment the user has
+    // actually typed/clicked into any of this form's own fields this page
+    // load (see the on(...) handlers in wireForm() below, each of which
+    // sets this true). auth.js's loadMyAlerts() checks this: as long as
+    // it's still false, it's safe to silently load the signed-in user's
+    // most recent saved alert into this form so the hero card reflects
+    // real saved data instead of sitting on the hardcoded demo default
+    // forever — see that function's own comment for the bug this fixes.
+    // The moment the user touches anything, this flips true and that
+    // auto-sync stops, so it never clobbers an in-progress edit.
+    userEditedForm: false,
+
     walk: {}, // per source+currency running mock value, seeded lazily
+    // (DEFAULT_ALERT_ROW below is derived from the state values above,
+    // captured once, before wireForm()/loadAlertIntoForm() can ever change
+    // them — see that constant's own comment.)
     history: [], // { t: Date, value: number } for the currently selected series
     log: [],
 
     liveData: { generatedAt: null, results: [] }, // from data/latest-rates.json
     liveDataFetchFailed: false,
+  };
+
+  // Phase 15 bug fix (23-Aug-2026), part 2 — a "row" shaped exactly like a
+  // real Supabase alerts row, but built from the plain demo defaults just
+  // above (captured here, once, before anything can mutate them). Lets
+  // auth.js reset the form/hero back to a neutral, honest starting point by
+  // calling window.CKM.loadAlertIntoForm(DEFAULT_ALERT_ROW) — the exact
+  // same function/DOM-sync path "Edit" already uses — for the case where a
+  // signed-in user's saved alerts count drops to zero (e.g. they delete
+  // their only alert) while they haven't touched the form themselves. Without
+  // this, the hero card would keep silently showing that now-deleted
+  // alert's stale numbers forever, indistinguishable from a real, current
+  // alert — the same category of bug as the original hero/saved-alert
+  // mismatch, just triggered by a delete instead of a fresh sign-in.
+  const DEFAULT_ALERT_ROW = {
+    currency: state.currency,
+    rate_type: state.rateType,
+    target_rate: state.targetRate,
+    sources: Object.keys(state.sources).filter((k) => state.sources[k]),
+    branch: state.branch,
+    condition: state.condition,
+    pct_change_threshold: state.pctChange,
+    monitoring_interval_minutes: state.interval,
+    notification_methods: Object.keys(state.notifications).filter((k) => state.notifications[k]),
+    telegram_chat_id: state.telegramChatId,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -261,6 +301,30 @@
 
     state.telegramChatId = row.telegram_chat_id || "";
     if ($("telegramChatId")) $("telegramChatId").value = state.telegramChatId;
+
+    // Bug fix (23-Aug-2026), found while testing the fix above: everything
+    // up to this point updates `state` and the plain form INPUT controls
+    // correctly and instantly, but the hero card / compare table / chart
+    // are all rendered by tick(), which otherwise only runs once every 4
+    // seconds (setInterval in init()) or when the user explicitly interacts
+    // with monitoring. Without this call, a caller of loadAlertIntoForm —
+    // including the pre-existing "Edit" button, not just the new auto-sync
+    // above — could show the OLD hero numbers for up to ~4 seconds after
+    // the form/state have already switched to a different alert. tick() is
+    // safe to call here: it's a pure re-render unless state.monitoring is
+    // already true (never set by this function), so it can't spuriously
+    // fire an alert or log activity for a user who hasn't clicked "Start
+    // monitoring".
+    tick();
+  };
+
+  // Phase 15 bug fix (23-Aug-2026), part 2 — see DEFAULT_ALERT_ROW's own
+  // comment above. Reuses loadAlertIntoForm's exact DOM-sync logic, just
+  // with the plain demo defaults instead of a real saved row, so "reset to
+  // a neutral state" and "load a specific alert" can never drift apart
+  // into two subtly different code paths.
+  window.CKM.resetFormToDefaults = function () {
+    window.CKM.loadAlertIntoForm(DEFAULT_ALERT_ROW);
   };
 
   function callHook(name, ...args) {
@@ -882,6 +946,7 @@
     if ($("rateTypeHint")) $("rateTypeHint").textContent = RATE_TYPE_EXPLAINERS[state.rateType];
 
     on("currency", "change", (e) => {
+      state.userEditedForm = true;
       state.currency = e.target.value;
       const cur = CURRENCIES.find((c) => c.code === state.currency);
       $("targetRate").value = cur.base.toFixed(cur.decimals);
@@ -892,6 +957,7 @@
 
     document.querySelectorAll("#rateTypeSeg button").forEach((btn) => {
       btn.addEventListener("click", () => {
+        state.userEditedForm = true;
         document.querySelectorAll("#rateTypeSeg button").forEach((b) => b.setAttribute("aria-pressed", "false"));
         btn.setAttribute("aria-pressed", "true");
         state.rateType = btn.dataset.value;
@@ -900,33 +966,37 @@
     });
 
     on("targetRate", "input", (e) => {
+      state.userEditedForm = true;
       const v = parseFloat(e.target.value);
       state.targetRate = Number.isFinite(v) && v > 0 ? v : state.targetRate;
     });
 
-    on("srcMMM", "change", (e) => { state.sources.mymoneymaster = e.target.checked; });
-    on("srcTM", "change", (e) => { state.sources.tajmuhabath = e.target.checked; updateBranchAvailability(); });
-    on("srcMTA", "change", (e) => { state.sources.merchantradeasia = e.target.checked; });
+    on("srcMMM", "change", (e) => { state.userEditedForm = true; state.sources.mymoneymaster = e.target.checked; });
+    on("srcTM", "change", (e) => { state.userEditedForm = true; state.sources.tajmuhabath = e.target.checked; updateBranchAvailability(); });
+    on("srcMTA", "change", (e) => { state.userEditedForm = true; state.sources.merchantradeasia = e.target.checked; });
 
-    on("branch", "change", (e) => { state.branch = e.target.value; });
+    on("branch", "change", (e) => { state.userEditedForm = true; state.branch = e.target.value; });
 
     on("condition", "change", (e) => {
+      state.userEditedForm = true;
       state.condition = e.target.value;
       $("pctChangeField").style.display = state.condition === "PCT_CHANGE" ? "block" : "none";
     });
     on("pctChange", "input", (e) => {
+      state.userEditedForm = true;
       const v = parseFloat(e.target.value);
       state.pctChange = Number.isFinite(v) && v > 0 ? v : state.pctChange;
     });
 
-    on("interval", "change", (e) => { state.interval = parseInt(e.target.value, 10); });
+    on("interval", "change", (e) => { state.userEditedForm = true; state.interval = parseInt(e.target.value, 10); });
     // No notifBrowser checkbox (Phase 11.1) — state.notifications.browser stays true unconditionally, set at init above.
-    on("notifEmail", "change", (e) => { state.notifications.email = e.target.checked; });
+    on("notifEmail", "change", (e) => { state.userEditedForm = true; state.notifications.email = e.target.checked; });
     on("notifTelegram", "change", (e) => {
+      state.userEditedForm = true;
       state.notifications.telegram = e.target.checked;
       $("telegramChatIdField").style.display = state.notifications.telegram ? "block" : "none";
     });
-    on("telegramChatId", "input", (e) => { state.telegramChatId = e.target.value.trim(); });
+    on("telegramChatId", "input", (e) => { state.userEditedForm = true; state.telegramChatId = e.target.value.trim(); });
 
     on("alertForm", "submit", (e) => {
       e.preventDefault();
