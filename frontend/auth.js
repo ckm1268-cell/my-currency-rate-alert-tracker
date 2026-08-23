@@ -605,6 +605,21 @@
     editingAlertId = id;
     loadedAlertId = id;
     window.CKM.loadAlertIntoForm(alert);
+    // Bug fix (23-Aug-2026): clicking "Edit" is just as deliberate a choice
+    // of which alert belongs in the form/hero as typing into a field is —
+    // but it never used to set state.userEditedForm itself. If the user
+    // then clicked Save without ALSO touching some other field (a very
+    // normal thing to do — re-saving an alert as-is, or only toggling a
+    // checkbox that doesn't happen to be wired through wireForm()'s on()
+    // handler for this exact purpose), userEditedForm was still false once
+    // the save completed. loadMyAlerts()'s auto-sync (see its own comment)
+    // then saw "not editing, form untouched" and silently reloaded the
+    // user's NEWEST alert over the one they had just edited — e.g. editing
+    // an older CNY alert and saving it would immediately snap the hero back
+    // to a newer VND alert instead of staying on CNY. Marking the form
+    // touched here, exactly like every real field handler already does,
+    // closes that gap using the same mechanism instead of a new one.
+    if (typeof window.CKM.getState === "function") window.CKM.getState().userEditedForm = true;
     updateEditingBanner();
     setSaveStatus("");
     const formPanel = $("formPanel");
