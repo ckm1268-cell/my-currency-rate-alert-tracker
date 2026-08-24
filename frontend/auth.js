@@ -861,10 +861,22 @@
    * drift apart if every caller has to remember to update both than if
    * there's exactly one place that does.
    */
+  /**
+   * Phase 21's original scope (chips + Supabase watch list) broadened in
+   * Phase 22 to also cover the Activity Log's empty-state text (see
+   * app.js's renderActivityLog() for why) — all three are derived from the
+   * exact same two facts (signed in? which/how many saved alerts?), so one
+   * function keeping all of them in sync, called from the same handful of
+   * myAlertsCache-mutation sites, is far less error-prone than three
+   * separate call sites each hoping the others remember to fire too.
+   */
   function syncSavedCurrencyUI() {
     renderSavedCurrencyChips();
     if (typeof window.CKM !== "undefined" && typeof window.CKM.setWatchedCurrencies === "function") {
       window.CKM.setWatchedCurrencies(getSavedCurrencies());
+    }
+    if (typeof window.CKM !== "undefined" && typeof window.CKM.renderActivityLog === "function") {
+      window.CKM.renderActivityLog();
     }
   }
 
@@ -1187,6 +1199,13 @@
       // correct even when currency changes via the plain form dropdown
       // rather than via a chip click (see app.js's onCurrencyChanged calls).
       window.CKM.onCurrencyChanged = renderSavedCurrencyChips;
+      // Phase 22 — lets app.js's renderActivityLog() tailor its empty-state
+      // message to what's actually true for this visitor (see that
+      // function's comment) instead of one static string for everyone.
+      window.CKM.getMonitoringContext = () => ({
+        signedIn: !!currentSession,
+        activeSavedAlerts: myAlertsCache.filter((a) => a.status === "ACTIVE").length,
+      });
     }
 
     // Show a friendly message for a failed callback (e.g. expired/reused

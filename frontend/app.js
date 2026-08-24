@@ -241,6 +241,12 @@
   // below) instead of building a second one, e.g. to warn before a saved-
   // currency chip click overwrites unsaved edits in the form.
   window.CKM.showToast = (msg) => showToast(msg);
+  // Phase 22 — lets auth.js re-render the Activity Log's empty-state text
+  // (see renderActivityLog() below) the moment sign-in state or the saved-
+  // alerts list changes, rather than that text sitting stale until the
+  // next unrelated log entry — see that function's own comment for why
+  // this needed fixing at all.
+  window.CKM.renderActivityLog = () => renderActivityLog();
 
   // Phase 13 — lets auth.js's new "Edit" button on a saved alert push that
   // alert's saved settings back into this form (currency, rate type, target,
@@ -1136,25 +1142,47 @@
     renderActivityLog();
   }
 
-  // Bug fix (23-Aug-2026): this card previously rendered nothing at all until
-  // the very first call to logActivity() — which only ever happens once the
-  // user clicks "Start monitoring" (or hits Reset) in THIS browser tab. A
-  // signed-in user who relies entirely on the Phase 14 server-side scheduled
-  // job (never clicking "Start monitoring" locally) would see a permanently,
-  // silently blank <ul>, indistinguishable from a broken card — which is
-  // exactly what was reported. Every other card on the dashboard explains its
-  // own empty state; this one now does too, and renders it immediately at
-  // startup rather than waiting for the first log entry.
+  // Phase 22 (24-Aug-2026) bug fix: the fixed empty-state text below (added
+  // in the Phase 23-Aug-2026 fix noted above) told EVERY visitor to "click
+  // Start monitoring... or sign in above" — including someone who is
+  // ALREADY signed in with active saved alerts. Reported: a signed-in user
+  // with 2 ACTIVE saved alerts saw this generic message, read "or sign in
+  // above" as evidence nothing was happening yet, and had no way to tell,
+  // from this card alone, that their alerts were in fact already being
+  // checked every 5 minutes by the backend. The backend and notification
+  // delivery were never the bug (see backend/scheduler/run.js and
+  // backend/notifications/notify.js — both real, both running); this
+  // card's copy just never accounted for that being possible.
+  //
+  // Fix: ask auth.js (via window.CKM.getMonitoringContext(), which it sets
+  // up during init — see that file) whether the person is signed in and
+  // how many saved alerts are currently ACTIVE, and tailor the message to
+  // what's actually true for them, instead of one static string for
+  // everyone.
   function renderActivityLog() {
     const el = $("activityLog");
     if (!el) return;
-    if (state.log.length === 0) {
-      el.innerHTML = `<li class="log-empty">No activity yet — click "Start monitoring" below to begin locally, or sign in above: alerts checked by the scheduled backend job will still be reflected on this dashboard even without local monitoring running.</li>`;
+    if (state.log.length > 0) {
+      el.innerHTML = state.log.map((e) =>
+        `<li><span class="log-time">${e.t.toLocaleTimeString()}</span><span class="log-msg">${escapeHtml(e.msg)}</span></li>`
+      ).join("");
       return;
     }
-    el.innerHTML = state.log.map((e) =>
-      `<li><span class="log-time">${e.t.toLocaleTimeString()}</span><span class="log-msg">${escapeHtml(e.msg)}</span></li>`
-    ).join("");
+
+    const ctx = (typeof window.CKM.getMonitoringContext === "function")
+      ? window.CKM.getMonitoringContext()
+      : { signedIn: false, activeSavedAlerts: 0 };
+
+    let msg;
+    if (ctx.signedIn && ctx.activeSavedAlerts > 0) {
+      const n = ctx.activeSavedAlerts;
+      msg = `No local activity in this tab — that's expected, not a problem. You have ${n} active saved alert${n === 1 ? "" : "s"} already being checked by the scheduled backend job every 5 minutes, independent of this tab; you'll be notified by whichever method you chose when saving (email/Telegram) even with this page closed. This log only ever shows checks run locally, in this browser tab — click "Start monitoring" below if you also want to watch a rate live here.`;
+    } else if (ctx.signedIn) {
+      msg = `No activity yet, and no saved alerts to check in the background. Click "Start monitoring" below to watch a rate live in this tab, or save an alert above so the scheduled backend job checks it automatically, even after you close this page.`;
+    } else {
+      msg = `No activity yet — click "Start monitoring" below to begin locally, or sign in above and save an alert so the scheduled backend job checks it automatically, even when this tab is closed.`;
+    }
+    el.innerHTML = `<li class="log-empty">${escapeHtml(msg)}</li>`;
   }
 
   function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
