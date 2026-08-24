@@ -240,7 +240,7 @@
         loadedAlertId = null;
         renderAlertsList([]);
         renderHeroRows();
-        renderSavedCurrencyChips();
+        syncSavedCurrencyUI();
       }
     }
   }
@@ -406,7 +406,7 @@
     myAlertsCache = [];
     loadedAlertId = null;
     renderHeroRows(); // switches "Best available rate" back to the single-alert view now that myAlertsCache is empty
-    renderSavedCurrencyChips(); // empties and collapses both chip rows for the same reason
+    syncSavedCurrencyUI(); // empties and collapses both chip rows, and clears the Supabase watch list, for the same reason
     stopEditingAlert(); // clears editingAlertId and resets the Save button/banner for the next sign-in
     // Bug fix (23-Aug-2026): without this, state.userEditedForm stays true
     // for the rest of the browser tab's life once any field has ever been
@@ -844,6 +844,30 @@
     });
   }
 
+  /**
+   * Phase 21 (24-Aug-2026) — the single entry point for keeping BOTH
+   * things derived from myAlertsCache's set of currencies in sync with
+   * each other: the chip row above (which currencies can you click), and
+   * app.js's Supabase live-rate cache (which currencies get kept fresh —
+   * see app.js's window.CKM.setWatchedCurrencies() and its Phase 21
+   * comment for the full "why": Phase 20 only kept the ACTIVE currency's
+   * rates fresh, leaving every OTHER saved-alert row in the hero table
+   * still on stale/deploy-time-only data).
+   *
+   * Deliberately one function calling both, rather than two separate
+   * calls at every myAlertsCache-mutation site — the exact same reasoning
+   * documented next to Phase 18's own call sites below: two things
+   * derived from the same source data are far more likely to silently
+   * drift apart if every caller has to remember to update both than if
+   * there's exactly one place that does.
+   */
+  function syncSavedCurrencyUI() {
+    renderSavedCurrencyChips();
+    if (typeof window.CKM !== "undefined" && typeof window.CKM.setWatchedCurrencies === "function") {
+      window.CKM.setWatchedCurrencies(getSavedCurrencies());
+    }
+  }
+
   async function loadMyAlerts() {
     if (!sb || !currentSession) return;
     const { data, error } = await sb.from("alerts").select("*").order("created_at", { ascending: false });
@@ -911,7 +935,7 @@
     // function's own comment above for why this can't happen any earlier.
     updateAlertLiveRates();
     renderHeroRows();
-    renderSavedCurrencyChips();
+    syncSavedCurrencyUI();
   }
 
   async function saveCurrentAlert() {

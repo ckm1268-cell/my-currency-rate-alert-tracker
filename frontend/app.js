@@ -384,6 +384,27 @@
   // migration is applied, every query below simply fails (RLS denies
   // anon), gets caught, and falls back to the static-file path — so this
   // code is safe to deploy in either order relative to the SQL step.
+  //
+  // Phase 21 (24-Aug-2026) follow-up: Phase 20 scoped the cache to ONLY
+  // whichever currency was currently active in the form/comparison table.
+  // That correctly fixed the reported bug (the active currency's
+  // comparison table and its OWN hero row), but left every OTHER row in
+  // "My saved alerts" — a currency you have a saved alert for but aren't
+  // currently viewing — still falling back to the old, deploy-time-only
+  // static JSON, since computeAlertReading() (used only for those other
+  // rows; see auth.js's getAlertDisplayReading()) calls getReading() with
+  // THAT alert's own currency, not necessarily the active one.
+  //
+  // Fix: `watchedCurrencies` below is a set of extra currencies to keep
+  // fresh alongside the active one — auth.js populates it via
+  // window.CKM.setWatchedCurrencies() with every distinct currency across
+  // the signed-in user's saved alerts (getSavedCurrencies(), the same
+  // Phase 18 helper the saved-currency chips already use), refreshed at
+  // the exact same points myAlertsCache itself refreshes so the two can
+  // never drift apart. The cache itself is now keyed by currency (a Map)
+  // instead of a single {currency, rows} pair, so multiple currencies'
+  // rows can be held fresh simultaneously without one query's results
+  // overwriting another's.
   // ---------------------------------------------------------------------
 
   function hasRealAdapter(sourceId, currencyCode) {
@@ -392,10 +413,16 @@
   }
 
   let sbRatesClient = null;
-  // Scoped to a single currency at a time — the dashboard only ever shows
-  // one currency's comparison table at once, so there's no reason to pull
-  // (or keep fresh) every currency's rows on every poll.
-  let supabaseRatesCache = { currency: null, rows: [], failed: false };
+  // currency code -> { rows, failed } — see this section's Phase 21 note.
+  const supabaseRatesCache = new Map();
+  // Extra currencies (beyond whichever is currently active) to keep
+  // fresh — set by auth.js via window.CKM.setWatchedCurrencies() below.
+  let watchedCurrencies = [];
+
+  window.CKM.setWatchedCurrencies = function (codes) {
+    watchedCurrencies = Array.isArray(codes) ? codes.filter(Boolean) : [];
+    loadSupabaseRates(); // refresh immediately with the new set, don't wait for the poll
+  };
 
   function supabaseConfigured() {
     return (
@@ -407,47 +434,54 @@
     );
   }
 
-  /** Mirrors loadLiveData() below: fetch, cache, re-render, fail soft.
-   *  Pulls the most recent rows for the CURRENTLY selected currency only
-   *  (see supabaseRatesCache's comment) — a currency switch (chip, form
-   *  dropdown, loading a saved alert) calls this again immediately rather
-   *  than waiting out the poll interval, so the comparison table doesn't
-   *  sit showing a stale currency's cache after a switch. */
+  /** One query per currency in play (the active one + every watched one),
+   *  run in parallel, each written into its own slot in supabaseRatesCache
+   *  — so a slow/failed query for one currency can never block or
+   *  overwrite another's already-fresh data. A currency switch or a
+   *  myAlertsCache refresh calls this again immediately (see the two call
+   *  sites below and setWatchedCurrencies() above) rather than waiting out
+   *  the poll interval. */
   async function loadSupabaseRates() {
     if (!supabaseConfigured()) return;
-    const currencyAtRequestTime = state.currency;
-    try {
-      if (!sbRatesClient) sbRatesClient = window.supabase.createClient(window.CKM_SUPABASE_URL, window.CKM_SUPABASE_ANON_KEY);
-      // limit(40) comfortably covers every source+branch combo that could
-      // exist for one currency today (3 sources, at most one branched)
-      // with headroom for more being added later (see config/websites/).
-      const { data, error } = await sbRatesClient
-        .from("rates")
-        .select("source, branch, currency, buy_rate, sell_rate, retrieved_at, source_timestamp, status, validation_status, error_message, created_at")
-        .eq("currency", currencyAtRequestTime)
-        .order("created_at", { ascending: false })
-        .limit(40);
-      if (error) throw error;
-      supabaseRatesCache = { currency: currencyAtRequestTime, rows: data || [], failed: false };
-    } catch (err) {
-      // Covers RLS denying anon before RUN_THIS_IN_SUPABASE.sql has been
-      // run, a network error, or Supabase being down — any of these is a
-      // real reason to fall back to the static-file path below, not to
-      // pretend nothing's wrong.
-      supabaseRatesCache = { currency: currencyAtRequestTime, rows: [], failed: true };
-    }
+    if (!sbRatesClient) sbRatesClient = window.supabase.createClient(window.CKM_SUPABASE_URL, window.CKM_SUPABASE_ANON_KEY);
+
+    const currencies = Array.from(new Set([state.currency, ...watchedCurrencies]));
+
+    await Promise.all(currencies.map(async (code) => {
+      try {
+        // limit(40) comfortably covers every source+branch combo that
+        // could exist for one currency today (3 sources, at most one
+        // branched) with headroom for more being added later (see
+        // config/websites/).
+        const { data, error } = await sbRatesClient
+          .from("rates")
+          .select("source, branch, currency, buy_rate, sell_rate, retrieved_at, source_timestamp, status, validation_status, error_message, created_at")
+          .eq("currency", code)
+          .order("created_at", { ascending: false })
+          .limit(40);
+        if (error) throw error;
+        supabaseRatesCache.set(code, { rows: data || [], failed: false });
+      } catch (err) {
+        // Covers RLS denying anon before RUN_THIS_IN_SUPABASE.sql has been
+        // run, a network error, or Supabase being down — any of these is a
+        // real reason to fall back to the static-file path below, not to
+        // pretend nothing's wrong.
+        supabaseRatesCache.set(code, { rows: [], failed: true });
+      }
+    }));
     tick();
   }
 
-  /** Latest row for this exact source+branch, from the currency-scoped
-   *  cache above. One row per source+branch, since the query already
+  /** Latest row for this exact source+branch, from that currency's slot in
+   *  the cache above. One row per source+branch, since the query already
    *  ordered newest-first and this takes the first match — null if
-   *  nothing's ever been checked for this combo, or the cache is for a
-   *  different currency (a fresh loadSupabaseRates() call is already in
-   *  flight after any currency switch — see that function's comment). */
+   *  nothing's ever been checked for this combo, or this currency hasn't
+   *  been fetched yet (a fresh loadSupabaseRates() call is already in
+   *  flight after any currency switch or watch-list change). */
   function findSupabaseResult(sourceId, currencyCode, branch) {
-    if (supabaseRatesCache.currency !== currencyCode) return null;
-    return supabaseRatesCache.rows.find((r) =>
+    const cached = supabaseRatesCache.get(currencyCode);
+    if (!cached) return null;
+    return cached.rows.find((r) =>
       r.source === sourceId && (r.branch || null) === (branch || null)
     ) || null;
   }
