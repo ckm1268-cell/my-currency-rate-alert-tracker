@@ -259,6 +259,7 @@
     state.history = [];
     lastSelectedValue = null;
     callHook("onCurrencyChanged");
+    loadSupabaseRates(); // Phase 20 — don't wait out the poll interval after a currency switch
 
     state.rateType = row.rate_type;
     document.querySelectorAll("#rateTypeSeg button").forEach((b) => {
@@ -352,14 +353,103 @@
   }
 
   // ---------------------------------------------------------------------
-  // Real live data (My Money Master CNY, Phase 2) — loaded from a static
-  // JSON file a backend GitHub Actions job regenerates on every deploy.
-  // See backend/scripts/checkRate.js and .github/workflows/pages.yml.
+  // Real live data — two sources, checked in priority order.
+  //
+  // Phase 20 (24-Aug-2026) bug fix: through Phase 19, this file only ever
+  // read data/latest-rates.json, a static snapshot regenerated ONCE per
+  // deploy by .github/workflows/pages.yml — completely disconnected from
+  // backend/scheduler/run.js, which has separately been writing a fresh
+  // reading to Supabase's `rates` table every 5 minutes since Phase 14
+  // (.github/workflows/monitor.yml), independent of any deploy. Reported
+  // 24-Aug-2026: CNY showing STALE/UNAVAILABLE across all 3 real sources
+  // on the dashboard despite the backend having checked successfully many
+  // times since the last deploy — the real, fresh data was sitting in
+  // Supabase the whole time, just never read by this file.
+  //
+  // Fix: query `rates` directly (loadSupabaseRates() below), polled at the
+  // same LIVE_DATA_POLL_MS cadence as the old static-file path — plenty
+  // fast relative to the backend's own 5-minute write cadence, so this
+  // frontend poll is never the bottleneck. The static-file path is NOT
+  // removed: it's the automatic fallback for a source+currency combo with
+  // no `rates` row at all, or if Supabase is unreachable/misconfigured —
+  // matching the "fails soft, never fake LIVE" pattern already used
+  // throughout this file and rateHistory.js's real-history chart.
+  //
+  // Unlike rateHistory.js's chart (deliberately signed-in-only, per that
+  // file's own comment), this read is meant to work for signed-out
+  // visitors too — the project brief requires the dashboard itself to be
+  // publicly accessible — so it needs `rates`' SELECT policy to allow
+  // `public`, not just `authenticated`; see database/schema.sql and
+  // RUN_THIS_IN_SUPABASE.sql for that one-time migration. Before that
+  // migration is applied, every query below simply fails (RLS denies
+  // anon), gets caught, and falls back to the static-file path — so this
+  // code is safe to deploy in either order relative to the SQL step.
   // ---------------------------------------------------------------------
 
   function hasRealAdapter(sourceId, currencyCode) {
     const supported = REAL_ADAPTER_SUPPORT[sourceId];
     return Array.isArray(supported) && supported.includes(currencyCode);
+  }
+
+  let sbRatesClient = null;
+  // Scoped to a single currency at a time — the dashboard only ever shows
+  // one currency's comparison table at once, so there's no reason to pull
+  // (or keep fresh) every currency's rows on every poll.
+  let supabaseRatesCache = { currency: null, rows: [], failed: false };
+
+  function supabaseConfigured() {
+    return (
+      typeof window.CKM_SUPABASE_URL === "string" && window.CKM_SUPABASE_URL &&
+      window.CKM_SUPABASE_URL !== "YOUR_SUPABASE_PROJECT_URL" &&
+      typeof window.CKM_SUPABASE_ANON_KEY === "string" && window.CKM_SUPABASE_ANON_KEY &&
+      window.CKM_SUPABASE_ANON_KEY !== "YOUR_SUPABASE_ANON_KEY" &&
+      typeof window.supabase !== "undefined" && typeof window.supabase.createClient === "function"
+    );
+  }
+
+  /** Mirrors loadLiveData() below: fetch, cache, re-render, fail soft.
+   *  Pulls the most recent rows for the CURRENTLY selected currency only
+   *  (see supabaseRatesCache's comment) — a currency switch (chip, form
+   *  dropdown, loading a saved alert) calls this again immediately rather
+   *  than waiting out the poll interval, so the comparison table doesn't
+   *  sit showing a stale currency's cache after a switch. */
+  async function loadSupabaseRates() {
+    if (!supabaseConfigured()) return;
+    const currencyAtRequestTime = state.currency;
+    try {
+      if (!sbRatesClient) sbRatesClient = window.supabase.createClient(window.CKM_SUPABASE_URL, window.CKM_SUPABASE_ANON_KEY);
+      // limit(40) comfortably covers every source+branch combo that could
+      // exist for one currency today (3 sources, at most one branched)
+      // with headroom for more being added later (see config/websites/).
+      const { data, error } = await sbRatesClient
+        .from("rates")
+        .select("source, branch, currency, buy_rate, sell_rate, retrieved_at, source_timestamp, status, validation_status, error_message, created_at")
+        .eq("currency", currencyAtRequestTime)
+        .order("created_at", { ascending: false })
+        .limit(40);
+      if (error) throw error;
+      supabaseRatesCache = { currency: currencyAtRequestTime, rows: data || [], failed: false };
+    } catch (err) {
+      // Covers RLS denying anon before RUN_THIS_IN_SUPABASE.sql has been
+      // run, a network error, or Supabase being down — any of these is a
+      // real reason to fall back to the static-file path below, not to
+      // pretend nothing's wrong.
+      supabaseRatesCache = { currency: currencyAtRequestTime, rows: [], failed: true };
+    }
+    tick();
+  }
+
+  /** Latest row for this exact source+branch, from the currency-scoped
+   *  cache above. One row per source+branch, since the query already
+   *  ordered newest-first and this takes the first match — null if
+   *  nothing's ever been checked for this combo, or the cache is for a
+   *  different currency (a fresh loadSupabaseRates() call is already in
+   *  flight after any currency switch — see that function's comment). */
+  function findSupabaseResult(sourceId, currencyCode, branch) {
+    if (supabaseRatesCache.currency !== currencyCode) return null;
+    return supabaseRatesCache.rows.find((r) =>
+      r.source === sourceId && (r.branch || null) === (branch || null)
+    ) || null;
   }
 
   async function loadLiveData() {
@@ -385,11 +475,48 @@
   }
 
   /**
+   * Shared by both the Supabase path and the static-JSON path below: given
+   * an entry already normalized to {status, buyRate, sellRate, retrievedAt
+   * (Date|null), sourceTimestamp, validationStatus, errorMessage}, applies
+   * the exact same freshness recheck either source needs — a row written
+   * as `status: 'LIVE'` five minutes ago by the backend is still honestly
+   * LIVE right now, but the same row read three hours from now, with no
+   * newer one behind it, must be recomputed as STALE at READ time, not
+   * trusted at its original write-time status forever. Never upgrades a
+   * stale or failed check to look LIVE — the false-freshness bug the
+   * project's Error Handling section warns against.
+   */
+  function buildRealReadingFromEntry(base, entry, now) {
+    if (entry.status !== "LIVE") {
+      // Pass through whatever was actually recorded (EXTRACTION_ERROR,
+      // RATE_VALIDATION_ERROR, SOURCE_UNAVAILABLE) rather than reinterpreting it.
+      return { ...base, buyRate: entry.buyRate ?? null, sellRate: entry.sellRate ?? null,
+        retrievedAt: entry.retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
+        status: entry.status, validationStatus: entry.validationStatus,
+        errorMessage: entry.errorMessage };
+    }
+
+    const ageMs = entry.retrievedAt ? now.getTime() - entry.retrievedAt.getTime() : Infinity;
+    if (ageMs > LIVE_DATA_FRESHNESS_MS) {
+      return { ...base, buyRate: entry.buyRate, sellRate: entry.sellRate,
+        retrievedAt: entry.retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
+        status: "STALE", validationStatus: entry.validationStatus,
+        errorMessage: `Last successful check was ${Math.round(ageMs / 60000)} min ago (freshness window is ${LIVE_DATA_FRESHNESS_MS / 60000} min).` };
+    }
+
+    return { ...base, buyRate: entry.buyRate, sellRate: entry.sellRate,
+      retrievedAt: entry.retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
+      status: "LIVE", validationStatus: entry.validationStatus };
+  }
+
+  /**
    * Real counterpart to simulateReading(): builds a StandardRateResult-
-   * shaped reading from data/latest-rates.json instead of the random walk.
-   * Never upgrades a stale or failed check to look LIVE — that is exactly
-   * the false-freshness bug the project's Error Handling section warns
-   * against ("do not display the last known rate as if it were live").
+   * shaped reading from live data instead of the random walk. Checks
+   * Supabase's `rates` table first (fresh as of the backend's last 5-
+   * minute run — see this section's header comment), falling back to
+   * data/latest-rates.json (fresh as of the last deploy) only when no
+   * Supabase row exists for this combo yet, or Supabase couldn't be
+   * reached at all.
    *
    * Phase 16 (23-Aug-2026): `currencyCode` is now an explicit parameter
    * (defaulting to `state.currency`, so every existing call site behaves
@@ -400,6 +527,19 @@
   function getRealReading(sourceId, branch, currencyCode = state.currency) {
     const now = new Date();
     const base = { source: sourceId, branch: branch || null, currency: currencyCode, origin: "REAL" };
+
+    const sbRow = findSupabaseResult(sourceId, currencyCode, branch);
+    if (sbRow) {
+      return buildRealReadingFromEntry(base, {
+        status: sbRow.status,
+        buyRate: sbRow.buy_rate,
+        sellRate: sbRow.sell_rate,
+        retrievedAt: sbRow.retrieved_at ? new Date(sbRow.retrieved_at) : null,
+        sourceTimestamp: sbRow.source_timestamp || null,
+        validationStatus: sbRow.validation_status,
+        errorMessage: sbRow.error_message,
+      }, now);
+    }
 
     if (state.liveDataFetchFailed) {
       return { ...base, buyRate: null, sellRate: null, retrievedAt: null, sourceTimestamp: null,
@@ -414,28 +554,15 @@
         errorMessage: "No live check has completed for this currency yet." };
     }
 
-    const retrievedAt = entry.retrievedAt ? new Date(entry.retrievedAt) : null;
-
-    if (entry.status !== "LIVE") {
-      // Pass through whatever the backend actually recorded (EXTRACTION_ERROR,
-      // RATE_VALIDATION_ERROR, SOURCE_UNAVAILABLE) rather than reinterpreting it.
-      return { ...base, buyRate: entry.buyRate ?? null, sellRate: entry.sellRate ?? null,
-        retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
-        status: entry.status, validationStatus: entry.validationStatus,
-        errorMessage: entry.errorMessage };
-    }
-
-    const ageMs = retrievedAt ? now.getTime() - retrievedAt.getTime() : Infinity;
-    if (ageMs > LIVE_DATA_FRESHNESS_MS) {
-      return { ...base, buyRate: entry.buyRate, sellRate: entry.sellRate,
-        retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
-        status: "STALE", validationStatus: entry.validationStatus,
-        errorMessage: `Last successful check was ${Math.round(ageMs / 60000)} min ago (freshness window is ${LIVE_DATA_FRESHNESS_MS / 60000} min).` };
-    }
-
-    return { ...base, buyRate: entry.buyRate, sellRate: entry.sellRate,
-      retrievedAt, sourceTimestamp: entry.sourceTimestamp || null,
-      status: "LIVE", validationStatus: entry.validationStatus };
+    return buildRealReadingFromEntry(base, {
+      status: entry.status,
+      buyRate: entry.buyRate,
+      sellRate: entry.sellRate,
+      retrievedAt: entry.retrievedAt ? new Date(entry.retrievedAt) : null,
+      sourceTimestamp: entry.sourceTimestamp || null,
+      validationStatus: entry.validationStatus,
+      errorMessage: entry.errorMessage,
+    }, now);
   }
 
   /** Dispatcher: real reading if this source+currency has a real adapter, simulated otherwise.
@@ -1090,6 +1217,7 @@
       state.history = [];
       lastSelectedValue = null;
       callHook("onCurrencyChanged");
+      loadSupabaseRates(); // Phase 20 — don't wait out the poll interval after a currency switch
     });
 
     document.querySelectorAll("#rateTypeSeg button").forEach((btn) => {
@@ -1232,9 +1360,11 @@
     }
 
     loadLiveData(); // also calls tick() once it resolves (or fails)
+    loadSupabaseRates(); // Phase 20 — same pattern, preferred source when it has data
     tick();
     setInterval(tick, 4000);
     setInterval(loadLiveData, LIVE_DATA_POLL_MS);
+    setInterval(loadSupabaseRates, LIVE_DATA_POLL_MS);
     setInterval(() => { $("clockLabel").textContent = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }); }, 1000);
     window.addEventListener("resize", renderChart);
   }

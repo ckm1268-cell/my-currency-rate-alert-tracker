@@ -203,15 +203,22 @@ create index if not exists rates_lookup_idx on public.rates (source, currency, b
 
 alter table public.rates enable row level security;
 
--- Any authenticated user can read rate history (it's public market data).
--- No insert/update/delete policy is created for the anon/authenticated
--- roles, which means only the service-role key (used exclusively by the
--- backend — see backend/db/supabaseClient.js — and which bypasses RLS
--- entirely) can write here.
+-- Phase 20 (24-Aug-2026): widened from "to authenticated" to "to public".
+-- Reported bug: the dashboard's live-rate display (Multi-source comparison
+-- table, hero rows) had no way to read this table at all before this
+-- change — see frontend/app.js's loadSupabaseRates()/getRealReading() for
+-- the new read path this policy enables. Kept `to authenticated` for years
+-- of comments calling this "public reference data" while actually blocking
+-- anon reads was the real inconsistency; this aligns the policy with what
+-- the table's own comment (and the project's public-accessibility
+-- requirement) already said it was. No insert/update/delete policy exists
+-- for anon/authenticated either way — only the service-role key (backend/
+-- db/supabaseClient.js, bypasses RLS entirely) can write here.
 drop policy if exists "Authenticated users can read rates" on public.rates;
-create policy "Authenticated users can read rates"
+drop policy if exists "Anyone can read rates" on public.rates;
+create policy "Anyone can read rates"
   on public.rates for select
-  to authenticated
+  to public
   using (true);
 
 -- -----------------------------------------------------------------------------
