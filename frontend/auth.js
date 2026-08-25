@@ -59,11 +59,6 @@
     PCT_CHANGE: "Changes by X%",
   };
 
-  const SOURCE_LABELS = {
-    mymoneymaster: "My Money Master",
-    tajmuhabath: "Taj Muhabath",
-  };
-
   const NOTIFICATION_LABELS = {
     browser: "🔔 Browser (this tab only)",
     email: "✉️ Email",
@@ -424,8 +419,32 @@
   // -------------------------------------------------------------------------
 
   function describeAlert(a) {
-    const sources = Array.isArray(a.sources) ? a.sources.map((s) => SOURCE_LABELS[s] || s).join(" + ") : "—";
-    const branch = a.branch ? ` (${a.branch})` : "";
+    // Phase 25 (25-Aug-2026) bug fix — reported: "My Money Master + Taj
+    // Muhabath + merchantradeasia + jalinanduta (AEON MALL CHERAS
+    // SELATAN)" — a Taj Muhabath branch appearing to belong to Jalinan
+    // Duta, which has no branches at all. Root cause: this function used
+    // to join every source name into one string FIRST, then blindly
+    // append " (branch)" to the end of that whole string — correct only
+    // by coincidence, back when Taj Muhabath (the only source that has
+    // ever had a branch) always happened to be the LAST item in
+    // a.sources. Adding Jalinan Duta after it (Phase 24) broke that
+    // coincidence. Fixed by attaching the branch to the specific source
+    // token it actually belongs to — via window.CKM.getBranchSupportedSourceIds()
+    // (app.js, reading each source's own supportsBranch flag) — so this is
+    // correct regardless of array order or how many more sources get
+    // added later.
+    const branchSupportedIds = (typeof window.CKM !== "undefined" && typeof window.CKM.getBranchSupportedSourceIds === "function")
+      ? window.CKM.getBranchSupportedSourceIds()
+      : ["tajmuhabath"]; // conservative fallback matching today's only branch-supporting source, if the bridge is ever unavailable
+
+    const sources = Array.isArray(a.sources)
+      ? a.sources.map((s) => {
+          const label = (typeof window.CKM !== "undefined" && typeof window.CKM.getSourceName === "function")
+            ? window.CKM.getSourceName(s)
+            : s;
+          return (a.branch && branchSupportedIds.includes(s)) ? `${label} (${a.branch})` : label;
+        }).join(" + ")
+      : "—";
     const cond = CONDITION_LABELS[a.condition] || a.condition;
     // Phase 11: notification_methods is an array — any combination may be
     // selected, all delivered simultaneously (see backend/scheduler/run.js's
@@ -438,7 +457,7 @@
     const notif = methods.length
       ? methods.map((m) => NOTIFICATION_LABELS[m] || m).join(" + ")
       : "—";
-    return { sources: sources + branch, cond, notif };
+    return { sources, cond, notif };
   }
 
   function statusPillClass(status) {

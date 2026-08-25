@@ -250,6 +250,24 @@
   // below) instead of building a second one, e.g. to warn before a saved-
   // currency chip click overwrites unsaved edits in the form.
   window.CKM.showToast = (msg) => showToast(msg);
+  // Phase 25 (25-Aug-2026) bug fix — lets auth.js's describeAlert() attach
+  // a saved alert's branch to the SPECIFIC source that actually has one,
+  // reading it from SOURCES' own supportsBranch field (the same source of
+  // truth backend/scheduler/comboSelection.js was fixed to read from
+  // config/websites/*.json's branchSupport, this session) instead of
+  // hardcoding 'tajmuhabath' a 3rd time in a completely different file.
+  window.CKM.getBranchSupportedSourceIds = () => SOURCES.filter((s) => s.supportsBranch).map((s) => s.id);
+  // Phase 25 (25-Aug-2026) bug fix — found while fixing the branch-mislabel
+  // bug above: auth.js kept its OWN hardcoded copy of source display names
+  // (SOURCE_LABELS), which was never updated when merchantradeasia (Phase
+  // 14) or jalinanduta (Phase 24) were added — both showed up as raw
+  // lowercase ids in "My saved alerts" ("...+ merchantradeasia +
+  // jalinanduta" instead of "...+ Merchantrade Asia + Jalinan Duta"),
+  // visible in the very screenshot that reported the branch bug. Same root
+  // cause as that bug: a second hardcoded list that had to independently
+  // stay in sync with SOURCES and quietly didn't. Exposing this bridge
+  // instead lets auth.js stop keeping its own copy at all.
+  window.CKM.getSourceName = (id) => (SOURCES.find((s) => s.id === id) || {}).name || id;
   // Phase 22 — lets auth.js re-render the Activity Log's empty-state text
   // (see renderActivityLog() below) the moment sign-in state or the saved-
   // alerts list changes, rather than that text sitting stale until the
