@@ -21,6 +21,13 @@
 // here until someone remembered to add a 3rd/4th copy of the same string
 // check. Reading each config's own branchSupport field instead means this
 // file can never disagree with the one place that's supposed to define it.
+//
+// Follow-up fix (25-Aug-2026, later same day): the Set below was built but
+// getRequiredCombos()/readingsForAlert() were never actually switched over
+// to read it — both still had the literal `source === 'tajmuhabath'` check
+// a few lines down, so the magic-string problem this comment describes was
+// still live. Both functions now call BRANCH_SUPPORTED_SOURCES.has(source)
+// instead — this Set is the thing that actually decides branch handling.
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -74,7 +81,7 @@ function getRequiredCombos(alerts) {
   (alerts || []).forEach((alert) => {
     const sources = Array.isArray(alert.sources) ? alert.sources : [];
     sources.forEach((source) => {
-      const branch = source === 'tajmuhabath' ? (alert.branch || null) : null;
+      const branch = BRANCH_SUPPORTED_SOURCES.has(source) ? (alert.branch || null) : null;
       const combo = { source, currency: alert.currency, branch };
       seen.set(comboKey(combo), combo);
     });
@@ -104,7 +111,7 @@ function readingsForAlert(alert, resultsByComboKey) {
   const sources = Array.isArray(alert.sources) ? alert.sources : [];
   return sources
     .map((source) => {
-      const branch = source === 'tajmuhabath' ? (alert.branch || null) : null;
+      const branch = BRANCH_SUPPORTED_SOURCES.has(source) ? (alert.branch || null) : null;
       return resultsByComboKey.get(comboKey({ source, currency: alert.currency, branch }));
     })
     .filter(Boolean);

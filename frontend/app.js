@@ -66,11 +66,19 @@
     "AEON MALL CHERAS SELATAN",
   ];
 
+  // checkboxId added 25-Aug-2026 (bug fix, see loadAlertIntoForm() below): each
+  // source's money-changer checkbox <input id>, so state.sources can be
+  // rebuilt and every checkbox re-synced by looping over this ONE list
+  // instead of a second hand-written copy of "mymoneymaster/tajmuhabath/
+  // merchantradeasia/jalinanduta" that has to be remembered and kept in sync
+  // by hand every time a source is added — exactly the kind of drift that
+  // let loadAlertIntoForm() silently forget about Jalinan Duta when it was
+  // added (Phase 24) and never noticed.
   const SOURCES = [
-    { id: "mymoneymaster", name: "My Money Master", supportsBranch: false, spreadBias: 0 },
-    { id: "tajmuhabath", name: "Taj Muhabath", supportsBranch: true, spreadBias: 0.06 },
-    { id: "merchantradeasia", name: "Merchantrade Asia", supportsBranch: false, spreadBias: 0.03 },
-    { id: "jalinanduta", name: "Jalinan Duta", supportsBranch: false, spreadBias: 0.02 },
+    { id: "mymoneymaster", name: "My Money Master", supportsBranch: false, spreadBias: 0, checkboxId: "srcMMM" },
+    { id: "tajmuhabath", name: "Taj Muhabath", supportsBranch: true, spreadBias: 0.06, checkboxId: "srcTM" },
+    { id: "merchantradeasia", name: "Merchantrade Asia", supportsBranch: false, spreadBias: 0.03, checkboxId: "srcMTA" },
+    { id: "jalinanduta", name: "Jalinan Duta", supportsBranch: false, spreadBias: 0.02, checkboxId: "srcJD" },
   ];
 
   const RATE_TYPE_EXPLAINERS = {
@@ -308,16 +316,24 @@
       if ($("targetRate")) $("targetRate").value = target.toFixed(decimals);
     }
 
+    // Bug fix (25-Aug-2026): this used to be a hand-written object literal
+    // listing only mymoneymaster/tajmuhabath/merchantradeasia, plus a 4th
+    // "if ($('srcJD'))..." line bolted on separately when Jalinan Duta was
+    // added (Phase 24) — but the object literal itself was never updated to
+    // include it. Every saved alert's real jalinanduta selection was
+    // therefore silently discarded here: state.sources.jalinanduta ended up
+    // undefined regardless of what row.sources actually said, and the
+    // checkbox always unchecked itself. Looping over SOURCES (this file's
+    // one canonical source list, checkboxId included) instead of a second
+    // hardcoded copy means a 5th source added later can't repeat this same
+    // bug — there is no second list left to forget.
     const sourceList = Array.isArray(row.sources) ? row.sources : [];
-    state.sources = {
-      mymoneymaster: sourceList.includes("mymoneymaster"),
-      tajmuhabath: sourceList.includes("tajmuhabath"),
-      merchantradeasia: sourceList.includes("merchantradeasia"),
-    };
-    if ($("srcMMM")) $("srcMMM").checked = state.sources.mymoneymaster;
-    if ($("srcTM")) $("srcTM").checked = state.sources.tajmuhabath;
-    if ($("srcMTA")) $("srcMTA").checked = state.sources.merchantradeasia;
-    if ($("srcJD")) $("srcJD").checked = !!state.sources.jalinanduta;
+    state.sources = {};
+    SOURCES.forEach((s) => {
+      const selected = sourceList.includes(s.id);
+      state.sources[s.id] = selected;
+      if ($(s.checkboxId)) $(s.checkboxId).checked = selected;
+    });
     updateBranchAvailability();
 
     if (row.branch) {
