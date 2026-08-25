@@ -520,6 +520,13 @@
       }
     }));
     tick();
+    // Phase 28 (26-Aug-2026) fix — see renderActivityLog()'s own comment:
+    // the Activity Log now shows real rows from this same cache for a
+    // signed-in user with saved alerts, so it needs to re-render every time
+    // fresh rows arrive here (initial load, the 60s poll, a currency
+    // switch, or setWatchedCurrencies() firing early) — not just wait for
+    // an unrelated tick()/logActivity() call to happen to touch it next.
+    renderActivityLog();
   }
 
   /** Latest row for this exact source+branch, from that currency's slot in
@@ -1203,6 +1210,52 @@
   // how many saved alerts are currently ACTIVE, and tailor the message to
   // what's actually true for them, instead of one static string for
   // everyone.
+  // Phase 28 (26-Aug-2026) fix: a signed-in user with saved alerts previously
+  // saw this card explain, correctly but unhelpfully, that real checks were
+  // happening "independent of this tab" — with nothing to actually look at.
+  // Reported: "The Activity Log should be running as long as there is
+  // currency in My Saved Alerts." The scheduled backend job (Phase 8/14,
+  // backend/scheduler/run.js) has been writing every real check it makes
+  // into Supabase's `rates` table all along — and this file has already been
+  // reading those exact rows since Phase 20/21 (loadSupabaseRates() above,
+  // one query per currency across every saved alert, kept fresh on a 60s
+  // poll) to drive the comparison table and hero card. buildBackendActivityEntries()
+  // below just turns that SAME already-fetched data into log lines too, so
+  // this card shows the real backend job's own recent checks — source,
+  // currency, buy/sell, and status, newest first — instead of only
+  // explaining that they exist somewhere you can't see. Local, in-tab
+  // checks (state.log, from "Start monitoring") still take priority when
+  // present, unchanged from before.
+  function buildBackendActivityEntries() {
+    const entries = [];
+    supabaseRatesCache.forEach((cached, currencyCode) => {
+      if (!cached || cached.failed) return;
+      cached.rows.forEach((r) => {
+        const src = SOURCES.find((s) => s.id === r.source);
+        const sourceName = src ? src.name : r.source;
+        const branchSuffix = r.branch ? ` (${r.branch})` : "";
+        const when = r.created_at || r.retrieved_at;
+        const t = when ? new Date(when) : null;
+
+        let text;
+        if (r.status === "LIVE") {
+          const buy = r.buy_rate != null ? formatRate(Number(r.buy_rate), currencyCode) : "—";
+          const sell = r.sell_rate != null ? formatRate(Number(r.sell_rate), currencyCode) : "—";
+          text = `${sourceName}${branchSuffix} — ${currencyCode} buy ${buy} / sell ${sell} · LIVE`;
+        } else {
+          // Honestly pass through whatever the adapter actually recorded
+          // (SOURCE_UNAVAILABLE, EXTRACTION_ERROR, RATE_VALIDATION_ERROR) —
+          // never relabel a real failed check as if it succeeded.
+          const reason = r.error_message ? `: ${String(r.error_message).slice(0, 90)}` : "";
+          text = `${sourceName}${branchSuffix} — ${currencyCode} · ${r.status || "UNKNOWN"}${reason}`;
+        }
+        entries.push({ t, text, sortKey: t ? t.getTime() : 0 });
+      });
+    });
+    entries.sort((a, b) => b.sortKey - a.sortKey);
+    return entries.slice(0, 15); // most recent 15 across every watched currency — plenty for a glance, not a full history dump
+  }
+
   function renderActivityLog() {
     const el = $("activityLog");
     if (!el) return;
@@ -1217,6 +1270,18 @@
       ? window.CKM.getMonitoringContext()
       : { signedIn: false, totalSavedAlerts: 0, active: 0, triggered: 0, disabled: 0 };
 
+    if (ctx.signedIn && ctx.totalSavedAlerts > 0) {
+      const backendEntries = buildBackendActivityEntries();
+      if (backendEntries.length > 0) {
+        const note = `<li class="log-empty">Showing the ${backendEntries.length} most recent check${backendEntries.length === 1 ? "" : "s"} from the scheduled backend job (every 5 minutes) — not just this tab.</li>`;
+        const rows = backendEntries.map((e) =>
+          `<li><span class="log-time">${e.t ? e.t.toLocaleTimeString() : "—"}</span><span class="log-msg">${escapeHtml(e.text)}</span></li>`
+        ).join("");
+        el.innerHTML = note + rows;
+        return;
+      }
+    }
+
     let msg;
     if (ctx.signedIn && ctx.totalSavedAlerts > 0) {
       const parts = [];
@@ -1225,7 +1290,13 @@
       if (ctx.disabled > 0) parts.push(`${ctx.disabled} disabled`);
       const breakdown = parts.join(", ");
       const n = ctx.totalSavedAlerts;
-      msg = `No local activity in this tab — that's expected, not a problem. You have ${n} saved alert${n === 1 ? "" : "s"} (${breakdown}); anything still active is checked by the scheduled backend job independent of this tab, and you'll be notified by whichever method you chose when saving (email/Telegram) even with this page closed. This log only ever shows checks run locally, in this browser tab — click "Start monitoring" below if you also want to watch a rate live here.`;
+      // Reaching this branch means buildBackendActivityEntries() above
+      // found nothing yet (the backend job's rows for your saved
+      // currencies haven't finished loading, or none has ever run) — not
+      // that this log can never show them. Once loadSupabaseRates() gets a
+      // real row back (it retries every 60s), this message is replaced by
+      // the actual checks automatically — see the branch above.
+      msg = `Loading recent checks for your ${n} saved alert${n === 1 ? "" : "s"} (${breakdown}) from the scheduled backend job — this refreshes every 60 seconds. If nothing appears shortly, the backend job hasn't completed its first check yet, or hasn't run at all: it runs every 5 minutes independent of this tab, and you'll still be notified by whichever method you chose when saving (email/Telegram) even with this page closed.`;
     } else if (ctx.signedIn) {
       msg = `No activity yet, and no saved alerts to check in the background. Click "Start monitoring" below to watch a rate live in this tab, or save an alert above so the scheduled backend job checks it automatically, even after you close this page.`;
     } else {
