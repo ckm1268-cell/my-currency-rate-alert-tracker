@@ -41,6 +41,13 @@ const ADAPTERS = {
   mymoneymaster: () => require('../scrapers/mymoneymaster.adapter'),
   tajmuhabath: () => require('../scrapers/tajmuhabath.adapter'),
   merchantradeasia: () => require('../scrapers/merchantradeasia.adapter'),
+  // Phase 24 (24-Aug-2026) — jalinanduta is registered here ONLY, not yet
+  // in backend/scheduler/run.js's own ADAPTERS map or any GitHub Actions
+  // workflow. This script is exactly the manual, one-off verification tool
+  // NEW_SOURCES_INVESTIGATION.md asks be run before wiring it into
+  // anything scheduled — registering it here is that verification step,
+  // not a decision to start polling it automatically.
+  jalinanduta: () => require('../scrapers/jalinanduta.adapter'),
 };
 
 const DATA_FILE = path.join(__dirname, '..', '..', 'frontend', 'data', 'latest-rates.json');

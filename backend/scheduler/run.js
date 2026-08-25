@@ -105,12 +105,20 @@ const ADAPTERS = {
   mymoneymaster: () => require('../scrapers/mymoneymaster.adapter'),
   tajmuhabath: () => require('../scrapers/tajmuhabath.adapter'),
   merchantradeasia: () => require('../scrapers/merchantradeasia.adapter'),
+  // Phase 24 (25-Aug-2026) — verified via a real checkRate.js run (status
+  // LIVE, validationStatus PASSED) plus a manual cross-check against the
+  // live site and a clean robots.txt read, all done by the project owner
+  // since this sandbox can't reach jalinanduta.com directly. See
+  // NEW_SOURCES_INVESTIGATION.md for the full trail before touching this
+  // adapter's selectors.
+  jalinanduta: () => require('../scrapers/jalinanduta.adapter'),
 };
 
 const SOURCE_DISPLAY_NAMES = {
   mymoneymaster: 'My Money Master',
   tajmuhabath: 'Taj Muhabath',
   merchantradeasia: 'Merchantrade Asia',
+  jalinanduta: 'Jalinan Duta',
 };
 
 async function fetchPreviousRateRow(sb, combo) {

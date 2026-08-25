@@ -77,6 +77,17 @@ jobs:
         run: node scripts/checkRate.js merchantradeasia CNY
         continue-on-error: true
 
+      - name: Check Jalinan Duta CNY rate
+        # Phase 24 (25-Aug-2026): robots.txt checked live by the project
+        # owner (User-agent: * / Disallow: /wp-admin/ only — the homepage
+        # this adapter fetches is not disallowed), and a real checkRate.js
+        # run + manual cross-check against the live site both confirmed a
+        # plausible CNY value before this step was added. See
+        # NEW_SOURCES_INVESTIGATION.md for the full trail.
+        working-directory: backend
+        run: node scripts/checkRate.js jalinanduta CNY
+        continue-on-error: true
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 

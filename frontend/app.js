@@ -70,6 +70,7 @@
     { id: "mymoneymaster", name: "My Money Master", supportsBranch: false, spreadBias: 0 },
     { id: "tajmuhabath", name: "Taj Muhabath", supportsBranch: true, spreadBias: 0.06 },
     { id: "merchantradeasia", name: "Merchantrade Asia", supportsBranch: false, spreadBias: 0.03 },
+    { id: "jalinanduta", name: "Jalinan Duta", supportsBranch: false, spreadBias: 0.02 },
   ];
 
   const RATE_TYPE_EXPLAINERS = {
@@ -83,6 +84,14 @@
     mymoneymaster: ["CNY"],
     tajmuhabath: ["CNY"],
     merchantradeasia: ["CNY", "VND", "TWD"],
+    // Phase 24 — CNY only. config/websites/jalinanduta.json's validation
+    // block also lists VND/USD/etc. expectedRange bounds (the page's own
+    // table shows them too), but only CNY has actually been confirmed via
+    // a real checkRate.js run — see NEW_SOURCES_INVESTIGATION.md. Add the
+    // others here only after each is separately verified the same way,
+    // same convention merchantradeasia's own CNY-then-VND-then-TWD
+    // rollout followed.
+    jalinanduta: ["CNY"],
   };
 
   const LIVE_DATA_URL = "data/latest-rates.json";
@@ -98,7 +107,7 @@
     rateType: "SELL",
     targetRate: 60.5,
     pctChange: 1,
-    sources: { mymoneymaster: true, tajmuhabath: true, merchantradeasia: true },
+    sources: { mymoneymaster: true, tajmuhabath: true, merchantradeasia: true, jalinanduta: false },
     branch: TM_BRANCHES[13], // LALAPORT BBCC — the branch the Phase 3 backend job explicitly
     // requests via checkRate.js (see .github/workflows/pages.yml). NOT the page's own
     // natural default when no branch is selected (that's "THE EXCHANGE TRX", confirmed
@@ -290,6 +299,7 @@
     if ($("srcMMM")) $("srcMMM").checked = state.sources.mymoneymaster;
     if ($("srcTM")) $("srcTM").checked = state.sources.tajmuhabath;
     if ($("srcMTA")) $("srcMTA").checked = state.sources.merchantradeasia;
+    if ($("srcJD")) $("srcJD").checked = !!state.sources.jalinanduta;
     updateBranchAvailability();
 
     if (row.branch) {
@@ -1301,6 +1311,7 @@
     on("srcMMM", "change", (e) => { state.userEditedForm = true; state.sources.mymoneymaster = e.target.checked; });
     on("srcTM", "change", (e) => { state.userEditedForm = true; state.sources.tajmuhabath = e.target.checked; updateBranchAvailability(); });
     on("srcMTA", "change", (e) => { state.userEditedForm = true; state.sources.merchantradeasia = e.target.checked; });
+    on("srcJD", "change", (e) => { state.userEditedForm = true; state.sources.jalinanduta = e.target.checked; });
 
     on("branch", "change", (e) => { state.userEditedForm = true; state.branch = e.target.value; });
 
