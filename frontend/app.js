@@ -1241,7 +1241,37 @@
         if (r.status === "LIVE") {
           const buy = r.buy_rate != null ? formatRate(Number(r.buy_rate), currencyCode) : "—";
           const sell = r.sell_rate != null ? formatRate(Number(r.sell_rate), currencyCode) : "—";
-          text = `${sourceName}${branchSuffix} — ${currencyCode} buy ${buy} / sell ${sell} · LIVE`;
+          // Phase 29 (26-Aug-2026) fix: reported — Jalinan Duta's VND row
+          // showed here as "LIVE" while the Multi-source comparison table
+          // showed the exact same source+currency as SIMULATED, directly
+          // contradicting each other. Root cause: the backend adapter is
+          // generic (no hardcoded currency) and will happily return LIVE
+          // for any currency it finds a table row for, and
+          // backend/validation/validateRate.js only range-checks a
+          // currency when config/websites/*.json defines an
+          // expectedRange for it — Jalinan Duta's config only has one for
+          // CNY (Phase 24 deliberately verified CNY only, same rollout
+          // pattern as Merchantrade Asia), so a VND row sails through
+          // validation with no range check at all and gets written to
+          // Supabase as status: 'LIVE'. Every OTHER real/simulated split
+          // on this dashboard (comparison table, hero, saved-alert cards,
+          // currency chips) is decided by hasRealAdapter()/
+          // REAL_ADAPTER_SUPPORT — a human-curated allowlist of
+          // source+currency combos that have actually been verified
+          // end-to-end (see NEW_SOURCES_INVESTIGATION.md/config's
+          // compliance.actionRequired for what that verification bar is)
+          // — this was the one place reading the raw DB status column
+          // directly instead. Applying the same gate here means the log
+          // can never again claim a combo is LIVE that the rest of the
+          // app still — correctly and deliberately — treats as
+          // unverified, while still surfacing that a real check happened
+          // (rather than silently hiding the row, which would look like
+          // its own inconsistency).
+          if (hasRealAdapter(r.source, currencyCode)) {
+            text = `${sourceName}${branchSuffix} — ${currencyCode} buy ${buy} / sell ${sell} · LIVE`;
+          } else {
+            text = `${sourceName}${branchSuffix} — ${currencyCode} buy ${buy} / sell ${sell} · extracted OK, but ${currencyCode} isn't verified for this source yet — shown as SIMULATED elsewhere until confirmed`;
+          }
         } else {
           // Honestly pass through whatever the adapter actually recorded
           // (SOURCE_UNAVAILABLE, EXTRACTION_ERROR, RATE_VALIDATION_ERROR) —
