@@ -231,11 +231,29 @@ create table if not exists public.notifications (
   rate_id            uuid references public.rates(id) on delete set null,
   triggered_at       timestamptz not null default now(),
   notification_type  text not null default 'browser',
-  delivery_status    text not null default 'DELIVERED' check (delivery_status in ('DELIVERED', 'FAILED', 'PENDING')),
+  -- Phase 25 (25-Aug-2026) bug fix: added 'NOT_APPLICABLE'. Reported: rows
+  -- for notification_type = 'browser' sat permanently as 'PENDING' in this
+  -- table, which read as a stuck/broken delivery. It wasn't stuck — per
+  -- backend/notifications/notify.js's own original comment, 'browser' (and
+  -- the still-unbuilt whatsapp/sms) have no server-side delivery channel
+  -- at all: a browser notification can only ever fire from an open tab
+  -- (frontend/app.js's fireAlert()), a completely separate code path that
+  -- never writes to this table in the first place. 'PENDING' was chosen
+  -- specifically to avoid the worse mistake of claiming DELIVERED or
+  -- FAILED for something no delivery was ever attempted for — but
+  -- 'PENDING' still implies "will resolve soon," which is false here: it
+  -- will never resolve via this table, for any row, ever. 'NOT_APPLICABLE'
+  -- says what's actually true — this channel is structurally undeliverable
+  -- server-side, not stuck in a queue — while keeping the same "never
+  -- claim a delivery that didn't happen" principle PENDING was chosen for
+  -- in the first place.
+  delivery_status    text not null default 'DELIVERED' check (delivery_status in ('DELIVERED', 'FAILED', 'PENDING', 'NOT_APPLICABLE')),
   delivery_error     text,                                        -- Phase 10: notify.js's error message when
                                                                     -- delivery_status = 'FAILED' (bad/missing API key,
                                                                     -- no email on the account, Resend/Telegram API error,
                                                                     -- etc.) — null whenever delivery_status isn't FAILED.
+                                                                    -- Phase 25: also populated (non-error, explanatory)
+                                                                    -- when delivery_status = 'NOT_APPLICABLE'.
   message            text
 );
 

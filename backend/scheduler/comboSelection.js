@@ -7,6 +7,33 @@
  * be unit-tested without any of that (see tests/comboSelection.test.js).
  */
 
+// Phase 25 (25-Aug-2026) hidden-issue fix: getRequiredCombos() and
+// readingsForAlert() below used to each hardcode
+// `source === 'tajmuhabath'` as their own private, duplicated way of
+// answering "does this source support branches" — a magic string that
+// had to independently stay in sync with config/websites/tajmuhabath.json's
+// own branchSupport: true (the field frontend/app.js's SOURCES array
+// already treats as the real source of truth) AND with itself, in two
+// separate functions in this one file. Nothing had actually drifted yet
+// (adding Jalinan Duta, Phase 24, correctly needed no change here since it
+// isn't 'tajmuhabath'), but that was luck, not a guarantee — the next
+// source to ever need branch support would have silently done nothing
+// here until someone remembered to add a 3rd/4th copy of the same string
+// check. Reading each config's own branchSupport field instead means this
+// file can never disagree with the one place that's supposed to define it.
+const fs = require('node:fs');
+const path = require('node:path');
+
+const BRANCH_SUPPORTED_SOURCES = new Set(
+  fs.readdirSync(path.join(__dirname, '../../config/websites'))
+    .filter((f) => f.endsWith('.json'))
+    .filter((f) => {
+      const config = JSON.parse(fs.readFileSync(path.join(__dirname, '../../config/websites', f), 'utf8'));
+      return config.branchSupport === true;
+    })
+    .map((f) => f.replace(/\.json$/, ''))
+);
+
 /**
  * Stable string key identifying one (source, currency, branch) combination
  * — the unit of work the scheduler actually needs to check once per run,

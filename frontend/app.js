@@ -1181,12 +1181,17 @@
 
     const ctx = (typeof window.CKM.getMonitoringContext === "function")
       ? window.CKM.getMonitoringContext()
-      : { signedIn: false, activeSavedAlerts: 0 };
+      : { signedIn: false, totalSavedAlerts: 0, active: 0, triggered: 0, disabled: 0 };
 
     let msg;
-    if (ctx.signedIn && ctx.activeSavedAlerts > 0) {
-      const n = ctx.activeSavedAlerts;
-      msg = `No local activity in this tab — that's expected, not a problem. You have ${n} active saved alert${n === 1 ? "" : "s"} already being checked by the scheduled backend job every 5 minutes, independent of this tab; you'll be notified by whichever method you chose when saving (email/Telegram) even with this page closed. This log only ever shows checks run locally, in this browser tab — click "Start monitoring" below if you also want to watch a rate live here.`;
+    if (ctx.signedIn && ctx.totalSavedAlerts > 0) {
+      const parts = [];
+      if (ctx.active > 0) parts.push(`${ctx.active} active — still being checked every 5 minutes`);
+      if (ctx.triggered > 0) parts.push(`${ctx.triggered} already triggered — paused until you reset ${ctx.triggered === 1 ? "it" : "them"}`);
+      if (ctx.disabled > 0) parts.push(`${ctx.disabled} disabled`);
+      const breakdown = parts.join(", ");
+      const n = ctx.totalSavedAlerts;
+      msg = `No local activity in this tab — that's expected, not a problem. You have ${n} saved alert${n === 1 ? "" : "s"} (${breakdown}); anything still active is checked by the scheduled backend job independent of this tab, and you'll be notified by whichever method you chose when saving (email/Telegram) even with this page closed. This log only ever shows checks run locally, in this browser tab — click "Start monitoring" below if you also want to watch a rate live here.`;
     } else if (ctx.signedIn) {
       msg = `No activity yet, and no saved alerts to check in the background. Click "Start monitoring" below to watch a rate live in this tab, or save an alert above so the scheduled backend job checks it automatically, even after you close this page.`;
     } else {

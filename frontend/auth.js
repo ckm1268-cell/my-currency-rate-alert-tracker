@@ -1199,13 +1199,37 @@
       // correct even when currency changes via the plain form dropdown
       // rather than via a chip click (see app.js's onCurrencyChanged calls).
       window.CKM.onCurrencyChanged = renderSavedCurrencyChips;
-      // Phase 22 — lets app.js's renderActivityLog() tailor its empty-state
-      // message to what's actually true for this visitor (see that
-      // function's comment) instead of one static string for everyone.
-      window.CKM.getMonitoringContext = () => ({
-        signedIn: !!currentSession,
-        activeSavedAlerts: myAlertsCache.filter((a) => a.status === "ACTIVE").length,
-      });
+      // Phase 25 (25-Aug-2026) bug fix: reported — a user with 2 saved
+      // alerts (2 currencies) saw the Activity Log say "You have 1 active
+      // saved alert," which read as a bug/miscount. It wasn't a miscount:
+      // per backend/scheduler/run.js's own header comment, an alert that
+      // has already TRIGGERED is deliberately excluded from every
+      // subsequent scheduler run's query ("don't re-fire"), so it
+      // genuinely stops being "actively checked" the moment it fires —
+      // activeSavedAlerts only ever counted status === 'ACTIVE' rows, and
+      // this user's 2nd alert had already triggered by the time they
+      // looked. The count itself (getMonitoringContext, added Phase 22)
+      // was correct; the message just never explained WHY it could differ
+      // from the total saved count, so a correct number looked wrong.
+      // Fix: return the full breakdown (active/triggered/disabled) instead
+      // of a single number, so app.js's renderActivityLog() can spell out
+      // exactly why, instead of asserting a bare count the person has no
+      // way to reconcile against what they actually see in "My saved
+      // alerts" just above it.
+      window.CKM.getMonitoringContext = () => {
+        const counts = { active: 0, triggered: 0, disabled: 0 };
+        myAlertsCache.forEach((a) => {
+          if (a.status === "ACTIVE") counts.active++;
+          else if (a.status === "TRIGGERED") counts.triggered++;
+          else if (a.status === "DISABLED") counts.disabled++;
+        });
+        return {
+          signedIn: !!currentSession,
+          totalSavedAlerts: myAlertsCache.length,
+          activeSavedAlerts: counts.active, // kept for anything still reading this exact field
+          ...counts,
+        };
+      };
     }
 
     // Show a friendly message for a failed callback (e.g. expired/reused

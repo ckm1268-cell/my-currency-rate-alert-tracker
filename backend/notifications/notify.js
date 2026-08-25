@@ -29,7 +29,7 @@
  *           email?: string, telegramChatId?: string }} target
  * @param {{ currency: string, rateType: string, rate: number,
  *           targetRate: number, source: string, retrievedAt?: string|Date }} payload
- * @returns {Promise<{ delivered: boolean, deliveryStatus: "DELIVERED"|"FAILED"|"PENDING", error: string|null }>}
+ * @returns {Promise<{ delivered: boolean, deliveryStatus: "DELIVERED"|"FAILED"|"PENDING"|"NOT_APPLICABLE", error: string|null }>}
  */
 
 'use strict';
@@ -101,10 +101,24 @@ async function notify(target, payload) {
   // 'browser', 'whatsapp', 'sms' — no server-side delivery channel exists
   // for these. 'browser' is Phase 1's channel and only ever fires in an
   // open tab (frontend/app.js's fireAlert()) — that is correct, expected
-  // behavior, not a gap, so this stays PENDING rather than FAILED: the
-  // scheduler DID detect and log the trigger, it's just not this module's
-  // job to deliver it.
-  return { delivered: false, deliveryStatus: 'PENDING', error: null };
+  // behavior, not a gap.
+  //
+  // Phase 25 (25-Aug-2026) bug fix: this used to return deliveryStatus:
+  // 'PENDING' here, which read as a stuck/unresolved delivery — reported
+  // as a bug (every 'browser' row sat as PENDING forever). 'PENDING' was
+  // originally chosen to avoid the worse mistake of claiming DELIVERED or
+  // FAILED for a channel nothing was ever attempted on — but it still
+  // implies "will resolve eventually," which is false: this will never
+  // resolve via this function, for any row, because no server-side
+  // implementation of it could exist (there's no tab to notify). Returning
+  // NOT_APPLICABLE says that plainly instead, while keeping the same
+  // "never claim a delivery that didn't happen" principle intact — see
+  // database/schema.sql's matching CHECK constraint update.
+  return {
+    delivered: false,
+    deliveryStatus: 'NOT_APPLICABLE',
+    error: `The scheduled backend job detected this trigger, but "${target.channel}" has no server-side delivery — it only fires from an open browser tab.`,
+  };
 }
 
 module.exports = { notify, formatAlertText, formatAlertHtml };

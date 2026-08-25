@@ -4,7 +4,9 @@
  * Only the parts of notify() that don't require a real network call are
  * exercised here: message formatting (pure), and every branch that returns
  * BEFORE ever calling sendEmail()/sendTelegramMessage() (missing
- * destination, and the 'browser'/'whatsapp'/'sms' PENDING fallback). The
+ * destination, and the 'browser'/'whatsapp'/'sms' NOT_APPLICABLE fallback —
+ * PENDING through Phase 24, changed in Phase 25: see notify.js's own
+ * comment on that branch for why PENDING was misleading here). The
  * actual DELIVERED path (a real Resend/Telegram API call succeeding) is
  * not something `node --test` can verify without live credentials and
  * network access — same category of gap already flagged honestly for the
@@ -59,16 +61,16 @@ test('notify() with channel "telegram" and no chat id fails cleanly without atte
   assert.match(result.error, /no telegram chat id/i);
 });
 
-test('notify() with channel "browser" returns PENDING — not FAILED, not DELIVERED', async () => {
+test('notify() with channel "browser" returns NOT_APPLICABLE — not FAILED, not DELIVERED, and not the old misleading PENDING', async () => {
   const result = await notify({ channel: 'browser' }, BASE_PAYLOAD);
   assert.equal(result.delivered, false);
-  assert.equal(result.deliveryStatus, 'PENDING');
-  assert.equal(result.error, null);
+  assert.equal(result.deliveryStatus, 'NOT_APPLICABLE');
+  assert.match(result.error, /no server-side delivery/i);
 });
 
-test('notify() with an unimplemented channel (whatsapp/sms) also returns PENDING, never crashes', async () => {
+test('notify() with an unimplemented channel (whatsapp/sms) also returns NOT_APPLICABLE, never crashes', async () => {
   const whatsapp = await notify({ channel: 'whatsapp' }, BASE_PAYLOAD);
-  assert.equal(whatsapp.deliveryStatus, 'PENDING');
+  assert.equal(whatsapp.deliveryStatus, 'NOT_APPLICABLE');
   const sms = await notify({ channel: 'sms' }, BASE_PAYLOAD);
-  assert.equal(sms.deliveryStatus, 'PENDING');
+  assert.equal(sms.deliveryStatus, 'NOT_APPLICABLE');
 });

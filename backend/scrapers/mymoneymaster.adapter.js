@@ -7,7 +7,17 @@
  * secondary selector assignment from the original architecture review).
  *
  * Primary path: plain HTTP GET of config.liveRateUrl ('/Home/rate_board')
- * + cheerio parse of the '.smallBox3' per-country cards. No browser
+ * + cheerio parse of the '.ratebox-table-wrap' per-country cards (Phase 25
+ * fix, 25-Aug-2026: this comment still said '.smallBox3' — the class the
+ * site itself used until a real production run hit EXTRACTION_ERROR and
+ * config/websites/mymoneymaster.json's own "SECOND CORRECTION" note was
+ * added identifying the site had switched to '.ratebox-table-wrap' as the
+ * class, with 'smallBox3' surviving only as a non-unique id. The config
+ * (and therefore the actual runtime behavior) was corrected at the time;
+ * this comment and tests/fixtures/mymoneymaster.rate_board.sample.html
+ * were not, which is why the unit tests below started failing against a
+ * stale fixture despite the adapter working correctly in production — see
+ * that fixture's own header for the matching fix). No browser
  * required — confirmed the BUY/SELL values are present in the raw HTTP
  * response, independent of any JS execution.
  *

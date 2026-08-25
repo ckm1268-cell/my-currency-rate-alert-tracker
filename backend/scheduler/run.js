@@ -77,13 +77,16 @@
  *   user's own auth email via the Supabase Auth admin API, or the alert's
  *   own saved telegram_chat_id) and calls notify() for every selected
  *   channel at once (see resolveNotifyTargets() + the Promise.all in
- *   evaluateAlert()), each returning DELIVERED / FAILED / PENDING honestly
- *   based on what actually happened for THAT channel — never optimistically
- *   marked DELIVERED before a send is attempted, and one channel's failure
- *   never blocks another's delivery. 'browser' (Phase 1) and the still-
- *   unimplemented whatsapp/sms channels correctly stay PENDING: notify()
- *   has no server-side channel for them, same "never mislabel" principle
- *   the Phase 5 fireAlert() incident and every phase since has held to.
+ *   evaluateAlert()), each returning DELIVERED / FAILED / PENDING /
+ *   NOT_APPLICABLE honestly based on what actually happened for THAT
+ *   channel — never optimistically marked DELIVERED before a send is
+ *   attempted, and one channel's failure never blocks another's delivery.
+ *   'browser' (Phase 1) and the still-unimplemented whatsapp/sms channels
+ *   correctly return NOT_APPLICABLE (Phase 25 — was PENDING through Phase
+ *   24, which misleadingly implied eventual resolution for something that
+ *   structurally never resolves via this table): notify() has no
+ *   server-side channel for them, same "never mislabel" principle the
+ *   Phase 5 fireAlert() incident and every phase since has held to.
  *
  * - Duplicate-alert suppression needs no extra bookkeeping here: this
  *   script only ever queries alerts with status = 'ACTIVE'. Once an alert
@@ -261,7 +264,8 @@ async function resolveNotifyTargets(sb, alert, emailCache) {
     }
 
     // 'browser', 'whatsapp', 'sms' — notify() itself knows these have no
-    // server-side channel and will return PENDING; nothing to resolve here.
+    // server-side channel and will return NOT_APPLICABLE (Phase 25);
+    // nothing to resolve here.
     targets.push({ channel: method });
   }
   return targets;

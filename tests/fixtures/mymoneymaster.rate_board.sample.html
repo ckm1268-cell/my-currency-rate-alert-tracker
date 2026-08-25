@@ -1,6 +1,18 @@
 <!--
   Fixture for tests/mymoneymaster.adapter.test.js.
 
+  Phase 25 fix (25-Aug-2026): this fixture used class="smallBox3" for the
+  card wrapper, which was the site's OLD structure. config/websites/
+  mymoneymaster.json's own "SECOND CORRECTION" note documents that a real
+  production run already caught the site switching to class=
+  "ratebox-table-wrap" (with "smallBox3" surviving only as a non-unique
+  id) — the config and adapter were fixed at the time, but this fixture
+  was never updated to match, so parseHtml(html, 'CNY') against it was
+  silently returning null (zero '.ratebox-table-wrap' matches) — a stale
+  test giving a false failure against otherwise-correct, already-working
+  production code. Updated below to match config's own documented
+  sampleMatchedHtml exactly.
+
   This is NOT a fabricated mock — the markup structure (class names, tag
   nesting, exact "Buy :" / "Sell :" span text) was captured live from
   http://www.mymoneymaster.com.my/Home/rate_board on 21-Aug-2026 via a
@@ -21,7 +33,7 @@
   <div class="rate-board-section">
     <ul>
       <li>
-        <div class="smallBox3">
+        <div class="ratebox-table-wrap " id="smallBox3">
           <div class="flag-country">
             <span class="flag-image-rate"><img src="http://www.mymoneymaster.com.my/mmm_admin/assets/images/flags/placeholder_usa.png" alt="flag-img"></span>
             <span class="country-rate-board">USA</span>
@@ -36,7 +48,7 @@
         </div>
       </li>
       <li>
-        <div class="smallBox3">
+        <div class="ratebox-table-wrap " id="smallBox3">
           <div class="flag-country">
             <span class="flag-image-rate"><img src="http://www.mymoneymaster.com.my/mmm_admin/assets/images/flags/1465464977_mmmm_china.png" alt="flag-img"></span>
             <span class="country-rate-board">CHN</span>
