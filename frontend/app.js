@@ -1089,9 +1089,23 @@
       const value = state.rateType === "SELL" ? best.sellRate : best.buyRate;
       rateText = formatRate(value);
       if (isReal) rateLabel = `LIVE ${state.rateType} RATE — retrieved directly from source`;
-      if (state.monitoring) {
-        if (state.triggered) { pillClass = "reached"; pillText = (isReal ? "🔴 " : "🔴 SIMULATED: ") + "TARGET REACHED"; }
-        else { pillClass = isReal ? "live" : "waiting"; pillText = isReal ? "🟢 LIVE — WAITING" : "🟡 SIMULATED: WAITING"; }
+      // Bug fix (26-Aug-2026, reported): state.triggered was only ever
+      // checked INSIDE the `state.monitoring` branch, so loading a saved
+      // alert that the BACKEND had already marked TRIGGERED (state.triggered
+      // set from row.status in loadAlertIntoForm, independent of this tab's
+      // own "Start Monitoring" toggle) still showed "🟢 LIVE (not
+      // monitoring)" here — directly contradicting the alert card right
+      // next to it, which correctly reads TRIGGERED from the database. This
+      // hero pill and that card were describing the exact same alert with
+      // opposite-looking colors. Fix: check state.triggered FIRST,
+      // regardless of state.monitoring — it's already a reliable flag
+      // either way (set live by tick() during monitoring, or set from the
+      // database when a saved alert is loaded) — and only use
+      // state.monitoring to distinguish the two non-triggered cases.
+      if (state.triggered) {
+        pillClass = "reached"; pillText = (isReal ? "🔴 " : "🔴 SIMULATED: ") + "TARGET REACHED";
+      } else if (state.monitoring) {
+        pillClass = isReal ? "live" : "waiting"; pillText = isReal ? "🟢 LIVE — WAITING" : "🟡 SIMULATED: WAITING";
       } else {
         pillClass = isReal ? "live" : "mock";
         pillText = isReal ? "🟢 LIVE (not monitoring)" : "🧪 SIMULATED (not monitoring)";
@@ -1129,11 +1143,24 @@
       // about the alert's real condition (ABOVE, PCT_CHANGE, etc.) or
       // duplicate-suppression state. One source of truth for "did this
       // fire," not two that could disagree (Phase 8 fix).
+      //
+      // Bug fix (26-Aug-2026, reported): this used to also require
+      // `state.monitoring` — this tab's own local "Start Monitoring"
+      // toggle — before showing REACHED. That's wrong for a SAVED alert:
+      // loadAlertIntoForm() already sets state.triggered from the
+      // database's own status column the moment the alert loads, entirely
+      // independent of whether this browser tab has ever clicked "Start
+      // Monitoring." So simply viewing a saved alert that the backend had
+      // already marked TRIGGERED showed a plain green "🟢 LIVE" badge here
+      // — directly contradicting the "TRIGGERED" pill on the alert card
+      // immediately above this table, for the exact same alert. Dropping
+      // the state.monitoring requirement makes state.triggered alone the
+      // one source of truth this comment already promised, in both cases.
       const statusBadge = r.status === "SOURCE_UNAVAILABLE" ? `<span class="status-pill error" style="font-size:.72rem;">⚠ UNAVAILABLE</span>`
         : r.status === "EXTRACTION_ERROR" ? `<span class="status-pill error" style="font-size:.72rem;">⚠ EXTRACTION ERROR</span>`
         : r.status === "STALE" ? `<span class="status-pill error" style="font-size:.72rem;">🟠 STALE</span>`
         : !r.valid ? `<span class="status-pill error" style="font-size:.72rem;">⚠ INVALID</span>`
-        : state.monitoring && i === bestIdx && state.triggered ? `<span class="status-pill reached" style="font-size:.72rem;">🔴 REACHED</span>`
+        : i === bestIdx && state.triggered ? `<span class="status-pill reached" style="font-size:.72rem;">🔴 REACHED</span>`
         : r.origin === "REAL" ? `<span class="status-pill live" style="font-size:.72rem;">🟢 LIVE</span>`
         : `<span class="status-pill waiting" style="font-size:.72rem;">🟡 WAITING</span>`;
       return `<tr class="${i === bestIdx ? "is-best" : ""}">
