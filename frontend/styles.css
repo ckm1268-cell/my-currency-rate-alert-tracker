@@ -428,6 +428,19 @@ select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
 #historyHeading,
 #activityHeading { font-family: var(--font-body); }
 
+/* Phase 36 (26-Aug-2026) fix: requested — same treatment again, this
+   time for the Account card's headline ("Save Alerts To Your Account",
+   should match its own eyebrow "Your account") and the form panel's
+   headline ("Build Your Alert", should match the sans-serif font every
+   field label — e.g. "Currency" — already uses via .field label's
+   inherited font-body, since .form-panel h2 sets no font-family of its
+   own and so falls through to the global h1/h2/h3 serif rule). Scoped to
+   these two ids (added on the <h3>/<h2> in index.html) rather than
+   changing the global h1,h2,h3 rule, which still governs every other
+   heading on the page. */
+#accountHeading,
+#formHeading { font-family: var(--font-body); }
+
 /* ---------- Hero rate card ---------- */
 .hero-pair { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; }
 /* Phase 32 (26-Aug-2026) fix: requested — "Your saved alerts" (shown here

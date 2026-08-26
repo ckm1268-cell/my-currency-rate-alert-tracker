@@ -656,7 +656,9 @@
       // "saved", since this line is this card's own headline (right below
       // its "Best available rate for your alert" eyebrow), not a sentence
       // continuing that eyebrow's text.
-      rowsHeading.textContent = `${myAlertsCache.length} Saved alert${myAlertsCache.length === 1 ? "" : "s"}`;
+      // Phase 36 (26-Aug-2026) follow-up: requested — every word in this
+      // headline capitalized, not just "Saved" — "Alert"/"Alerts" too.
+      rowsHeading.textContent = `${myAlertsCache.length} Saved Alert${myAlertsCache.length === 1 ? "" : "s"}`;
     }
     if (!hasAlerts) return;
 
