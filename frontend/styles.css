@@ -406,9 +406,26 @@ select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
   color: var(--ink-faint);
   font-weight: 600;
 }
+/* Phase 32 (26-Aug-2026) fix: requested — the Multi-source comparison
+   card's headline ("Every selected money changer, side by side") should
+   read in the same font as its own eyebrow label above it
+   ("Multi-source comparison"), not the serif display font the global
+   h1/h2/h3 rule applies everywhere else. Scoped to this one id (added on
+   the <h3> in index.html) rather than changing the global h1,h2,h3 rule,
+   which still governs every other heading on the page (form panel,
+   account panel, chart, activity log). */
+#compareHeading { font-family: var(--font-body); }
 
 /* ---------- Hero rate card ---------- */
 .hero-pair { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; }
+/* Phase 32 (26-Aug-2026) fix: requested — "Your saved alerts" (shown here
+   instead of the CNY/MYR pair once the user has saved alerts — see
+   auth.js's renderHeroRows()) should read in the same font as its own
+   eyebrow label above it ("Best available rate for your alert"), not the
+   serif display font every other headline on this card uses. Scoped to
+   this one id rather than changing .hero-pair itself, since that class is
+   shared with #heroPair ("CNY / MYR"), which keeps the display font. */
+#heroRowsHeading { font-family: var(--font-body); }
 .hero-grid {
   display: grid;
   grid-template-columns: 1.3fr 1fr 1fr;

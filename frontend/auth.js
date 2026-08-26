@@ -652,7 +652,11 @@
     if (pillEl) pillEl.style.display = hasAlerts ? "none" : "";
     if (rowsHeading) {
       rowsHeading.style.display = hasAlerts ? "" : "none";
-      rowsHeading.textContent = `${myAlertsCache.length} saved alert${myAlertsCache.length === 1 ? "" : "s"}`;
+      // Phase 32 (26-Aug-2026) fix: requested — "Saved" capitalized, not
+      // "saved", since this line is this card's own headline (right below
+      // its "Best available rate for your alert" eyebrow), not a sentence
+      // continuing that eyebrow's text.
+      rowsHeading.textContent = `${myAlertsCache.length} Saved alert${myAlertsCache.length === 1 ? "" : "s"}`;
     }
     if (!hasAlerts) return;
 
