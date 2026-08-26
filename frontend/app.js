@@ -372,6 +372,40 @@
     // object has no such field), which correctly resolves to false there.
     state.triggered = row.status === "TRIGGERED";
     state.forcedMode = null;
+
+    // Bug fix (26-Aug-2026, reported): a saved, signed-in alert required a
+    // manual "Start monitoring" click in THIS TAB before it would even be
+    // locally tracked/displayed as live or fire the in-tab browser
+    // notification — even though the real, authoritative monitoring (the
+    // backend's every-5-minute scheduled check, which is what actually
+    // evaluates the target and sends email/Telegram/push) has been running
+    // the whole time regardless of any button here. That's backwards from
+    // the user's own expectation and from how this app is described
+    // everywhere else: a saved ACTIVE/TRIGGERED alert is already being
+    // watched, full stop — this tab shouldn't need a separate "did you also
+    // press a button" condition layered on top just to keep up locally.
+    // Auto-engage local monitoring the instant a REAL saved alert loads —
+    // row.id only ever exists on an actual Supabase row; DEFAULT_ALERT_ROW
+    // (the signed-out/no-saved-alerts demo state resetFormToDefaults()
+    // uses) never has one, so that quick/unsaved-alert flow still requires
+    // its own explicit "Start monitoring" click, unchanged.
+    //
+    // Deliberately NOT calling startMonitoring() itself here: that function
+    // also resets state.triggered/state.history/lastSelectedValue to a
+    // fresh start, which would either wipe the real TRIGGERED state just
+    // set two lines above back to "waiting" (a worse bug than this one) or
+    // cause an immediate spurious re-fire of the in-tab notification on
+    // every single page load/reload for an alert that's already past
+    // target. Only state.monitoring itself, plus the button's own label, are
+    // set here — everything else this row needs was already synced above.
+    if (row.id != null) {
+      state.monitoring = true;
+      if ($("startBtn")) {
+        $("startBtn").textContent = "✓ Monitoring active";
+        $("startBtn").dataset.active = "true";
+      }
+    }
+
     callHook("onCurrencyChanged");
     loadSupabaseRates(); // Phase 20 — don't wait out the poll interval after a currency switch
 
