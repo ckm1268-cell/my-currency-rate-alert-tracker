@@ -920,10 +920,47 @@
   function pickBestReading(readings, rateType) {
     const validReadings = readings.filter((r) => r.valid);
     if (!validReadings.length) return readings[0] || null;
+
+    // Bug fix (26-Aug-2026, reported: KRW/JPY/VND showing a SIM badge and
+    // a fabricated-looking number on the dashboard even though 2-3 of
+    // their selected sources DO have real adapter support for that
+    // currency — see hasRealAdapter()/CODE_MATCHED_SOURCES above).
+    //
+    // Root cause: this function used to pick the numerically best reading
+    // across ALL valid readings regardless of origin — real and simulated
+    // mixed together. simulateReading()'s random walk (stepWalk()) has no
+    // reason to land close to the real rate, so on any given tick a
+    // simulated number can easily out-rank (be lower, for SELL) the real
+    // ones purely by chance, silently winning "best" and getting displayed
+    // — and origin-tagged — as if it were the live figure. Confirmed via
+    // this project's own source-support tables: My Money Master has no
+    // real KRW/VND card and Merchantrade Asia excludes JPY (unit
+    // mismatch) — so an alert selecting all four sources for KRW mixes
+    // 3 real readings (Taj Muhabath, Jalinan Duta, Merchantrade Asia) with
+    // 1 simulated one (My Money Master), and the simulated one was
+    // sometimes winning.
+    //
+    // This isn't just a cosmetic mislabel: tick() (above) feeds this same
+    // function's return value straight into isTargetMet()/fireAlert() for
+    // the in-tab client-side alert, so a mixed real+simulated alert could
+    // fire — or fail to fire — off a fabricated number. That's exactly
+    // the class of false alert PROJECT INSTRUCTIONS section 9 requires
+    // guarding against, and section 25 requires never silently
+    // substituting an alternative source for the real one.
+    //
+    // Fix: only ever fall back to a simulated reading when NO valid real
+    // reading exists among the currently selected sources for this
+    // currency. Whenever at least one real source produced a valid
+    // reading, simulated readings are excluded from the pool entirely —
+    // "best" is always the best REAL reading in that case, never a
+    // fabricated number that merely happened to look better.
+    const realReadings = validReadings.filter((r) => r.origin === "REAL");
+    const pool = realReadings.length ? realReadings : validReadings;
+
     const key = rateType === "SELL" ? "sellRate" : "buyRate";
     const better = (a, b) => (rateType === "SELL" ? a[key] < b[key] : a[key] > b[key]);
-    let best = validReadings[0];
-    validReadings.forEach((r) => { if (better(r, best)) best = r; });
+    let best = pool[0];
+    pool.forEach((r) => { if (better(r, best)) best = r; });
     return best;
   }
 
