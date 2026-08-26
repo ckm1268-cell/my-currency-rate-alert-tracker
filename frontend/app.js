@@ -1705,6 +1705,28 @@
 
     on("alertForm", "submit", (e) => {
       e.preventDefault();
+      // Bug fix (26-Aug-2026, reported): now that a saved alert auto-engages
+      // monitoring on load (see loadAlertIntoForm() above), the button
+      // almost always already reads "✓ Monitoring active" by the time
+      // anyone could click it. But this handler still called the full
+      // startMonitoring() unconditionally — which resets state.triggered to
+      // false regardless of the alert's real status — so clicking an
+      // already-active button on an alert that was genuinely already past
+      // target immediately looked like a fresh trigger: the in-tab
+      // notification and toast fired again right there. That's real,
+      // correct 'browser'-channel behavior (it only ever runs client-side,
+      // in this tab, the instant this tab evaluates it), not a bug on its
+      // own — but resetting an already-correct state to produce it was.
+      // Real email/Telegram/push are dispatched exclusively by the backend
+      // scheduled job, never by anything in this file — no button here can
+      // make those fire early or explains their absence; they simply run on
+      // their own schedule, unaffected by this click either way. Only
+      // start fresh (reset triggered/history) on a genuine OFF -> ON
+      // transition — a resubmit while already monitoring just reaffirms it.
+      if (state.monitoring) {
+        $("formStatus").textContent = "Monitoring is already active for this alert — no need to click again.";
+        return;
+      }
       startMonitoring();
     });
 
