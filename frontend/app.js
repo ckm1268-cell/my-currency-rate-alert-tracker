@@ -1478,21 +1478,25 @@
   // misconfigured OS clock, or simply a non-en-MY locale would silently
   // show a different format/timezone than the rest of the app). Matches
   // backend/notifications/notify.js's formatMalaysiaTime() exactly — same
-  // explicit Asia/Kuala_Lumpur timezone, same DD-MMM-YYYY HH:MM:SS shape —
-  // so every channel (browser, email, Telegram, push) reports the exact
-  // same time for the exact same trigger, regardless of where each one
-  // happens to run. Duplicated rather than shared because this project has
-  // no bundler/shared-module setup between frontend and backend (same
+  // explicit Asia/Kuala_Lumpur timezone, same DD-MMM-YYYY hh:mm:ss AM/PM
+  // shape — so every channel (browser, email, Telegram, push) reports the
+  // exact same time for the exact same trigger, regardless of where each
+  // one happens to run. Duplicated rather than shared because this project
+  // has no bundler/shared-module setup between frontend and backend (same
   // reasoning as SOURCE_DISPLAY_NAMES/ADAPTER_CURRENCY_UNIT elsewhere).
+  //
+  // Bug fix (26-Aug-2026, reported): switched from 24-hour to 12-hour clock
+  // with an AM/PM suffix — see notify.js's matching comment for the exact
+  // same change and reasoning; kept identical here so the two never drift.
   function formatMalaysiaTime(input) {
     const d = input ? new Date(input) : new Date();
-    const parts = new Intl.DateTimeFormat("en-GB", {
+    const parts = new Intl.DateTimeFormat("en-US", {
       timeZone: "Asia/Kuala_Lumpur",
       day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
     }).formatToParts(d);
     const get = (type) => parts.find((p) => p.type === type).value;
-    return `${get("day")}-${get("month")}-${get("year")} ${get("hour")}:${get("minute")}:${get("second")}`;
+    return `${get("day")}-${get("month")}-${get("year")} ${get("hour")}:${get("minute")}:${get("second")} ${get("dayPeriod")}`;
   }
 
   // ---------------------------------------------------------------------

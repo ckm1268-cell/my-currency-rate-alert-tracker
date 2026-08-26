@@ -55,15 +55,24 @@ test('formatAlertText falls back to the current time when retrievedAt is missing
 // own timezone — this test proves the exact output for a known instant,
 // not just that SOME "Time:" line exists (the two tests above already
 // covered that, but neither would have caught the wrong-timezone bug).
-test('formatAlertText renders the Time: line in Malaysia local time (UTC+8), DD-MMM-YYYY HH:MM:SS, regardless of host timezone', () => {
-  // BASE_PAYLOAD.retrievedAt = '2026-08-22T13:02:00.000Z' -> 13:02 UTC + 8h = 21:02 MYT.
+//
+// Bug fix (26-Aug-2026, reported again): switched from 24-hour to 12-hour
+// clock with an AM/PM suffix — 21:02:00 becomes 09:02:00 PM.
+test('formatAlertText renders the Time: line in Malaysia local time (UTC+8), DD-MMM-YYYY hh:mm:ss AM/PM, regardless of host timezone', () => {
+  // BASE_PAYLOAD.retrievedAt = '2026-08-22T13:02:00.000Z' -> 13:02 UTC + 8h = 21:02 MYT = 09:02 PM.
   const text = formatAlertText(BASE_PAYLOAD);
-  assert.ok(text.includes('Time:\n22-Aug-2026 21:02:00'), `expected Malaysia-formatted time in:\n${text}`);
+  assert.ok(text.includes('Time:\n22-Aug-2026 09:02:00 PM'), `expected Malaysia-formatted time in:\n${text}`);
 });
 
 test('formatMalaysiaTime is exported directly and available for other channels (push) to use', () => {
   const { formatMalaysiaTime } = require('../backend/notifications/notify');
-  assert.equal(formatMalaysiaTime('2026-08-26T00:09:45.000Z'), '26-Aug-2026 08:09:45');
+  assert.equal(formatMalaysiaTime('2026-08-26T00:09:45.000Z'), '26-Aug-2026 08:09:45 AM');
+});
+
+test('formatMalaysiaTime renders the midnight edge case as 12:00:00 AM, not 00:00:00', () => {
+  const { formatMalaysiaTime } = require('../backend/notifications/notify');
+  // 2026-08-25T16:00:00.000Z + 8h = 2026-08-26T00:00:00 MYT (midnight).
+  assert.equal(formatMalaysiaTime('2026-08-25T16:00:00.000Z'), '26-Aug-2026 12:00:00 AM');
 });
 
 test('notify() with channel "email" and no email on file fails cleanly without attempting a send', async () => {

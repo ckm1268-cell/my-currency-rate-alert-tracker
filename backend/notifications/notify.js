@@ -70,16 +70,25 @@ const { sendWebPush } = require('./webpush');
  * possibly-diverging implementation — see that file for why it still needs
  * its own small copy anyway (no shared module system between front/back end
  * in this project).
+ *
+ * Bug fix (26-Aug-2026, reported): switched from 24-hour to 12-hour clock
+ * with an AM/PM suffix, per request — e.g. "26-Aug-2026 09:39:29 PM" instead
+ * of "26-Aug-2026 21:39:29". `hour12: true` on its own would still need a
+ * plain-English AM/PM label pulled out separately, so this reads the
+ * `dayPeriod` part straight out of the same formatToParts() call rather than
+ * building it by hand — en-US's dayPeriod values are already the plain
+ * "AM"/"PM" this app wants, no extra mapping needed. Confirmed correct at
+ * the midnight edge case too (00:00 MYT -> "12:00:00 AM", not "00:00:00").
  */
 function formatMalaysiaTime(input) {
   const d = input ? new Date(input) : new Date();
-  const parts = new Intl.DateTimeFormat('en-GB', {
+  const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'Asia/Kuala_Lumpur',
     day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
   }).formatToParts(d);
   const get = (type) => parts.find((p) => p.type === type).value;
-  return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')}:${get('second')}`;
+  return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')}:${get('second')} ${get('dayPeriod')}`;
 }
 
 /**
