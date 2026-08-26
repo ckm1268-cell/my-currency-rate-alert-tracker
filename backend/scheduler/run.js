@@ -69,6 +69,16 @@
  *   section 24 logging requirement; a failed check is exactly as much a
  *   fact worth recording as a successful one, never silently dropped.
  *
+ * - Phase 31 (26-Aug-2026): every LIVE/STALE reading also gets one extra,
+ *   optional cross-check against Bank Negara Malaysia's own published
+ *   Interbank reference rate (backend/validation/bnmCrossCheck.js) before
+ *   being written — a second, independent, live benchmark on top of (never
+ *   instead of) each adapter's own static expectedRange bounds. If BNM is
+ *   unreachable or doesn't cover a currency, this silently no-ops and the
+ *   reading is written exactly as before; it only ever downgrades a
+ *   reading to RATE_VALIDATION_ERROR, and only when the deviation is gross
+ *   enough to look like a scraping bug rather than a normal retail spread.
+ *
  * - A triggered alert's `notifications` row(s) now reflect a REAL delivery
  *   attempt, as of Phase 10 (22-Aug-2026) — backend/notifications/notify.js
  *   is no longer a throwing scaffold. As of Phase 11, an alert's
@@ -103,6 +113,7 @@ const { getServiceRoleClient } = require('../db/supabaseClient');
 const { isTargetMet, pickBestReading } = require('../targetEngine/compareTarget');
 const { comboKey, getRequiredCombos, readingsForAlert } = require('./comboSelection');
 const { notify } = require('../notifications/notify');
+const { crossCheckAgainstBnm } = require('../validation/bnmCrossCheck');
 
 const ADAPTERS = {
   mymoneymaster: () => require('../scrapers/mymoneymaster.adapter'),
@@ -207,6 +218,50 @@ async function checkCombo(sb, combo) {
     `[scheduler]   -> status=${reading.status} validationStatus=${reading.validationStatus}` +
       (reading.errorMessage ? ` errorMessage=${reading.errorMessage}` : '')
   );
+
+  // Phase 31 (26-Aug-2026) — BNM reference-rate cross-check. Only run for
+  // readings that already cleared this adapter's own expectedRange
+  // validation and came back LIVE or STALE; nothing to gain by
+  // cross-checking a reading we've already rejected for another reason.
+  // crossCheckAgainstBnm() never throws and returns null whenever the
+  // check couldn't be meaningfully performed (BNM unreachable, currency
+  // not covered, etc.) — that null case intentionally leaves `reading`
+  // completely untouched, so BNM being briefly unavailable can never block
+  // or fail a real check. Only a genuinely GROSS deviation (see
+  // backend/validation/bnmCrossCheck.js's threshold) downgrades the
+  // reading — this is an extra layer on top of, never a replacement for,
+  // each adapter's own expectedRange bounds.
+  if (reading.status === 'LIVE' || reading.status === 'STALE') {
+    const crossCheck = await crossCheckAgainstBnm(reading);
+    if (crossCheck && crossCheck.grosslyOffReference) {
+      console.warn(
+        `[scheduler]   BNM cross-check: ${combo.source} ${combo.currency} deviates ` +
+          `${crossCheck.deviationPct.toFixed(1)}% from BNM's own reference rate (ours ~` +
+          `${crossCheck.adapterMiddle.toFixed(4)} vs BNM ~${crossCheck.bnmMiddleAdapterUnit.toFixed(4)}, ` +
+          `session ${crossCheck.session}, ${crossCheck.rateDate}) — flagging as RATE_VALIDATION_ERROR ` +
+          `instead of ${reading.status}.`
+      );
+      reading = {
+        ...reading,
+        status: 'RATE_VALIDATION_ERROR',
+        validationStatus: 'FAILED',
+        errorMessage:
+          `Passed this adapter's own expectedRange check, but the reading (~${crossCheck.adapterMiddle.toFixed(4)}) ` +
+          `deviates ${crossCheck.deviationPct.toFixed(1)}% from Bank Negara Malaysia's own published Interbank ` +
+          `reference rate for ${combo.currency} (~${crossCheck.bnmMiddleAdapterUnit.toFixed(4)}, session ` +
+          `${crossCheck.session}, ${crossCheck.rateDate}) — more likely a decimal-placement, unit-scaling, or ` +
+          `extraction error than a genuine ${crossCheck.deviationPct.toFixed(0)}% retail spread. See ` +
+          `backend/validation/bnmCrossCheck.js.`,
+      };
+    } else if (crossCheck) {
+      console.log(
+        `[scheduler]   BNM cross-check: within normal range (${crossCheck.deviationPct.toFixed(1)}% deviation ` +
+          `from BNM reference ~${crossCheck.bnmMiddleAdapterUnit.toFixed(4)}, session ${crossCheck.session}).`
+      );
+    } else {
+      console.log('[scheduler]   BNM cross-check: skipped (reference rate unavailable this run).');
+    }
+  }
 
   const rateRow = await insertRateRow(sb, reading);
 
