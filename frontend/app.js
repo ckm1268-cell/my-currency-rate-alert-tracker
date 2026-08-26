@@ -92,14 +92,27 @@
     mymoneymaster: ["CNY"],
     tajmuhabath: ["CNY"],
     merchantradeasia: ["CNY", "VND", "TWD"],
-    // Phase 24 — CNY only. config/websites/jalinanduta.json's validation
-    // block also lists VND/USD/etc. expectedRange bounds (the page's own
-    // table shows them too), but only CNY has actually been confirmed via
-    // a real checkRate.js run — see NEW_SOURCES_INVESTIGATION.md. Add the
-    // others here only after each is separately verified the same way,
+    // Phase 24 — CNY confirmed via a real checkRate.js run, cross-checked
+    // by the project owner against the live site — see
+    // NEW_SOURCES_INVESTIGATION.md and config/websites/jalinanduta.json's
+    // compliance.actionRequired.
+    // Phase 30 (26-Aug-2026) — VND added the same way: the Phase 29 fix
+    // below (buildBackendActivityEntries' hasRealAdapter gate) had exposed
+    // that a real production poll was already returning a plausible VND
+    // rate (We Buy 155.00 / We Sell 159.00) but showing it as SIMULATED
+    // everywhere except the Activity Log, since VND wasn't verified yet.
+    // The project owner opened jalinanduta.com directly and confirmed
+    // those exact numbers, config/websites/jalinanduta.json's
+    // expectedRange now has a VND entry (was previously missing — see
+    // that file's validation.notes), and this array is updated to match.
+    // config/websites/jalinanduta.json's validation block still lists
+    // USD/SGD/THB/JPY/etc. expectedRange bounds too (the page's own table
+    // shows them), but only CNY and VND have actually been confirmed via
+    // a real checkRate.js run cross-checked against the live site — add
+    // the rest here only after each is separately verified the same way,
     // same convention merchantradeasia's own CNY-then-VND-then-TWD
     // rollout followed.
-    jalinanduta: ["CNY"],
+    jalinanduta: ["CNY", "VND"],
   };
 
   const LIVE_DATA_URL = "data/latest-rates.json";
