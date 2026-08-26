@@ -61,6 +61,28 @@ test('notify() with channel "telegram" and no chat id fails cleanly without atte
   assert.match(result.error, /no telegram chat id/i);
 });
 
+// Phase 39 (26-Aug-2026) tests — real Web Push delivery. Same "only test
+// what returns before a real network call" boundary as the email/telegram
+// tests above: notify.js's own upfront guard (no pushSubscription on the
+// target) never reaches backend/notifications/webpush.js's actual
+// webpush.sendNotification() call, so this is fully testable without
+// live VAPID keys or a real browser subscription. webpush.js's own guards
+// (missing VAPID keys, malformed subscription) are covered separately in
+// tests/webpush.test.js.
+test('notify() with channel "push" and no subscription fails cleanly without attempting a send', async () => {
+  const result = await notify({ channel: 'push' }, BASE_PAYLOAD);
+  assert.equal(result.delivered, false);
+  assert.equal(result.deliveryStatus, 'FAILED');
+  assert.match(result.error, /no push subscription/i);
+});
+
+test('notify() with channel "push" and a subscription missing its endpoint also fails cleanly', async () => {
+  const result = await notify({ channel: 'push', pushSubscription: { keys: {} } }, BASE_PAYLOAD);
+  assert.equal(result.delivered, false);
+  assert.equal(result.deliveryStatus, 'FAILED');
+  assert.match(result.error, /no push subscription/i);
+});
+
 test('notify() with channel "browser" returns NOT_APPLICABLE — not FAILED, not DELIVERED, and not the old misleading PENDING', async () => {
   const result = await notify({ channel: 'browser' }, BASE_PAYLOAD);
   assert.equal(result.delivered, false);

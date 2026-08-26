@@ -72,7 +72,7 @@ create table if not exists public.alerts (
   monitoring_interval_minutes integer not null default 5
                            check (monitoring_interval_minutes in (1, 5, 10, 15, 30)),
   notification_methods   text[] not null default '{browser}'::text[]
-                           check (notification_methods <@ ARRAY['browser','email','telegram','whatsapp','sms']::text[]
+                           check (notification_methods <@ ARRAY['browser','email','telegram','push','whatsapp','sms']::text[]
                                   and array_length(notification_methods, 1) > 0),
                                                                     -- Phase 11: an ARRAY, not a single value — any combination
                                                                     -- may be selected at once (e.g. ['email','telegram']),
@@ -83,8 +83,12 @@ create table if not exists public.alerts (
                                                                     -- of independently-selectable options doesn't need a
                                                                     -- join table. 'browser', 'email', and 'telegram' are all
                                                                     -- real as of Phase 10 — see backend/notifications/notify.js.
-                                                                    -- 'whatsapp'/'sms' remain unimplemented (out of scope) but
-                                                                    -- stay in the allowed set for forward compatibility.
+                                                                    -- 'push' is real as of Phase 39 (26-Aug-2026) — genuine Web
+                                                                    -- Push, delivered by the scheduled backend job even with
+                                                                    -- the browser closed, distinct from 'browser' (which only
+                                                                    -- ever fires from an open tab's own JS). 'whatsapp'/'sms'
+                                                                    -- remain unimplemented (out of scope) but stay in the
+                                                                    -- allowed set for forward compatibility.
   telegram_chat_id       text,                                     -- Phase 10: only meaningful when 'telegram' is one of
                                                                     -- notification_methods. Stored per-alert (not per-user) for
                                                                     -- simplicity, matching this table's existing philosophy
@@ -94,6 +98,18 @@ create table if not exists public.alerts (
                                                                     -- email delivery uses the account's own auth.users.email
                                                                     -- via the Supabase Auth admin API (service-role only),
                                                                     -- never a second, potentially-stale copy of it.
+  push_subscription      jsonb,                                    -- Phase 39: only meaningful when 'push' is one of
+                                                                    -- notification_methods. The browser's own PushSubscription
+                                                                    -- object (`{ endpoint, keys: { p256dh, auth } }`), captured
+                                                                    -- by frontend/push.js via PushManager.subscribe() and saved
+                                                                    -- verbatim — same per-alert (not per-user) storage
+                                                                    -- philosophy as telegram_chat_id above, and for the same
+                                                                    -- reason: a subscription is inherently per-device, so
+                                                                    -- there is no single "the user's push endpoint" to hang
+                                                                    -- off a profile table even if one existed. jsonb (not
+                                                                    -- text) so a malformed/partial subscription is rejected by
+                                                                    -- Postgres at write time rather than silently stored as an
+                                                                    -- unparseable string.
 
   status                 text not null default 'ACTIVE'
                            check (status in ('ACTIVE', 'TRIGGERED', 'DISABLED')),
@@ -393,10 +409,36 @@ alter table public.alerts
 
 create index if not exists alerts_last_checked_at_idx on public.alerts (last_checked_at);
 
+-- -----------------------------------------------------------------------------
+-- Phase 39 migration (26-Aug-2026) — real Web Push delivery: push_subscription,
+-- and 'push' added to the notification_methods allowed set. Safe to re-run:
+-- `add column if not exists` is a no-op if it's already there, and the CHECK
+-- constraint uses the same drop-then-create idempotency pattern the Phase 11
+-- migration above already established. Every existing row simply gets
+-- push_subscription = NULL, which notify.js already treats as "no subscription
+-- saved" -> a clean FAILED delivery, not a crash, if 'push' were ever
+-- (incorrectly) present in that row's notification_methods without one — it
+-- won't be, since 'push' didn't exist as a selectable option before this
+-- migration ran.
+-- -----------------------------------------------------------------------------
+
+alter table public.alerts
+  add column if not exists push_subscription jsonb;
+
+alter table public.alerts
+  drop constraint if exists alerts_notification_methods_check;
+alter table public.alerts
+  add constraint alerts_notification_methods_check
+    check (notification_methods <@ ARRAY['browser','email','telegram','push','whatsapp','sms']::text[]
+           and array_length(notification_methods, 1) > 0);
+
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to
 -- get your Project URL / anon key into frontend/supabaseConfig.js, and your
 -- service-role key into a GitHub Actions secret (never into frontend code).
 -- Phase 10 (email/Telegram delivery) additionally needs RESEND_API_KEY and/or
 -- TELEGRAM_BOT_TOKEN as GitHub Actions secrets — see NOTIFICATIONS_SETUP.md.
+-- Phase 39 (Web Push delivery) additionally needs VAPID_PUBLIC_KEY and
+-- VAPID_PRIVATE_KEY as GitHub Actions secrets (plus the public key in
+-- frontend/pushConfig.js) — see PUSH_SETUP.md.
 -- =============================================================================

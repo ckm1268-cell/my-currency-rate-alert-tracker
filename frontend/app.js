@@ -169,8 +169,14 @@
     // from a form field. email now defaults to checked (Phase 11.1); the
     // user must still add RESEND_API_KEY (see NOTIFICATIONS_SETUP.md) and be
     // signed in for it to actually deliver.
-    notifications: { browser: true, email: true, telegram: false },
+    notifications: { browser: true, email: true, telegram: false, push: false },
     telegramChatId: "", // Phase 10 — only meaningful when notifications.telegram is true
+    pushSubscription: null, // Phase 39 — the browser's PushSubscription (as JSON), set by
+                             // frontend/push.js once subscribe() succeeds; only meaningful
+                             // when notifications.push is true. Written via the SAME state
+                             // object push.js reads through window.CKM.getState() — see
+                             // that file's own header comment for why no extra plumbing
+                             // is needed to get it into saveCurrentAlert()'s row.
 
     monitoring: false,
     triggered: false,
@@ -222,6 +228,7 @@
     monitoring_interval_minutes: state.interval,
     notification_methods: Object.keys(state.notifications).filter((k) => state.notifications[k]),
     telegram_chat_id: state.telegramChatId,
+    push_subscription: state.pushSubscription,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -424,7 +431,7 @@
     }
 
     // browser stays permanently on (Phase 11.1 — no checkbox for it); only
-    // email/telegram reflect what this saved alert actually had checked.
+    // email/telegram/push reflect what this saved alert actually had checked.
     const methods = Array.isArray(row.notification_methods)
       ? row.notification_methods
       : (row.notification_method ? [row.notification_method] : ["browser"]);
@@ -436,6 +443,28 @@
 
     state.telegramChatId = row.telegram_chat_id || "";
     if ($("telegramChatId")) $("telegramChatId").value = state.telegramChatId;
+
+    // Phase 39 — Push restores exactly like telegram_chat_id just above:
+    // trust whatever this saved alert's own row already has, rather than
+    // requiring a fresh PushManager.subscribe() call every time an
+    // unrelated field (target rate, interval, etc.) gets edited and saved.
+    // Bug caught before shipping this: an earlier version of this comment
+    // deliberately left state.pushSubscription untouched on restore,
+    // reasoning that only a live subscribe() should ever set it — but
+    // setting a checkbox's `.checked` property directly does not fire a
+    // "change" event, so frontend/push.js's own listener (which is what
+    // would normally populate state.pushSubscription) never ran, and
+    // saveCurrentAlert()'s "push selected but no subscription" guard then
+    // incorrectly blocked saving an edit to an alert that was already a
+    // perfectly valid, previously-subscribed Push alert. Restoring the
+    // stored value directly here — same as every other field on this
+    // form — fixes that: editing and re-saving no longer requires
+    // re-subscribing, and a user who genuinely wants to move Push to a
+    // different device still can, by unchecking and re-checking the box
+    // (which DOES fire "change", and DOES call subscribe() for real).
+    state.notifications.push = methods.includes("push");
+    if ($("notifPush")) $("notifPush").checked = state.notifications.push;
+    state.pushSubscription = row.push_subscription || null;
 
     // Bug fix (23-Aug-2026), found while testing the fix above: everything
     // up to this point updates `state` and the plain form INPUT controls
@@ -1406,9 +1435,13 @@
   function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
   // ---------------------------------------------------------------------
-  // Alerts / notifications (browser notifications; wired to both real and
-  // simulated readings — see fireAlert()'s origin check below. Additional
-  // channels — email, Telegram, WhatsApp — are Phase 10 work.)
+  // Alerts / notifications (in-tab browser notifications; wired to both
+  // real and simulated readings — see fireAlert()'s origin check below.
+  // Additional server-side channels — email, Telegram (Phase 10), and
+  // real Web Push (Phase 39, frontend/push.js) — are delivered by
+  // backend/scheduler/run.js, not from here; this function's own
+  // `new Notification(...)` call only ever fires while this specific tab
+  // is open, which is exactly why Push exists as a separate channel.)
   // ---------------------------------------------------------------------
 
   function fireAlert(reading, value) {

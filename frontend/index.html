@@ -117,6 +117,10 @@
           <input type="checkbox" id="notifTelegram" value="telegram">
           <label for="notifTelegram">Telegram — sent by the scheduled backend job</label>
         </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="notifPush" value="push">
+          <label for="notifPush">Push — sent by the scheduled backend job, works even with your browser closed</label>
+        </div>
         <div class="checkbox-row is-disabled">
           <input type="checkbox" id="notifWhatsapp" value="whatsapp" disabled>
           <label for="notifWhatsapp">WhatsApp — not yet built</label>
@@ -127,6 +131,8 @@
         <label for="telegramChatId">Telegram chat ID</label>
         <input type="text" id="telegramChatId" name="telegramChatId" inputmode="numeric" placeholder="e.g. 123456789">
       </div>
+
+      <p class="hint" id="pushStatus"></p>
 
       <button type="submit" class="btn-primary" id="startBtn">Start monitoring</button>
       <button type="button" class="btn-secondary" id="resetBtn">Reset alert</button>
@@ -389,8 +395,10 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="supabaseConfig.js"></script>
+<script src="pushConfig.js"></script>
 <script src="app.js"></script>
 <script src="auth.js"></script>
 <script src="rateHistory.js"></script>
+<script src="push.js"></script>
 </body>
 </html>

@@ -91,6 +91,42 @@ test('resolveNotifyTargets: browser/whatsapp/sms need no lookup at all', async (
   assert.deepEqual(targets, [{ channel: 'browser' }, { channel: 'whatsapp' }, { channel: 'sms' }]);
 });
 
+// Phase 39 (26-Aug-2026) tests — 'push' resolves from the alert row itself
+// (alerts.push_subscription), same no-lookup shape as 'telegram' resolving
+// from alerts.telegram_chat_id, and unlike 'email' which needs the Auth
+// admin API + a per-run cache.
+
+test('resolveNotifyTargets: "push" passes the alert\'s own push_subscription straight through, unchanged', async () => {
+  const subscription = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys: { p256dh: 'x', auth: 'y' } };
+  const alert = { notification_methods: ['push'], push_subscription: subscription, user_id: 'u1' };
+  const targets = await resolveNotifyTargets({}, alert, new Map());
+  assert.deepEqual(targets, [{ channel: 'push', pushSubscription: subscription }]);
+});
+
+test('resolveNotifyTargets: "push" with no saved subscription still resolves a target (null subscription) rather than throwing — notify.js\'s own guard is what turns this into a clean FAILED', async () => {
+  const alert = { notification_methods: ['push'], push_subscription: null, user_id: 'u1' };
+  const targets = await resolveNotifyTargets({}, alert, new Map());
+  assert.deepEqual(targets, [{ channel: 'push', pushSubscription: null }]);
+});
+
+test('resolveNotifyTargets: push + email + telegram all at once resolves all three targets, push needing no admin-API call', async () => {
+  const fake = fakeSupabase(async () => ({ data: { user: { email: 'user@example.com' } }, error: null }));
+  const subscription = { endpoint: 'https://fcm.googleapis.com/fcm/send/abc', keys: { p256dh: 'x', auth: 'y' } };
+  const alert = {
+    notification_methods: ['push', 'email', 'telegram'],
+    push_subscription: subscription,
+    telegram_chat_id: '555',
+    user_id: 'u1',
+  };
+  const targets = await resolveNotifyTargets(fake.client, alert, new Map());
+  assert.deepEqual(targets, [
+    { channel: 'push', pushSubscription: subscription },
+    { channel: 'email', email: 'user@example.com' },
+    { channel: 'telegram', telegramChatId: '555' },
+  ]);
+  assert.equal(fake.getCalls(), 1, 'push must never trigger an email-style admin API lookup');
+});
+
 test('resolveNotifyTargets: falls back to the old singular notification_method column for a pre-migration row', async () => {
   const targets = await resolveNotifyTargets({}, { notification_method: 'browser', user_id: 'u1' }, new Map());
   assert.deepEqual(targets, [{ channel: 'browser' }]);

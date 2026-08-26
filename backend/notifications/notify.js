@@ -1,32 +1,43 @@
 /**
- * Notification engine — Phase 10 (real email + Telegram delivery)
+ * Notification engine — Phase 10 (real email + Telegram delivery),
+ * extended Phase 39 (26-Aug-2026, real Web Push delivery)
  * ====================================================================
- * STATUS: implemented, 22-Aug-2026. Was a throwing Phase 1 scaffold through
- * Phase 8 — backend/scheduler/run.js logged every trigger with
- * delivery_status "PENDING" because nothing actually pushed it anywhere.
- * This file is what turns that into a real delivery for the two channels
- * the project brief's Phase 2 notification scope covers (email, Telegram);
- * 'browser' and the Phase 3 channels (whatsapp, sms) are still not server-
- * side deliverable — 'browser' by definition only ever fires in an open tab
+ * STATUS: implemented, 22-Aug-2026 (email/telegram); 26-Aug-2026 (push).
+ * Was a throwing Phase 1 scaffold through Phase 8 — backend/scheduler/
+ * run.js logged every trigger with delivery_status "PENDING" because
+ * nothing actually pushed it anywhere. This file is what turns that into a
+ * real delivery for email, Telegram, and (as of Phase 39) push; 'browser'
+ * and the Phase 3 channels (whatsapp, sms) are still not server-side
+ * deliverable — 'browser' by definition only ever fires in an open tab
  * (frontend/app.js's fireAlert(), unchanged since Phase 6), and whatsapp/sms
- * remain genuinely out of scope.
+ * remain genuinely out of scope. 'push' is NOT the same thing as 'browser'
+ * despite both ultimately showing a native OS notification — 'browser' is
+ * a client-side `new Notification(...)` call that requires the tab to be
+ * open and JS running; 'push' is the standard Web Push protocol, sent from
+ * THIS server-side function via a subscription the browser created once
+ * (frontend/push.js), and delivered by the OS/browser's own push service
+ * even with the site's tab, or the whole browser, closed — see
+ * backend/notifications/webpush.js's header comment for the full
+ * explanation of why this needed a real dependency, unlike email/telegram.
  *
  * Pluggable by design, as the original scaffold's header comment promised:
- * each channel (email.js, telegram.js) implements its own narrow send
- * function; this file is the only place that knows how to format the
- * message and which channel a given target maps to. Adding a future channel
- * means adding one file + one branch here, not touching the scheduler.
+ * each channel (email.js, telegram.js, webpush.js) implements its own
+ * narrow send function; this file is the only place that knows how to
+ * format the message and which channel a given target maps to. Adding a
+ * future channel means adding one file + one branch here, not touching the
+ * scheduler.
  *
  * Every call is wrapped so it can never throw: a bad/missing API key, a
  * network failure, or an unconfigured destination (no email on the account,
- * no Telegram chat ID saved) all come back as a clean
- * { delivered: false, deliveryStatus: 'FAILED', error: '...' } result
+ * no Telegram chat ID saved, no push subscription saved) all come back as a
+ * clean { delivered: false, deliveryStatus: 'FAILED', error: '...' } result
  * instead of crashing the scheduler run over one bad delivery — the same
  * resilience pattern backend/scheduler/run.js already uses for a throwing
  * adapter (see checkCombo()'s try/catch).
  *
- * @param {{ channel: "browser"|"email"|"telegram"|"whatsapp"|"sms",
- *           email?: string, telegramChatId?: string }} target
+ * @param {{ channel: "browser"|"email"|"telegram"|"push"|"whatsapp"|"sms",
+ *           email?: string, telegramChatId?: string,
+ *           pushSubscription?: { endpoint: string, keys: object } }} target
  * @param {{ currency: string, rateType: string, rate: number,
  *           targetRate: number, source: string, retrievedAt?: string|Date }} payload
  * @returns {Promise<{ delivered: boolean, deliveryStatus: "DELIVERED"|"FAILED"|"PENDING"|"NOT_APPLICABLE", error: string|null }>}
@@ -36,6 +47,7 @@
 
 const { sendEmail } = require('./email');
 const { sendTelegramMessage } = require('./telegram');
+const { sendWebPush } = require('./webpush');
 
 /**
  * Builds the plain-text alert body, matching the exact template in the
@@ -92,6 +104,23 @@ async function notify(target, payload) {
         return { delivered: false, deliveryStatus: 'FAILED', error: 'No Telegram chat ID saved for this alert.' };
       }
       await sendTelegramMessage({ chatId: target.telegramChatId, text });
+      return { delivered: true, deliveryStatus: 'DELIVERED', error: null };
+    }
+
+    if (target.channel === 'push') {
+      if (!target.pushSubscription || !target.pushSubscription.endpoint) {
+        return {
+          delivered: false,
+          deliveryStatus: 'FAILED',
+          error: 'No push subscription saved for this alert — enable Push on a device and save the alert again.',
+        };
+      }
+      await sendWebPush({
+        subscription: target.pushSubscription,
+        title: `🚨 ${payload.currency} ${payload.rateType} target reached`,
+        body: `${payload.rate} (target ${payload.targetRate}) — ${payload.source}`,
+        url: '/',
+      });
       return { delivered: true, deliveryStatus: 'DELIVERED', error: null };
     }
   } catch (err) {

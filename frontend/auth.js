@@ -63,6 +63,7 @@
     browser: "🔔 Browser (this tab only)",
     email: "✉️ Email",
     telegram: "📨 Telegram",
+    push: "📲 Push (works even closed)",
     whatsapp: "WhatsApp",
     sms: "SMS",
   };
@@ -1003,6 +1004,18 @@
       setSaveStatus('Enter your Telegram chat ID in the panel on the left before saving a Telegram alert — see "Connecting Telegram" in NOTIFICATIONS_SETUP.md if you don\'t have it yet.');
       return;
     }
+    // Phase 39: mirrors the Telegram guard above exactly, for the same
+    // reason — never save an alert that claims a channel is active with
+    // nothing behind it. Unlike Telegram's chat ID (typed by the user),
+    // a push subscription can only come from a real, successful
+    // PushManager.subscribe() call on THIS device (see frontend/push.js) —
+    // there's nothing for the user to type around this guard, which is
+    // deliberate: it should be impossible to save a Push alert that was
+    // never actually subscribed.
+    if (notificationMethods.includes("push") && !state.pushSubscription) {
+      setSaveStatus('Enable Push notifications (check the Push box above and allow the permission prompt) before saving a Push alert.');
+      return;
+    }
 
     const row = {
       currency: state.currency,
@@ -1018,6 +1031,8 @@
       // of the checked channels — never write a stray chat ID onto an
       // alert that didn't select Telegram.
       telegram_chat_id: notificationMethods.includes("telegram") ? state.telegramChatId.trim() : null,
+      // Phase 39: same "only when selected" rule as telegram_chat_id above.
+      push_subscription: notificationMethods.includes("push") ? state.pushSubscription : null,
       // Re-arm on every save, including an edit of a DISABLED/TRIGGERED
       // alert — matches how the rest of this app treats "save"/"reset" as
       // meaning "start watching again from here" (see handleAlertReset()).

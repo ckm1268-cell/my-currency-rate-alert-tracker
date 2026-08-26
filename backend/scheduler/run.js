@@ -290,6 +290,13 @@ async function checkCombo(sb, combo) {
  * that hasn't had database/schema.sql's Phase 11 migration applied yet;
  * once that migration has run, the old column no longer exists and this
  * fallback is simply unreachable.
+ *
+ * Phase 39 (26-Aug-2026): 'push' resolves the same lightweight way
+ * 'telegram' does — its destination (a Web Push subscription object) is
+ * already sitting on the alert row itself (alerts.push_subscription),
+ * written once by frontend/push.js when the user enables Push on a device
+ * and saves the alert. No admin-API lookup, no cache — see the 'push'
+ * branch below.
  */
 async function resolveNotifyTargets(sb, alert, emailCache) {
   const methods = Array.isArray(alert.notification_methods) && alert.notification_methods.length > 0
@@ -300,6 +307,17 @@ async function resolveNotifyTargets(sb, alert, emailCache) {
   for (const method of methods) {
     if (method === 'telegram') {
       targets.push({ channel: 'telegram', telegramChatId: alert.telegram_chat_id });
+      continue;
+    }
+
+    // Phase 39 (26-Aug-2026): 'push' needs no lookup at all, unlike email —
+    // the subscription is already sitting on this exact alert row
+    // (alerts.push_subscription, written by frontend/push.js at save time),
+    // never a separate per-user profile to fetch. notify.js's own guard
+    // handles a null/missing subscription (an alert saved before Push was
+    // ever enabled on any device) as a clean FAILED, not a crash here.
+    if (method === 'push') {
+      targets.push({ channel: 'push', pushSubscription: alert.push_subscription });
       continue;
     }
 
