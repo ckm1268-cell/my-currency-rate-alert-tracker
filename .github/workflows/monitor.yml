@@ -16,11 +16,17 @@
 # See backend/scheduler/run.js's own header comment for the full design
 # rationale (best-rate-across-sources, real delivery resolution, etc.).
 #
-# RESEND_API_KEY and TELEGRAM_BOT_TOKEN below are optional in the sense that
+# RESEND_API_KEY, TELEGRAM_BOT_TOKEN, and (Phase 39, 26-Aug-2026)
+# VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY below are optional in the sense that
 # the run itself won't fail without them — but any active alert using
-# notification_method 'email' or 'telegram' will have its delivery recorded
-# as FAILED (with a clear reason) if the matching secret isn't set. See
-# NOTIFICATIONS_SETUP.md for how to obtain and add both.
+# 'email', 'telegram', or 'push' as one of its notification_methods will
+# have its delivery recorded as FAILED (with a clear reason) if the
+# matching secret isn't set. See NOTIFICATIONS_SETUP.md (email/Telegram)
+# and PUSH_SETUP.md (push) for how to obtain and add each. 'push' is real
+# Web Push — delivered by THIS scheduled job even with the browser fully
+# closed, unlike the always-existing 'browser' channel, which only ever
+# fires from an open tab's own JS (frontend/app.js's fireAlert()) and has
+# no server-side delivery at all — see backend/notifications/notify.js.
 #
 # RECURRING SCHEDULE — enabled Phase 14 (22-Aug-2026), at the project
 # owner's explicit request, on the SAME every-5-minute cadence that was
@@ -104,4 +110,7 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          VAPID_PUBLIC_KEY: ${{ secrets.VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          VAPID_SUBJECT: ${{ secrets.VAPID_SUBJECT }}
         run: node scheduler/run.js
