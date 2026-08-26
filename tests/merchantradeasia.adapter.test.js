@@ -44,13 +44,13 @@ test('parseHtml does not confuse CNY with AUD or JPY rows', () => {
 });
 
 test('parseHtml returns null for a currency with a configured display name but no matching row in the fixture', () => {
-  // GBP is a real row on the live page ("GREAT BRITAIN POUND") but is
-  // deliberately not in currencyDisplayNames yet (only CNY is, matching
-  // this adapter's actual scope) — add it there first if this ever needs
-  // to test "configured but not in this particular fixture" more directly.
-  // For now, reuse CNY's own config against a fixture that's been emptied
-  // of CNY to prove a real "not found" path distinct from the
-  // no-config-entry path covered by the next test.
+  // Phase 38 (26-Aug-2026) note: currencyDisplayNames now also covers
+  // VND/TWD/HKD/EUR/GBP/AUD/THB/KRW (see config/websites/merchantradeasia.json),
+  // not just CNY as when this comment was first written — but this
+  // fixture only has real captured markup for CNY/VND/TWD, so reusing
+  // CNY's own config against a fixture that's been emptied of CNY still
+  // proves the same "configured but not present in THIS fixture" path,
+  // distinct from the no-config-entry path covered by the next test.
   const noCnyHtml = html.replace(/CHINESE RENMINBI/g, 'SOMETHING ELSE');
   const result = parseHtml(noCnyHtml, 'CNY');
   assert.equal(result, null);

@@ -38,12 +38,19 @@ test('parseHtml does not confuse CNY with a different currency card (USD placeho
   assert.notEqual(result.sellRate, 4.25);
 });
 
-test('parseHtml returns null for a currency with no matching card', () => {
-  // GBP has no config.currencyDisplayNames entry AND no card in the
-  // fixture — this should throw (missing config entry), which is the
-  // correct failure mode: we want a loud config error, not a silent null,
-  // when asking for a currency the adapter was never told how to find.
-  assert.throws(() => parseHtml(html, 'GBP'), /No currencyDisplayNames entry/);
+test('parseHtml throws for a currency this site genuinely does not list, rather than returning a silent null', () => {
+  // Phase 38 (26-Aug-2026) update: this test originally used GBP, but
+  // Phase 38 added a real, browser-verified currencyDisplayNames.GBP
+  // entry to config/websites/mymoneymaster.json (the site does list GBP
+  // as "Sterling Pound" — see that file's Phase 38 note), so GBP no
+  // longer exercises the "no config entry" failure mode this test is
+  // actually about. Swapped to THB, which (per the same Phase 38
+  // browser session) this site genuinely does not quote at all — still a
+  // real gap, not a config oversight. This should throw (missing config
+  // entry), which is the correct failure mode: we want a loud config
+  // error, not a silent null, when asking for a currency the adapter was
+  // never told how to find.
+  assert.throws(() => parseHtml(html, 'THB'), /No currencyDisplayNames entry/);
 });
 
 test('parseHtml no longer throws for JPY (config entry now exists) but correctly finds no card in this fixture', () => {

@@ -86,33 +86,56 @@
     BUY: "You're selling foreign currency for MYR — you want the money changer's BUY rate (what they pay you for it). A higher BUY rate is better for you.",
   };
 
-  // Which source+currency combinations have a real Phase 2/3 adapter behind
-  // them. Everything not listed here still falls back to simulateReading().
-  const REAL_ADAPTER_SUPPORT = {
-    mymoneymaster: ["CNY"],
-    tajmuhabath: ["CNY"],
-    merchantradeasia: ["CNY", "VND", "TWD"],
-    // Phase 24 — CNY confirmed via a real checkRate.js run, cross-checked
-    // by the project owner against the live site — see
-    // NEW_SOURCES_INVESTIGATION.md and config/websites/jalinanduta.json's
-    // compliance.actionRequired.
-    // Phase 30 (26-Aug-2026) — VND added the same way: the Phase 29 fix
-    // below (buildBackendActivityEntries' hasRealAdapter gate) had exposed
-    // that a real production poll was already returning a plausible VND
-    // rate (We Buy 155.00 / We Sell 159.00) but showing it as SIMULATED
-    // everywhere except the Activity Log, since VND wasn't verified yet.
-    // The project owner opened jalinanduta.com directly and confirmed
-    // those exact numbers, config/websites/jalinanduta.json's
-    // expectedRange now has a VND entry (was previously missing — see
-    // that file's validation.notes), and this array is updated to match.
-    // config/websites/jalinanduta.json's validation block still lists
-    // USD/SGD/THB/JPY/etc. expectedRange bounds too (the page's own table
-    // shows them), but only CNY and VND have actually been confirmed via
-    // a real checkRate.js run cross-checked against the live site — add
-    // the rest here only after each is separately verified the same way,
-    // same convention merchantradeasia's own CNY-then-VND-then-TWD
-    // rollout followed.
-    jalinanduta: ["CNY", "VND"],
+  // Phase 38 (26-Aug-2026) — replaces the old REAL_ADAPTER_SUPPORT
+  // allowlist, which required a human to manually run checkRate.js and
+  // cross-check each new currency against the live site before it could
+  // ever be attempted (the "promotion" ceremony CNY/VND/TWD each went
+  // through). Reported: the project owner has already verified all 4
+  // registered money changers' real sites directly, repeatedly, and does
+  // not want that per-currency ceremony repeated for a currency newly
+  // selected at one of these 4 — only for an actual 5th money changer
+  // added later.
+  //
+  // The underlying adapters split into two genuinely different matching
+  // strategies, which is what actually decides whether a new currency
+  // needs any config at all:
+  //   - Taj Muhabath and Jalinan Duta match a row by its ISO CODE column
+  //     directly (`code === currencyCode` — see
+  //     backend/scrapers/tajmuhabath.adapter.js / jalinanduta.adapter.js's
+  //     parseHtml()). Nothing to configure per currency — any code the
+  //     live table actually lists is picked up automatically. Confirmed
+  //     live (26-Aug-2026, real browser session) that both sites list all
+  //     12 of this app's currencies today; a code either site DOESN'T
+  //     list simply fails with an honest EXTRACTION_ERROR/
+  //     SOURCE_UNAVAILABLE, never a fabricated number.
+  //   - My Money Master and Merchantrade Asia match by each site's own
+  //     DISPLAY NAME text (e.g. "Chinese Renminbi"), which cannot be
+  //     derived from an ISO code alone — config/websites/mymoneymaster.json
+  //     and merchantradeasia.json's own currencyDisplayNames maps supply
+  //     that text, captured directly from each site's live rendered DOM
+  //     (not guessed). The two lists below mirror exactly what's in those
+  //     two config files — same hand-duplication convention already used
+  //     for SOURCE_DISPLAY_NAMES/ADAPTER_CURRENCY_UNIT elsewhere in this
+  //     project. Adding a currency to either of these two sources going
+  //     forward is just adding one line to that JSON file (the real text,
+  //     read from the live page) — not a separate verification step.
+  //     My Money Master's own live page (26-Aug-2026) only has 8 currency
+  //     cards at all — THB/KRW/VND/TWD are not listed there and never
+  //     will be until the site itself adds them, regardless of config.
+  //     Merchantrade Asia deliberately excludes USD and SGD here: the
+  //     site quotes 2-3 note-size variants for each (e.g. "USD BIG",
+  //     "USD MEDIUM", "USD SMALL") with no single obvious "the" rate —
+  //     picking one silently would be a guess, not a verified mapping.
+  //     JPY is also excluded there on purpose: Merchantrade Asia quotes
+  //     JPY per 100 units, not per 1,000 like every other source/CURRENCIES'
+  //     own base convention — adding it as-is would silently compare a
+  //     10x-mismatched number in the multi-source "best rate" picker. Fix
+  //     requires an explicit per-source unit-conversion step, not just a
+  //     config entry — left out until that's built.
+  const CODE_MATCHED_SOURCES = new Set(["tajmuhabath", "jalinanduta"]);
+  const DISPLAY_NAME_MATCHED_CURRENCIES = {
+    mymoneymaster: ["CNY", "JPY", "USD", "SGD", "HKD", "EUR", "GBP", "AUD"],
+    merchantradeasia: ["CNY", "VND", "TWD", "HKD", "EUR", "GBP", "AUD", "THB", "KRW"],
   };
 
   const LIVE_DATA_URL = "data/latest-rates.json";
@@ -501,7 +524,8 @@
   // ---------------------------------------------------------------------
 
   function hasRealAdapter(sourceId, currencyCode) {
-    const supported = REAL_ADAPTER_SUPPORT[sourceId];
+    if (CODE_MATCHED_SOURCES.has(sourceId)) return true;
+    const supported = DISPLAY_NAME_MATCHED_CURRENCIES[sourceId];
     return Array.isArray(supported) && supported.includes(currencyCode);
   }
 
@@ -1298,12 +1322,13 @@
           // validation with no range check at all and gets written to
           // Supabase as status: 'LIVE'. Every OTHER real/simulated split
           // on this dashboard (comparison table, hero, saved-alert cards,
-          // currency chips) is decided by hasRealAdapter()/
-          // REAL_ADAPTER_SUPPORT — a human-curated allowlist of
-          // source+currency combos that have actually been verified
-          // end-to-end (see NEW_SOURCES_INVESTIGATION.md/config's
-          // compliance.actionRequired for what that verification bar is)
-          // — this was the one place reading the raw DB status column
+          // currency chips) is decided by hasRealAdapter() (see that
+          // function's own Phase 38 comment for how it decides this today
+          // — no longer the human-curated REAL_ADAPTER_SUPPORT allowlist
+          // this Phase 29 fix originally described, but the same
+          // principle: one shared gate, not a second copy reading the raw
+          // DB status column directly, which is what this fix actually
+          // changed) — this was the one place reading the raw DB status column
           // directly instead. Applying the same gate here means the log
           // can never again claim a combo is LIVE that the rest of the
           // app still — correctly and deliberately — treats as

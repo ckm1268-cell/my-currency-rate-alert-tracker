@@ -14,7 +14,8 @@ const {
   readingsForAlert,
   isSupportedCombo,
   getSkippedUnsupportedCombos,
-  SUPPORTED_CURRENCIES,
+  CODE_MATCHED_SOURCES,
+  DISPLAY_NAME_MATCHED_CURRENCIES,
 } = require('../backend/scheduler/comboSelection');
 
 test('comboKey is stable and treats a null/missing branch consistently', () => {
@@ -102,25 +103,50 @@ test('readingsForAlert returns an empty array for an alert with no sources', () 
 // the reported bug (My Money Master + VND) directly against
 // getRequiredCombos(), not just against isSupportedCombo() in isolation.
 
-test('isSupportedCombo is true only for a source+currency this project has verified', () => {
-  assert.equal(isSupportedCombo('mymoneymaster', 'CNY'), true);
-  assert.equal(isSupportedCombo('mymoneymaster', 'VND'), false); // the reported bug
-  assert.equal(isSupportedCombo('jalinanduta', 'VND'), true); // Phase 30 promotion
-  assert.equal(isSupportedCombo('merchantradeasia', 'TWD'), true);
-  assert.equal(isSupportedCombo('tajmuhabath', 'VND'), false);
-  assert.equal(isSupportedCombo('doesnotexist', 'CNY'), false); // unknown source, not just unknown currency
+// Phase 38 (26-Aug-2026) rewrite — the project owner asked that the old
+// per-currency manual-verification ceremony no longer gate a currency
+// newly selected at one of the 4 already-trusted money changers. The
+// tests below replace the old human-curated-allowlist assertions with
+// ones matching the new architecture: a code-matched source (Taj
+// Muhabath, Jalinan Duta) supports ANY currency unconditionally, since
+// its adapter matches a live table row by ISO code directly; a
+// display-name-matched source (My Money Master, Merchantrade Asia) only
+// supports a currency that has an actual currencyDisplayNames config
+// entry, since the parser genuinely cannot find the right row without
+// one. See comboSelection.js's own Phase 38 comment for the full
+// writeup.
+
+test('isSupportedCombo is unconditionally true for a code-matched source, regardless of currency', () => {
+  assert.equal(isSupportedCombo('tajmuhabath', 'CNY'), true);
+  assert.equal(isSupportedCombo('tajmuhabath', 'VND'), true); // was false pre-Phase-38 — this source never needed a config entry to work
+  assert.equal(isSupportedCombo('tajmuhabath', 'ZZZ'), true); // even a nonsense code — isSupportedCombo only gates on source type; the adapter's own live-table lookup is what actually fails honestly for a code the site doesn't list
+  assert.equal(isSupportedCombo('jalinanduta', 'VND'), true);
+  assert.equal(isSupportedCombo('jalinanduta', 'TWD'), true); // Phase 38 addition
 });
 
-test('SUPPORTED_CURRENCIES matches frontend/app.js\'s REAL_ADAPTER_SUPPORT exactly', () => {
-  // These two lists must never drift — see comboSelection.js's own
+test('isSupportedCombo is true for a display-name-matched source only when currencyDisplayNames has that currency', () => {
+  assert.equal(isSupportedCombo('mymoneymaster', 'CNY'), true);
+  assert.equal(isSupportedCombo('mymoneymaster', 'JPY'), true); // Phase 38 addition
+  assert.equal(isSupportedCombo('mymoneymaster', 'VND'), false); // the originally reported bug — mymoneymaster's site does not list VND at all
+  assert.equal(isSupportedCombo('merchantradeasia', 'TWD'), true);
+  assert.equal(isSupportedCombo('merchantradeasia', 'KRW'), true); // Phase 38 addition
+  assert.equal(isSupportedCombo('merchantradeasia', 'JPY'), false); // deliberately excluded — real 10x unit-scale mismatch, not a missing config entry
+  assert.equal(isSupportedCombo('merchantradeasia', 'USD'), false); // deliberately excluded — ambiguous BIG/MEDIUM/SMALL denomination tiers, no single canonical rate
+});
+
+test('isSupportedCombo is false for an unknown source, not just an unknown currency', () => {
+  assert.equal(isSupportedCombo('doesnotexist', 'CNY'), false);
+});
+
+test('CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES match frontend/app.js\'s copies exactly', () => {
+  // These two pairs must never drift — see comboSelection.js's own
   // comment for why they're hand-duplicated instead of shared, and
   // bnmCrossCheck.js's ADAPTER_CURRENCY_UNIT for the established pattern
   // this same check already follows elsewhere in the test suite.
-  assert.deepEqual(SUPPORTED_CURRENCIES, {
-    mymoneymaster: ['CNY'],
-    tajmuhabath: ['CNY'],
-    merchantradeasia: ['CNY', 'VND', 'TWD'],
-    jalinanduta: ['CNY', 'VND'],
+  assert.deepEqual(CODE_MATCHED_SOURCES, new Set(['tajmuhabath', 'jalinanduta']));
+  assert.deepEqual(DISPLAY_NAME_MATCHED_CURRENCIES, {
+    mymoneymaster: ['CNY', 'JPY', 'USD', 'SGD', 'HKD', 'EUR', 'GBP', 'AUD'],
+    merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW'],
   });
 });
 

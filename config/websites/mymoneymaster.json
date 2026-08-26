@@ -19,11 +19,17 @@
     "valueRowSelector": ".flag-country-rating-list",
     "matchStrategy": "For each '.ratebox-table-wrap' block, read '.flag-country-rating-head' text and match it against config.currencyDisplayNames[currencyCode] (exact, trimmed). Within the matching block, read each '.flag-country-rating-list' div's two child <span>s: first span's text (case-insensitive, colon-stripped) tells you Buy vs Sell; second span's text is the numeric value.",
     "sampleMatchedHtml": "<div class=\"ratebox-table-wrap \" id=\"smallBox3\"><div class=\"flag-country\">...</div><div class=\"flag-country-rating\"><div class=\"flag-country-rating-head\">Chinese Renminbi</div><div class=\"flag-country-rating-list\"><span>Buy :</span><span> 60.35</span></div><div class=\"flag-country-rating-list\"><span>Sell :</span><span> 60.60</span></div></div></div>",
-    "liveSampleObservedAt": "2026-08-21 (second re-verification, after fixing the merge-conflict-broken CI run): CNY BUY 60.35 / SELL 60.60"
+    "liveSampleObservedAt": "2026-08-21 (second re-verification, after fixing the merge-conflict-broken CI run): CNY BUY 60.35 / SELL 60.60. Phase 38 (26-Aug-2026) — full page re-read via a real connected browser session (javascript_tool executing document.querySelectorAll('.ratebox-table-wrap') directly against the live rendered DOM, not a summarizing fetch), confirming exactly 8 currency cards exist on this page today and capturing every heading's EXACT literal text: Chinese Renminbi (CNY, Buy 60.10/Sell 60.50), Japanese Yen (JPY, Buy 25.25/Sell 25.56 — this exact string also supersedes Phase 37's WebFetch-based guess of the same text, now confirmed character-for-character), Us Dollar (USD, Buy 4.013/Sell 4.033), Sterling Pound (GBP, Buy 5.475/Sell 5.50), Euro Dollar (EUR, Buy 4.675/Sell 4.6995), Hong Kong Dollar (HKD, Buy 51.35/Sell 51.60), Australian Dollar (AUD, Buy 2.88/Sell 2.896), Singapore Dollar (SGD, Buy 3.165/Sell 3.176). THB/KRW/VND/TWD are not listed on this page at all — not a config gap, the site genuinely does not quote them."
   },
   "currencyDisplayNames": {
     "CNY": "Chinese Renminbi",
-    "JPY": "Japanese Yen"
+    "JPY": "Japanese Yen",
+    "USD": "Us Dollar",
+    "GBP": "Sterling Pound",
+    "EUR": "Euro Dollar",
+    "HKD": "Hong Kong Dollar",
+    "AUD": "Australian Dollar",
+    "SGD": "Singapore Dollar"
   },
   "secondarySelector": {
     "description": "DEMOTED as of the Phase 2 re-verification — this was originally documented as the primary selector, but is confirmed to require JavaScript execution (not present in the raw HTTP response). Kept here only as the target for the Playwright fallback path, or if a future adapter revision prefers it once JS-rendered.",
@@ -41,14 +47,20 @@
   "validation": {
     "expectedRange": {
       "CNY": { "min": 40, "max": 80 },
-      "JPY": { "min": 15, "max": 40 }
+      "JPY": { "min": 15, "max": 40 },
+      "USD": { "min": 2, "max": 8 },
+      "GBP": { "min": 3, "max": 10 },
+      "EUR": { "min": 2.5, "max": 9 },
+      "HKD": { "min": 30, "max": 90 },
+      "AUD": { "min": 1.5, "max": 5.5 },
+      "SGD": { "min": 1.5, "max": 6 }
     },
-    "notes": "Range is a sanity bound only, not a hard limit — widen per-currency ranges as real historical data accumulates. Reject a reading where BUY > SELL, or where the value looks like it's missing the /100 unit scaling (e.g. 0.60 instead of 60). JPY range added 26-Aug-2026 (Phase 37): this page quotes JPY per 1000 units (label reads 'UNIT 1000'), matching frontend/app.js's CURRENCIES.base convention for JPY (base 25.55, decimals 2) — same per-unit scale as the real BUY 25.25 / SELL 25.56 observed at verification time, so no /1000 or *1000 adjustment is needed to compare against the other simulated/real JPY readings."
+    "notes": "Range is a sanity bound only, not a hard limit — widen per-currency ranges as real historical data accumulates. Reject a reading where BUY > SELL, or where the value looks like it's missing the /100 unit scaling (e.g. 0.60 instead of 60). JPY range added 26-Aug-2026 (Phase 37). USD/GBP/EUR/HKD/AUD/SGD ranges added 26-Aug-2026 (Phase 38), built around real values observed live that same day (see primarySelector's Phase 38 note) with generous padding matching this file's existing CNY/JPY convention."
   },
   "compliance": {
     "robotsTxt": "not found (404) as of 21-Aug-2026 — no machine-readable crawl restriction in place",
     "termsOfUseUrl": "linked from the site footer",
-    "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. This site's Terms of Use page (/Home/policy) could NOT actually be read as part of that decision — the site has no working HTTPS and the fetching tool used could not follow its http-to-https-back-to-http redirect loop. Genuinely unread, not cleared. See README.md's Compliance note for the full picture across all three sites, and how to actually get eyes on this page (a real browser follows the redirect fine). Phase 37 (26-Aug-2026) — JPY added to currencyDisplayNames/expectedRange above as PREP ONLY, NOT yet promoted to LIVE: reported — every JPY alert always showed SIMULATED, root cause being that no source has ever had JPY verified (frontend/app.js's REAL_ADAPTER_SUPPORT has no JPY entry for any of the 4 sources at all). This sandbox still cannot reach mymoneymaster.com.my directly (network egress blocked, same as every other source in this project); a WebFetch-based inspection of the live '/Home/rate_board' page (not a raw HTML capture, unlike CNY's original verification) found a Japanese Yen card quoting Buy 25.25 / Sell 25.56 per 1000 units, with the heading text appearing as 'Japanese Yen' — but that heading string is an exact-match key (see primarySelector.matchStrategy) read through a markdown-converting summarizer, not confirmed character-for-character the way CNY's 'Chinese Renminbi' was. Do NOT add 'JPY' to frontend/app.js's REAL_ADAPTER_SUPPORT or backend/scheduler/comboSelection.js's SUPPORTED_CURRENCIES until the same 2-step bar every other promotion here has cleared: (1) `node backend/scripts/checkRate.js mymoneymaster JPY` run for real (by the project owner, on a machine that can actually reach the site) returning status LIVE / validationStatus PASSED, and (2) the project owner independently cross-checking that exact BUY/SELL pair against mymoneymaster.com.my open in a real browser at the same time — if the 'Japanese Yen' heading guess above is wrong, step (1) will fail safe with EXTRACTION_ERROR (never a false LIVE), and the real heading text will need correcting here first."
+    "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. This site's Terms of Use page (/Home/policy) could NOT actually be read as part of that decision — the site has no working HTTPS and the fetching tool used could not follow its http-to-https-back-to-http redirect loop. Genuinely unread, not cleared. See README.md's Compliance note for the full picture across all three sites, and how to actually get eyes on this page (a real browser follows the redirect fine). Phase 37 (26-Aug-2026) had added JPY as PREP ONLY pending a manual checkRate.js promotion, since JPY's heading text then came from a summarizing fetch tool, not confirmed exact. Phase 38 (26-Aug-2026) SUPERSEDES that: the project owner reported already having verified all 4 registered money changers' real sites directly, repeatedly, and asked that a per-currency manual-promotion ceremony no longer gate a currency newly selected at one of these 4 — see frontend/app.js's Phase 38 comment (CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES) for the full architecture change. JPY plus USD/GBP/EUR/HKD/AUD/SGD above were all captured the same way: a real connected-browser session executing JavaScript directly against this page's live rendered DOM (primarySelector.liveSampleObservedAt has the exact captured text and values) — not a raw HTML capture like CNY's original Phase 2 verification, but not a guess either. THB/KRW/VND/TWD remain unmapped because the site itself does not list them at all, not because of any remaining verification step."
   },
-  "lastVerified": "2026-08-21"
+  "lastVerified": "2026-08-26 (Phase 38 — CNY/JPY/USD/GBP/EUR/HKD/AUD/SGD all re-confirmed live via a real connected-browser JS session; original card-layout verification 2026-08-21)"
 }

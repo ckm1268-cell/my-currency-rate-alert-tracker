@@ -47,42 +47,66 @@ const BRANCH_SUPPORTED_SOURCES = new Set(
 // Root cause: this file had no concept of which currencies a source's
 // adapter actually supports — getRequiredCombos() built a combo for every
 // source+currency pair ANY alert asked for, even when that source's own
-// config never had a mapping for that currency (My Money Master's
-// currencyDisplayNames only ever had "CNY"). That's not a real failure —
-// it's the scheduler asking the adapter to do something it was never built
-// to do — but it read exactly like one, complete with an internal file
-// path leaking into a user-facing log line.
+// config never had a mapping for that currency. That's not a real failure
+// — it's the scheduler asking the adapter to do something it was never
+// built to do — but it read exactly like one, complete with an internal
+// file path leaking into a user-facing log line.
 //
-// frontend/app.js's REAL_ADAPTER_SUPPORT already answers this exact
-// question for the dashboard's own real-vs-simulated split; this is the
-// same list, hand-duplicated here for the same reason
+// Phase 38 (26-Aug-2026) follow-up: the original fix answered "is this
+// combo supported" with a human-curated allowlist (SUPPORTED_CURRENCIES)
+// that required a manual checkRate.js run + live cross-check before each
+// new currency could be added — mirroring frontend/app.js's old
+// REAL_ADAPTER_SUPPORT. Reported: the project owner has already verified
+// all 4 registered money changers directly, repeatedly, and does not want
+// that per-currency ceremony gating a currency newly selected at one of
+// these 4 — only an actual 5th money changer added later should need it.
+//
+// What actually decides whether a combo can succeed, mechanically, is
+// each adapter's own matching strategy (see the two adapters' parseHtml()
+// for exactly this):
+//   - Taj Muhabath and Jalinan Duta match a row by its ISO CODE column
+//     directly — nothing to configure per currency; any code the live
+//     table lists works, and one it doesn't fails honestly
+//     (EXTRACTION_ERROR/SOURCE_UNAVAILABLE), never fabricated.
+//   - My Money Master and Merchantrade Asia match by each site's own
+//     DISPLAY NAME text, which config/websites/*.json's currencyDisplayNames
+//     supplies — that mapping is a real technical requirement (the parser
+//     can't derive site display text from an ISO code alone), but it's
+//     just config DATA now, not a verification gate: adding a currency to
+//     either of these two going forward means adding one line to that
+//     JSON file (the real text, read off the live page), not a separate
+//     promotion step.
+// frontend/app.js's hasRealAdapter() answers the identical question for
+// the dashboard's own real-vs-simulated split; this mirrors that same
+// split, hand-duplicated here for the same reason
 // backend/validation/bnmCrossCheck.js's ADAPTER_CURRENCY_UNIT and this
 // file's own SOURCE_DISPLAY_NAMES (in run.js) already are — a browser-only
 // IIFE with no CommonJS export can't be require()'d from here. IMPORTANT:
-// keep this in sync by hand with frontend/app.js's REAL_ADAPTER_SUPPORT —
-// whichever one is updated when a new source+currency combo is verified,
-// update the other in the same change.
-const SUPPORTED_CURRENCIES = {
-  mymoneymaster: ['CNY'],
-  tajmuhabath: ['CNY'],
-  merchantradeasia: ['CNY', 'VND', 'TWD'],
-  jalinanduta: ['CNY', 'VND'],
+// keep both lists below in sync by hand with frontend/app.js's
+// CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES.
+const CODE_MATCHED_SOURCES = new Set(['tajmuhabath', 'jalinanduta']);
+const DISPLAY_NAME_MATCHED_CURRENCIES = {
+  mymoneymaster: ['CNY', 'JPY', 'USD', 'SGD', 'HKD', 'EUR', 'GBP', 'AUD'],
+  merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW'],
 };
 
 /**
- * Is this source+currency combo one this project has actually verified an
- * adapter for (see frontend/app.js's REAL_ADAPTER_SUPPORT for the
- * verification bar each entry here had to clear)? Combos NOT in this list
- * are still perfectly legitimate for a user to save as an alert — the
- * frontend shows them as SIMULATED, which is exactly what they are — they
- * just have no real adapter behind them for the backend scheduler to call.
+ * Is this source+currency combo one the scheduler should actually attempt
+ * a live check for? True unconditionally for a code-matched source (Taj
+ * Muhabath, Jalinan Duta — any currency their live table lists works
+ * automatically); for a display-name-matched source (My Money Master,
+ * Merchantrade Asia), true only if that source's own currencyDisplayNames
+ * config has an entry for this currency, since the parser genuinely has
+ * no other way to find the right row. See this file's Phase 38 comment
+ * above for why this is no longer a manual-verification allowlist.
  *
  * @param {string} source
  * @param {string} currency
  * @returns {boolean}
  */
 function isSupportedCombo(source, currency) {
-  const list = SUPPORTED_CURRENCIES[source];
+  if (CODE_MATCHED_SOURCES.has(source)) return true;
+  const list = DISPLAY_NAME_MATCHED_CURRENCIES[source];
   return Array.isArray(list) && list.includes(currency);
 }
 
@@ -193,4 +217,12 @@ function readingsForAlert(alert, resultsByComboKey) {
     .filter(Boolean);
 }
 
-module.exports = { comboKey, getRequiredCombos, readingsForAlert, isSupportedCombo, getSkippedUnsupportedCombos, SUPPORTED_CURRENCIES };
+module.exports = {
+  comboKey,
+  getRequiredCombos,
+  readingsForAlert,
+  isSupportedCombo,
+  getSkippedUnsupportedCombos,
+  CODE_MATCHED_SOURCES,
+  DISPLAY_NAME_MATCHED_CURRENCIES,
+};
