@@ -47,6 +47,25 @@ test('formatAlertText falls back to the current time when retrievedAt is missing
   assert.ok(text.includes('Time:'));
 });
 
+// Bug fix (26-Aug-2026, reported): a real delivered email showed
+// "8/26/2026, 8:09:45 AM" — the GitHub Actions runner's own UTC time in
+// en-US format, not Malaysia time in the DD-MMM-YYYY format PROJECT
+// INSTRUCTIONS section 8/11 itself uses. formatMalaysiaTime() now formats
+// explicitly in Asia/Kuala_Lumpur (UTC+8) regardless of the host process's
+// own timezone — this test proves the exact output for a known instant,
+// not just that SOME "Time:" line exists (the two tests above already
+// covered that, but neither would have caught the wrong-timezone bug).
+test('formatAlertText renders the Time: line in Malaysia local time (UTC+8), DD-MMM-YYYY HH:MM:SS, regardless of host timezone', () => {
+  // BASE_PAYLOAD.retrievedAt = '2026-08-22T13:02:00.000Z' -> 13:02 UTC + 8h = 21:02 MYT.
+  const text = formatAlertText(BASE_PAYLOAD);
+  assert.ok(text.includes('Time:\n22-Aug-2026 21:02:00'), `expected Malaysia-formatted time in:\n${text}`);
+});
+
+test('formatMalaysiaTime is exported directly and available for other channels (push) to use', () => {
+  const { formatMalaysiaTime } = require('../backend/notifications/notify');
+  assert.equal(formatMalaysiaTime('2026-08-26T00:09:45.000Z'), '26-Aug-2026 08:09:45');
+});
+
 test('notify() with channel "email" and no email on file fails cleanly without attempting a send', async () => {
   const result = await notify({ channel: 'email' }, BASE_PAYLOAD);
   assert.equal(result.delivered, false);

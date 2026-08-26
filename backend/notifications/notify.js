@@ -50,11 +50,44 @@ const { sendTelegramMessage } = require('./telegram');
 const { sendWebPush } = require('./webpush');
 
 /**
+ * Bug fix (26-Aug-2026, reported): the "Time:" line was built with
+ * `new Date(...).toLocaleString()`, which formats using whatever locale/
+ * timezone the RUNNING PROCESS defaults to — not the user's. For email and
+ * Telegram, that process is the GitHub Actions runner (UTC, en-US format),
+ * so a real alert triggered at, say, 16:09:45 Malaysia time showed up in
+ * the email as "8/26/2026, 8:09:45 AM" — technically correct in UTC, but
+ * wrong for every user of this app, all of whom are monitoring Malaysian
+ * money changers. Confirmed via a real delivered email.
+ *
+ * Fix: always format explicitly in Asia/Kuala_Lumpur (UTC+8), regardless of
+ * what timezone the server happens to be running in, in DD-MMM-YYYY HH:MM:SS
+ * form — matching the exact format PROJECT INSTRUCTIONS section 8/11's own
+ * examples use ("21-Aug-2026 12:45:32"). Uses Intl.DateTimeFormat with an
+ * explicit `timeZone` rather than toLocaleString()'s implicit one, which is
+ * the only way to get a deterministic timezone independent of the host
+ * environment. Exported so frontend/app.js's client-side "browser" channel
+ * notification (fireAlert()) isn't tempted to duplicate this with its own,
+ * possibly-diverging implementation — see that file for why it still needs
+ * its own small copy anyway (no shared module system between front/back end
+ * in this project).
+ */
+function formatMalaysiaTime(input) {
+  const d = input ? new Date(input) : new Date();
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Kuala_Lumpur',
+    day: '2-digit', month: 'short', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(d);
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')}:${get('second')}`;
+}
+
+/**
  * Builds the plain-text alert body, matching the exact template in the
  * project brief's section 11 ("Notification / Alert System").
  */
 function formatAlertText({ currency, rateType, rate, targetRate, source, retrievedAt }) {
-  const time = retrievedAt ? new Date(retrievedAt).toLocaleString() : new Date().toLocaleString();
+  const time = formatMalaysiaTime(retrievedAt);
   return [
     '🚨 Currency Rate Alert',
     '',
@@ -118,7 +151,14 @@ async function notify(target, payload) {
       await sendWebPush({
         subscription: target.pushSubscription,
         title: `🚨 ${payload.currency} ${payload.rateType} target reached`,
-        body: `${payload.rate} (target ${payload.targetRate}) — ${payload.source}`,
+        // Bug fix (26-Aug-2026): push previously had no Time line at all —
+        // added here for parity with email/Telegram now that "all
+        // notifications should show Malaysia time" was reported. Native OS
+        // push notifications already show their own delivery timestamp
+        // chrome-side, but that's the DEVICE's receive time, not this
+        // alert's actual trigger time — worth stating explicitly, same as
+        // the other two channels.
+        body: `${payload.rate} (target ${payload.targetRate}) — ${payload.source}\nTime: ${formatMalaysiaTime(payload.retrievedAt)}`,
         url: '/',
       });
       return { delivered: true, deliveryStatus: 'DELIVERED', error: null };
@@ -150,4 +190,4 @@ async function notify(target, payload) {
   };
 }
 
-module.exports = { notify, formatAlertText, formatAlertHtml };
+module.exports = { notify, formatAlertText, formatAlertHtml, formatMalaysiaTime };

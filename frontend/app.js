@@ -1471,6 +1471,30 @@
 
   function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
 
+  // Bug fix (26-Aug-2026, reported): fireAlert()'s "Time:" line used
+  // `new Date().toLocaleString()`, which formats using the BROWSER's own
+  // locale/timezone setting — usually fine if the user's OS is correctly
+  // set to Malaysia time, but not guaranteed (a traveling user, a
+  // misconfigured OS clock, or simply a non-en-MY locale would silently
+  // show a different format/timezone than the rest of the app). Matches
+  // backend/notifications/notify.js's formatMalaysiaTime() exactly — same
+  // explicit Asia/Kuala_Lumpur timezone, same DD-MMM-YYYY HH:MM:SS shape —
+  // so every channel (browser, email, Telegram, push) reports the exact
+  // same time for the exact same trigger, regardless of where each one
+  // happens to run. Duplicated rather than shared because this project has
+  // no bundler/shared-module setup between frontend and backend (same
+  // reasoning as SOURCE_DISPLAY_NAMES/ADAPTER_CURRENCY_UNIT elsewhere).
+  function formatMalaysiaTime(input) {
+    const d = input ? new Date(input) : new Date();
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kuala_Lumpur",
+      day: "2-digit", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    }).formatToParts(d);
+    const get = (type) => parts.find((p) => p.type === type).value;
+    return `${get("day")}-${get("month")}-${get("year")} ${get("hour")}:${get("minute")}:${get("second")}`;
+  }
+
   // ---------------------------------------------------------------------
   // Alerts / notifications (in-tab browser notifications; wired to both
   // real and simulated readings — see fireAlert()'s origin check below.
@@ -1499,7 +1523,7 @@
       new Notification(`Currency Rate Alert${isReal ? "" : " (Simulated)"}`, {
         body: `${state.currency} ${state.rateType} = ${formatRate(value)} — target ${formatRate(state.targetRate)} reached.\n` +
           `Money changer: ${reading.sourceName}${reading.branch ? ` (${reading.branch})` : ""}\n` +
-          `Time: ${new Date().toLocaleString()}\n` +
+          `Time: ${formatMalaysiaTime()}\n` +
           (isReal
             ? "Retrieved directly from the live source."
             : "This is simulated data, not a live rate."),
