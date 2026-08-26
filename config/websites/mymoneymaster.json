@@ -22,7 +22,8 @@
     "liveSampleObservedAt": "2026-08-21 (second re-verification, after fixing the merge-conflict-broken CI run): CNY BUY 60.35 / SELL 60.60"
   },
   "currencyDisplayNames": {
-    "CNY": "Chinese Renminbi"
+    "CNY": "Chinese Renminbi",
+    "JPY": "Japanese Yen"
   },
   "secondarySelector": {
     "description": "DEMOTED as of the Phase 2 re-verification — this was originally documented as the primary selector, but is confirmed to require JavaScript execution (not present in the raw HTTP response). Kept here only as the target for the Playwright fallback path, or if a future adapter revision prefers it once JS-rendered.",
@@ -38,13 +39,16 @@
     "playwrightFallback": "navigate to liveRateUrl, wait for '.ratebox-table-wrap .flag-country-rating-head' to be attached, then read as with the HTTP path (same selectors, rendered DOM)"
   },
   "validation": {
-    "expectedRange": { "CNY": { "min": 40, "max": 80 } },
-    "notes": "Range is a sanity bound only, not a hard limit — widen per-currency ranges as real historical data accumulates. Reject a reading where BUY > SELL, or where the value looks like it's missing the /100 unit scaling (e.g. 0.60 instead of 60)."
+    "expectedRange": {
+      "CNY": { "min": 40, "max": 80 },
+      "JPY": { "min": 15, "max": 40 }
+    },
+    "notes": "Range is a sanity bound only, not a hard limit — widen per-currency ranges as real historical data accumulates. Reject a reading where BUY > SELL, or where the value looks like it's missing the /100 unit scaling (e.g. 0.60 instead of 60). JPY range added 26-Aug-2026 (Phase 37): this page quotes JPY per 1000 units (label reads 'UNIT 1000'), matching frontend/app.js's CURRENCIES.base convention for JPY (base 25.55, decimals 2) — same per-unit scale as the real BUY 25.25 / SELL 25.56 observed at verification time, so no /1000 or *1000 adjustment is needed to compare against the other simulated/real JPY readings."
   },
   "compliance": {
     "robotsTxt": "not found (404) as of 21-Aug-2026 — no machine-readable crawl restriction in place",
     "termsOfUseUrl": "linked from the site footer",
-    "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. This site's Terms of Use page (/Home/policy) could NOT actually be read as part of that decision — the site has no working HTTPS and the fetching tool used could not follow its http-to-https-back-to-http redirect loop. Genuinely unread, not cleared. See README.md's Compliance note for the full picture across all three sites, and how to actually get eyes on this page (a real browser follows the redirect fine)."
+    "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. This site's Terms of Use page (/Home/policy) could NOT actually be read as part of that decision — the site has no working HTTPS and the fetching tool used could not follow its http-to-https-back-to-http redirect loop. Genuinely unread, not cleared. See README.md's Compliance note for the full picture across all three sites, and how to actually get eyes on this page (a real browser follows the redirect fine). Phase 37 (26-Aug-2026) — JPY added to currencyDisplayNames/expectedRange above as PREP ONLY, NOT yet promoted to LIVE: reported — every JPY alert always showed SIMULATED, root cause being that no source has ever had JPY verified (frontend/app.js's REAL_ADAPTER_SUPPORT has no JPY entry for any of the 4 sources at all). This sandbox still cannot reach mymoneymaster.com.my directly (network egress blocked, same as every other source in this project); a WebFetch-based inspection of the live '/Home/rate_board' page (not a raw HTML capture, unlike CNY's original verification) found a Japanese Yen card quoting Buy 25.25 / Sell 25.56 per 1000 units, with the heading text appearing as 'Japanese Yen' — but that heading string is an exact-match key (see primarySelector.matchStrategy) read through a markdown-converting summarizer, not confirmed character-for-character the way CNY's 'Chinese Renminbi' was. Do NOT add 'JPY' to frontend/app.js's REAL_ADAPTER_SUPPORT or backend/scheduler/comboSelection.js's SUPPORTED_CURRENCIES until the same 2-step bar every other promotion here has cleared: (1) `node backend/scripts/checkRate.js mymoneymaster JPY` run for real (by the project owner, on a machine that can actually reach the site) returning status LIVE / validationStatus PASSED, and (2) the project owner independently cross-checking that exact BUY/SELL pair against mymoneymaster.com.my open in a real browser at the same time — if the 'Japanese Yen' heading guess above is wrong, step (1) will fail safe with EXTRACTION_ERROR (never a false LIVE), and the real heading text will need correcting here first."
   },
   "lastVerified": "2026-08-21"
 }

@@ -46,6 +46,28 @@ test('parseHtml returns null for a currency with no matching card', () => {
   assert.throws(() => parseHtml(html, 'GBP'), /No currencyDisplayNames entry/);
 });
 
+test('parseHtml no longer throws for JPY (config entry now exists) but correctly finds no card in this fixture', () => {
+  // Phase 37 (26-Aug-2026): config/websites/mymoneymaster.json now has a
+  // currencyDisplayNames.JPY entry ("Japanese Yen") — added from a
+  // WebFetch-based read of the live page (Buy 25.25 / Sell 25.56
+  // observed), NOT a raw HTML capture the way this fixture's real CNY
+  // card was. Deliberately NOT adding a fabricated "JPY card" to this
+  // fixture to make this test pass green — this file's own header
+  // comment is explicit that every card in it is either real captured
+  // markup or an obviously-labeled placeholder, and a guessed JPY block
+  // would blur that line. This test instead proves the ONLY thing that's
+  // actually verifiable from here: the config wiring itself works (no
+  // more "No currencyDisplayNames entry" throw), while still correctly
+  // returning null rather than fabricating a match, since no JPY card is
+  // present in this small fixture. See mymoneymaster.json's
+  // compliance.actionRequired for the real verification step this is
+  // waiting on: a live `node backend/scripts/checkRate.js mymoneymaster
+  // JPY` run, cross-checked by the project owner against the real site,
+  // before JPY can be promoted to frontend/app.js's REAL_ADAPTER_SUPPORT.
+  assert.doesNotThrow(() => parseHtml(html, 'JPY'));
+  assert.equal(parseHtml(html, 'JPY'), null);
+});
+
 test('the extracted CNY reading passes validateRate() against the configured expected range', () => {
   const { config } = require('../backend/scrapers/mymoneymaster.adapter');
   const result = parseHtml(html, 'CNY');
