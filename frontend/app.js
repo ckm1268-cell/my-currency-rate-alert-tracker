@@ -312,6 +312,36 @@
     if ($("currency")) $("currency").value = row.currency;
     state.history = [];
     lastSelectedValue = null;
+    // Phase 35 (26-Aug-2026) bug fix: reported — switching between saved
+    // currencies via the comparison-table chips (JPY → VND → CNY) kept
+    // showing "🔴 REACHED" on My Money Master's row even when its own
+    // SELL rate was clearly sitting ABOVE that currency's target (e.g.
+    // VND: SELL 154.30 vs target 153.50 — should read WAITING, exactly
+    // like Taj Muhabath's row right below it with an almost identical
+    // rate). Root cause: state.triggered and state.forcedMode are BOTH
+    // single, page-wide flags — set once by startMonitoring()/the hidden
+    // test panel's "Force trigger" button and never cleared again until
+    // "Reset alert" is clicked — but renderCompareTable()'s REACHED badge
+    // (app.js line ~1016) and renderHero()'s pill both read state.triggered
+    // directly with no idea it might describe a DIFFERENT currency's alert
+    // than the one currently on screen. Every other per-row field this
+    // function loads (currency, target, condition, sources...) already
+    // gets freshly overwritten from `row` on every call — these two didn't,
+    // so they silently kept whatever a previously-viewed/tested alert had
+    // left behind. Worse than a cosmetic mislabel: while state.triggered
+    // stays incorrectly true, tick()'s own `met && !state.triggered` guard
+    // (line ~919) would also SUPPRESS a genuinely new trigger for the
+    // now-active alert, since it looks like one already fired.
+    // Fixed by syncing both from this row instead of leaving them stale:
+    // state.triggered now mirrors the row's own real status (the same
+    // per-alert "TRIGGERED" the backend scheduler and auth.js's own
+    // updateAlertStatus() already write to Supabase — see auth.js's
+    // alerts.status column), so a chip switch shows this alert's actual
+    // state, not whichever alert was looked at last. row.status is
+    // undefined for DEFAULT_ALERT_ROW (resetFormToDefaults()'s plain demo
+    // object has no such field), which correctly resolves to false there.
+    state.triggered = row.status === "TRIGGERED";
+    state.forcedMode = null;
     callHook("onCurrencyChanged");
     loadSupabaseRates(); // Phase 20 — don't wait out the poll interval after a currency switch
 
