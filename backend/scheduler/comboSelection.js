@@ -41,6 +41,51 @@ const BRANCH_SUPPORTED_SOURCES = new Set(
     .map((f) => f.replace(/\.json$/, ''))
 );
 
+// Phase 33 (26-Aug-2026) fix: reported — the Activity Log showed
+// "My Money Master — VND · EXTRACTION_ERROR: Parse threw: No
+// currencyDisplayNames entry for 'VND' in config/websites/mymoneymaster.json".
+// Root cause: this file had no concept of which currencies a source's
+// adapter actually supports — getRequiredCombos() built a combo for every
+// source+currency pair ANY alert asked for, even when that source's own
+// config never had a mapping for that currency (My Money Master's
+// currencyDisplayNames only ever had "CNY"). That's not a real failure —
+// it's the scheduler asking the adapter to do something it was never built
+// to do — but it read exactly like one, complete with an internal file
+// path leaking into a user-facing log line.
+//
+// frontend/app.js's REAL_ADAPTER_SUPPORT already answers this exact
+// question for the dashboard's own real-vs-simulated split; this is the
+// same list, hand-duplicated here for the same reason
+// backend/validation/bnmCrossCheck.js's ADAPTER_CURRENCY_UNIT and this
+// file's own SOURCE_DISPLAY_NAMES (in run.js) already are — a browser-only
+// IIFE with no CommonJS export can't be require()'d from here. IMPORTANT:
+// keep this in sync by hand with frontend/app.js's REAL_ADAPTER_SUPPORT —
+// whichever one is updated when a new source+currency combo is verified,
+// update the other in the same change.
+const SUPPORTED_CURRENCIES = {
+  mymoneymaster: ['CNY'],
+  tajmuhabath: ['CNY'],
+  merchantradeasia: ['CNY', 'VND', 'TWD'],
+  jalinanduta: ['CNY', 'VND'],
+};
+
+/**
+ * Is this source+currency combo one this project has actually verified an
+ * adapter for (see frontend/app.js's REAL_ADAPTER_SUPPORT for the
+ * verification bar each entry here had to clear)? Combos NOT in this list
+ * are still perfectly legitimate for a user to save as an alert — the
+ * frontend shows them as SIMULATED, which is exactly what they are — they
+ * just have no real adapter behind them for the backend scheduler to call.
+ *
+ * @param {string} source
+ * @param {string} currency
+ * @returns {boolean}
+ */
+function isSupportedCombo(source, currency) {
+  const list = SUPPORTED_CURRENCIES[source];
+  return Array.isArray(list) && list.includes(currency);
+}
+
 /**
  * Stable string key identifying one (source, currency, branch) combination
  * — the unit of work the scheduler actually needs to check once per run,
@@ -81,9 +126,40 @@ function getRequiredCombos(alerts) {
   (alerts || []).forEach((alert) => {
     const sources = Array.isArray(alert.sources) ? alert.sources : [];
     sources.forEach((source) => {
+      // Phase 33 fix — never build a combo for a source+currency this
+      // project hasn't actually verified an adapter for; see
+      // isSupportedCombo()'s own comment above for why calling the
+      // adapter anyway is wrong, not just noisy.
+      if (!isSupportedCombo(source, alert.currency)) return;
       const branch = BRANCH_SUPPORTED_SOURCES.has(source) ? (alert.branch || null) : null;
       const combo = { source, currency: alert.currency, branch };
       seen.set(comboKey(combo), combo);
+    });
+  });
+  return Array.from(seen.values());
+}
+
+/**
+ * Phase 33 — the mirror image of getRequiredCombos() above: every distinct
+ * source+currency pair some alert actually asked for that got skipped
+ * because isSupportedCombo() said no. Not used to check anything — purely
+ * so backend/scheduler/run.js can log what it silently declined to do,
+ * instead of that only being visible as an absence. An alert that skips
+ * here isn't necessarily unevaluated this run — it's still evaluated
+ * normally against any of its OTHER selected sources that ARE supported;
+ * this only means this one particular source contributes nothing.
+ *
+ * @param {Array<{ sources: string[], currency: string }>} alerts
+ * @returns {Array<{ source: string, currency: string }>}
+ */
+function getSkippedUnsupportedCombos(alerts) {
+  const seen = new Map();
+  (alerts || []).forEach((alert) => {
+    const sources = Array.isArray(alert.sources) ? alert.sources : [];
+    sources.forEach((source) => {
+      if (isSupportedCombo(source, alert.currency)) return;
+      const key = `${source}::${alert.currency}`;
+      seen.set(key, { source, currency: alert.currency });
     });
   });
   return Array.from(seen.values());
@@ -117,4 +193,4 @@ function readingsForAlert(alert, resultsByComboKey) {
     .filter(Boolean);
 }
 
-module.exports = { comboKey, getRequiredCombos, readingsForAlert };
+module.exports = { comboKey, getRequiredCombos, readingsForAlert, isSupportedCombo, getSkippedUnsupportedCombos, SUPPORTED_CURRENCIES };

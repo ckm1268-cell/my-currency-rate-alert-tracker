@@ -416,6 +416,18 @@ select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
    account panel, chart, activity log). */
 #compareHeading { font-family: var(--font-body); }
 
+/* Phase 34 (26-Aug-2026) fix: requested — same treatment as
+   #compareHeading/#heroRowsHeading above, this time for the History
+   chart card's headline ("Selected Rate Over Time") and the Activity
+   Log card's headline ("What The Monitor Has Done") — each should read
+   in the same font as its own eyebrow label above it ("Rate History" /
+   "Activity Log"), not the serif display font the global h1/h2/h3 rule
+   applies everywhere else. Scoped to these two ids (added on the <h3>s
+   in index.html) rather than changing the global h1,h2,h3 rule, which
+   still governs every other heading on the page. */
+#historyHeading,
+#activityHeading { font-family: var(--font-body); }
+
 /* ---------- Hero rate card ---------- */
 .hero-pair { font-family: var(--font-display); font-size: 1.3rem; font-weight: 600; }
 /* Phase 32 (26-Aug-2026) fix: requested — "Your saved alerts" (shown here

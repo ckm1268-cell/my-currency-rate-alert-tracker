@@ -111,7 +111,7 @@
 
 const { getServiceRoleClient } = require('../db/supabaseClient');
 const { isTargetMet, pickBestReading } = require('../targetEngine/compareTarget');
-const { comboKey, getRequiredCombos, readingsForAlert } = require('./comboSelection');
+const { comboKey, getRequiredCombos, readingsForAlert, getSkippedUnsupportedCombos } = require('./comboSelection');
 const { notify } = require('../notifications/notify');
 const { crossCheckAgainstBnm } = require('../validation/bnmCrossCheck');
 
@@ -473,6 +473,21 @@ async function main() {
 
   const combos = getRequiredCombos(dueAlerts);
   console.log(`[scheduler] ${combos.length} distinct source/currency/branch combo(s) needed for these alerts.`);
+
+  // Phase 33 (26-Aug-2026) — surface what getRequiredCombos() silently
+  // declined to check, so a source+currency combo with no real adapter
+  // behind it (e.g. My Money Master + VND) is visible here in the run log
+  // instead of only as an EXTRACTION_ERROR row that used to leak an
+  // internal file path into the Activity Log. See
+  // comboSelection.js's isSupportedCombo() for what "supported" means.
+  const skipped = getSkippedUnsupportedCombos(dueAlerts);
+  if (skipped.length > 0) {
+    console.log(
+      `[scheduler] ${skipped.length} requested source/currency combo(s) skipped — no verified real adapter ` +
+        `for that pair yet (shown as SIMULATED on the dashboard, not checked live by this job): ` +
+        `${skipped.map((c) => `${c.source}/${c.currency}`).join(', ')}.`
+    );
+  }
 
   const readingsByComboKey = new Map();
   const recordsByComboKey = new Map();
