@@ -1,10 +1,16 @@
 /**
  * Phase 2 test — My Money Master adapter's parsing logic.
+ * Rewritten Phase 42 (27-Aug-2026) for the migration to the
+ * 'index.php?/Home/full_rate_board' page and code-based matching — see
+ * backend/scrapers/mymoneymaster.adapter.js's header comment for the full
+ * rationale (short version: VND was permanently stuck on SIMULATED
+ * because the old '/Home/rate_board' 8-card page never listed it at all;
+ * a user-supplied screenshot led to finding the real page that does).
  *
  * This tests parseHtml() (the pure, network-free half of the adapter)
- * against tests/fixtures/mymoneymaster.rate_board.sample.html, whose CNY
- * block is real markup captured live on 21-Aug-2026 (see that file's
- * header comment) — not invented sample data.
+ * against tests/fixtures/mymoneymaster.full_rate_board.sample.html, whose
+ * rows are real markup/values captured live on 27-Aug-2026 (see that
+ * file's header comment) — not invented sample data.
  *
  * It deliberately does NOT test fetchRate()'s live network call: this
  * repo's dev sandbox has restricted network egress and cannot reach
@@ -22,57 +28,80 @@ const path = require('node:path');
 const { parseHtml } = require('../backend/scrapers/mymoneymaster.adapter');
 const { validateRate } = require('../backend/validation/validateRate');
 
-const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'mymoneymaster.rate_board.sample.html');
+const FIXTURE_PATH = path.join(__dirname, 'fixtures', 'mymoneymaster.full_rate_board.sample.html');
 const html = fs.readFileSync(FIXTURE_PATH, 'utf8');
 
-test('parseHtml extracts the real captured CNY rate, not the first card on the page', () => {
+test('parseHtml extracts the real captured VND rate — the originally reported bug', () => {
+  const result = parseHtml(html, 'VND');
+  assert.ok(result, 'expected a parsed result for VND, got null');
+  assert.equal(result.buyRate, 155.30);
+  assert.equal(result.sellRate, 157.80);
+});
+
+test('parseHtml extracts the real captured CNY rate, not the first row on the page', () => {
   const result = parseHtml(html, 'CNY');
   assert.ok(result, 'expected a parsed result for CNY, got null');
-  assert.equal(result.buyRate, 60.30);
-  assert.equal(result.sellRate, 60.60);
+  assert.equal(result.buyRate, 60.20);
+  assert.equal(result.sellRate, 60.47);
 });
 
-test('parseHtml does not confuse CNY with a different currency card (USD placeholder)', () => {
+test('parseHtml does not confuse CNY with a different currency row (AUD placeholder)', () => {
   const result = parseHtml(html, 'CNY');
-  assert.notEqual(result.buyRate, 4.10);
-  assert.notEqual(result.sellRate, 4.25);
+  assert.notEqual(result.buyRate, 2.886);
+  assert.notEqual(result.sellRate, 2.905);
 });
 
-test('parseHtml throws for a currency this site genuinely does not list, rather than returning a silent null', () => {
-  // Phase 38 (26-Aug-2026) update: this test originally used GBP, but
-  // Phase 38 added a real, browser-verified currencyDisplayNames.GBP
-  // entry to config/websites/mymoneymaster.json (the site does list GBP
-  // as "Sterling Pound" — see that file's Phase 38 note), so GBP no
-  // longer exercises the "no config entry" failure mode this test is
-  // actually about. Swapped to THB, which (per the same Phase 38
-  // browser session) this site genuinely does not quote at all — still a
-  // real gap, not a config oversight. This should throw (missing config
-  // entry), which is the correct failure mode: we want a loud config
-  // error, not a silent null, when asking for a currency the adapter was
-  // never told how to find.
-  assert.throws(() => parseHtml(html, 'THB'), /No currencyDisplayNames entry/);
+test('parseHtml extracts the three other currencies Phase 42 newly unlocked for this source (THB, KRW, TWD)', () => {
+  const thb = parseHtml(html, 'THB');
+  assert.ok(thb, 'expected a parsed result for THB, got null');
+  assert.equal(thb.buyRate, 12.30);
+  assert.equal(thb.sellRate, 12.40);
+
+  const krw = parseHtml(html, 'KRW');
+  assert.ok(krw, 'expected a parsed result for KRW, got null');
+  assert.equal(krw.buyRate, 2.925);
+  assert.equal(krw.sellRate, 2.955);
+
+  const twd = parseHtml(html, 'TWD');
+  assert.ok(twd, 'expected a parsed result for TWD, got null');
+  assert.equal(twd.buyRate, 12.415);
+  assert.equal(twd.sellRate, 12.495);
 });
 
-test('parseHtml no longer throws for JPY (config entry now exists) but correctly finds no card in this fixture', () => {
-  // Phase 37 (26-Aug-2026): config/websites/mymoneymaster.json now has a
-  // currencyDisplayNames.JPY entry ("Japanese Yen") — added from a
-  // WebFetch-based read of the live page (Buy 25.25 / Sell 25.56
-  // observed), NOT a raw HTML capture the way this fixture's real CNY
-  // card was. Deliberately NOT adding a fabricated "JPY card" to this
-  // fixture to make this test pass green — this file's own header
-  // comment is explicit that every card in it is either real captured
-  // markup or an obviously-labeled placeholder, and a guessed JPY block
-  // would blur that line. This test instead proves the ONLY thing that's
-  // actually verifiable from here: the config wiring itself works (no
-  // more "No currencyDisplayNames entry" throw), while still correctly
-  // returning null rather than fabricating a match, since no JPY card is
-  // present in this small fixture. See mymoneymaster.json's
-  // compliance.actionRequired for the real verification step this is
-  // waiting on: a live `node backend/scripts/checkRate.js mymoneymaster
-  // JPY` run, cross-checked by the project owner against the real site,
-  // before JPY can be promoted to frontend/app.js's REAL_ADAPTER_SUPPORT.
-  assert.doesNotThrow(() => parseHtml(html, 'JPY'));
-  assert.equal(parseHtml(html, 'JPY'), null);
+test('parseHtml matches by ISO code, not by a hand-maintained display-name list — a currency outside this app\'s own 12-currency set (CAD) still resolves', () => {
+  // Proves the matching strategy itself is now generic (same as Taj
+  // Muhabath/Jalinan Duta), not still secretly gated by some allowlist —
+  // CAD isn't one of frontend/app.js's supported currencies, so nothing
+  // upstream will ever actually request it, but parseHtml() has no way
+  // to know that and shouldn't need to.
+  const result = parseHtml(html, 'CAD');
+  assert.ok(result, 'expected a parsed result for CAD, got null');
+  assert.equal(result.buyRate, 2.89);
+  assert.equal(result.sellRate, 2.935);
+});
+
+test('parseHtml returns null (not a throw) for a code genuinely absent from the page, honoring the honest-failure contract', () => {
+  // Phase 42 changed the failure mode for "currency not found" from a
+  // hard throw (the old "No currencyDisplayNames entry" error, back when
+  // a missing config entry was the only way to fail) to a plain null —
+  // matching how Taj Muhabath/Jalinan Duta's parseHtml() already behave,
+  // since there's no config entry left to be "missing" once matching is
+  // code-based. fetchRate() turns this null into an honest
+  // EXTRACTION_ERROR, never a fabricated number.
+  assert.equal(parseHtml(html, 'ZZZ'), null);
+});
+
+test('the extracted VND reading passes validateRate() against the configured expected range', () => {
+  const { config } = require('../backend/scrapers/mymoneymaster.adapter');
+  const result = parseHtml(html, 'VND');
+  const validation = validateRate({
+    currency: 'VND',
+    buyRate: result.buyRate,
+    sellRate: result.sellRate,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: config.validation.expectedRange.VND,
+  });
+  assert.equal(validation.passed, true, `expected validation to pass, reasons: ${validation.reasons.join('; ')}`);
 });
 
 test('the extracted CNY reading passes validateRate() against the configured expected range', () => {
@@ -110,4 +139,15 @@ test('validateRate rejects the decimal-placement false-alert scenario from the p
   });
   assert.equal(validation.passed, false);
   assert.ok(validation.reasons.some(r => r.includes('outside the expected range')));
+});
+
+test('validateRate rejects a VND reading missing its 1,000,000-unit scaling (e.g. 0.0001553 instead of 155.30)', () => {
+  const validation = validateRate({
+    currency: 'VND',
+    buyRate: 0.0001553,
+    sellRate: 0.0001578,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: { min: 100, max: 250 },
+  });
+  assert.equal(validation.passed, false);
 });

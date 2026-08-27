@@ -107,14 +107,21 @@ test('readingsForAlert returns an empty array for an alert with no sources', () 
 // per-currency manual-verification ceremony no longer gate a currency
 // newly selected at one of the 4 already-trusted money changers. The
 // tests below replace the old human-curated-allowlist assertions with
-// ones matching the new architecture: a code-matched source (Taj
-// Muhabath, Jalinan Duta) supports ANY currency unconditionally, since
-// its adapter matches a live table row by ISO code directly; a
-// display-name-matched source (My Money Master, Merchantrade Asia) only
-// supports a currency that has an actual currencyDisplayNames config
-// entry, since the parser genuinely cannot find the right row without
-// one. See comboSelection.js's own Phase 38 comment for the full
-// writeup.
+// ones matching that architecture: a code-matched source supports ANY
+// currency unconditionally, since its adapter matches a live table row
+// by ISO code directly; a display-name-matched source only supports a
+// currency that has an actual currencyDisplayNames config entry, since
+// the parser genuinely cannot find the right row without one.
+//
+// Phase 42 (27-Aug-2026) rewrite — My Money Master moved from
+// display-name-matched to code-matched (see comboSelection.js's own
+// Phase 42 comment): the project owner reported VND permanently
+// unavailable there, and it turned out to be exactly this file silently
+// never even asking the adapter to check it, not a real site limitation.
+// The old "mymoneymaster+VND is unsupported" assertions below — which
+// were previously this test suite's own documentation of that bug — are
+// replaced with assertions proving the fix: mymoneymaster now behaves
+// like every other code-matched source.
 
 test('isSupportedCombo is unconditionally true for a code-matched source, regardless of currency', () => {
   assert.equal(isSupportedCombo('tajmuhabath', 'CNY'), true);
@@ -122,12 +129,14 @@ test('isSupportedCombo is unconditionally true for a code-matched source, regard
   assert.equal(isSupportedCombo('tajmuhabath', 'ZZZ'), true); // even a nonsense code — isSupportedCombo only gates on source type; the adapter's own live-table lookup is what actually fails honestly for a code the site doesn't list
   assert.equal(isSupportedCombo('jalinanduta', 'VND'), true);
   assert.equal(isSupportedCombo('jalinanduta', 'TWD'), true); // Phase 38 addition
+  assert.equal(isSupportedCombo('mymoneymaster', 'CNY'), true);
+  assert.equal(isSupportedCombo('mymoneymaster', 'VND'), true); // Phase 42 fix — was false pre-Phase-42, the originally reported bug
+  assert.equal(isSupportedCombo('mymoneymaster', 'THB'), true); // Phase 42 addition
+  assert.equal(isSupportedCombo('mymoneymaster', 'KRW'), true); // Phase 42 addition
+  assert.equal(isSupportedCombo('mymoneymaster', 'TWD'), true); // Phase 42 addition
 });
 
 test('isSupportedCombo is true for a display-name-matched source only when currencyDisplayNames has that currency', () => {
-  assert.equal(isSupportedCombo('mymoneymaster', 'CNY'), true);
-  assert.equal(isSupportedCombo('mymoneymaster', 'JPY'), true); // Phase 38 addition
-  assert.equal(isSupportedCombo('mymoneymaster', 'VND'), false); // the originally reported bug — mymoneymaster's site does not list VND at all
   assert.equal(isSupportedCombo('merchantradeasia', 'TWD'), true);
   assert.equal(isSupportedCombo('merchantradeasia', 'KRW'), true); // Phase 38 addition
   assert.equal(isSupportedCombo('merchantradeasia', 'JPY'), false); // deliberately excluded — real 10x unit-scale mismatch, not a missing config entry
@@ -143,25 +152,32 @@ test('CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES match frontend/app.
   // comment for why they're hand-duplicated instead of shared, and
   // bnmCrossCheck.js's ADAPTER_CURRENCY_UNIT for the established pattern
   // this same check already follows elsewhere in the test suite.
-  assert.deepEqual(CODE_MATCHED_SOURCES, new Set(['tajmuhabath', 'jalinanduta']));
+  assert.deepEqual(CODE_MATCHED_SOURCES, new Set(['tajmuhabath', 'jalinanduta', 'mymoneymaster']));
   assert.deepEqual(DISPLAY_NAME_MATCHED_CURRENCIES, {
-    mymoneymaster: ['CNY', 'JPY', 'USD', 'SGD', 'HKD', 'EUR', 'GBP', 'AUD'],
     merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW'],
   });
 });
 
-test('getRequiredCombos never builds a combo for an unsupported source+currency (the reported My Money Master + VND bug)', () => {
+test('getRequiredCombos now builds a combo for My Money Master + VND (Phase 42 fix for the originally reported bug)', () => {
   const alerts = [{ sources: ['mymoneymaster'], currency: 'VND', branch: null }];
+  const combos = getRequiredCombos(alerts);
+  assert.equal(combos.length, 1);
+  assert.equal(combos[0].source, 'mymoneymaster');
+  assert.equal(combos[0].currency, 'VND');
+});
+
+test('getRequiredCombos never builds a combo for a source+currency the site genuinely does not support', () => {
+  const alerts = [{ sources: ['merchantradeasia'], currency: 'USD', branch: null }];
   const combos = getRequiredCombos(alerts);
   assert.deepEqual(combos, []); // must not call the adapter at all
 });
 
 test('getRequiredCombos keeps a supported combo from the same alert while dropping an unsupported one', () => {
-  const alerts = [{ sources: ['mymoneymaster', 'merchantradeasia'], currency: 'VND', branch: null }];
+  const alerts = [{ sources: ['merchantradeasia', 'mymoneymaster'], currency: 'USD', branch: null }];
   const combos = getRequiredCombos(alerts);
   assert.equal(combos.length, 1);
-  assert.equal(combos[0].source, 'merchantradeasia');
-  assert.equal(combos[0].currency, 'VND');
+  assert.equal(combos[0].source, 'mymoneymaster');
+  assert.equal(combos[0].currency, 'USD');
 });
 
 test('getRequiredCombos still builds every combo as before when all requested sources are supported', () => {
@@ -171,10 +187,15 @@ test('getRequiredCombos still builds every combo as before when all requested so
   assert.equal(combos[0].source, 'mymoneymaster');
 });
 
-test('getSkippedUnsupportedCombos reports the reported bug\'s exact combo', () => {
+test('getSkippedUnsupportedCombos no longer reports My Money Master + VND (Phase 42 fix)', () => {
   const alerts = [{ sources: ['mymoneymaster'], currency: 'VND', branch: null }];
+  assert.deepEqual(getSkippedUnsupportedCombos(alerts), []);
+});
+
+test('getSkippedUnsupportedCombos reports a genuinely unsupported combo', () => {
+  const alerts = [{ sources: ['merchantradeasia'], currency: 'USD', branch: null }];
   const skipped = getSkippedUnsupportedCombos(alerts);
-  assert.deepEqual(skipped, [{ source: 'mymoneymaster', currency: 'VND' }]);
+  assert.deepEqual(skipped, [{ source: 'merchantradeasia', currency: 'USD' }]);
 });
 
 test('getSkippedUnsupportedCombos returns nothing when every requested combo is supported', () => {
@@ -184,8 +205,8 @@ test('getSkippedUnsupportedCombos returns nothing when every requested combo is 
 
 test('getSkippedUnsupportedCombos dedupes the same skipped source+currency across multiple alerts', () => {
   const alerts = [
-    { sources: ['mymoneymaster'], currency: 'VND', branch: null },
-    { sources: ['mymoneymaster'], currency: 'VND', branch: null }, // a second user with the same alert
+    { sources: ['merchantradeasia'], currency: 'USD', branch: null },
+    { sources: ['merchantradeasia'], currency: 'USD', branch: null }, // a second user with the same alert
   ];
   const skipped = getSkippedUnsupportedCombos(alerts);
   assert.equal(skipped.length, 1);

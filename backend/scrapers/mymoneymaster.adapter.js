@@ -1,25 +1,41 @@
 /**
- * My Money Master adapter — Phase 2
- * ==================================
- * STATUS: implemented and unit-tested against a real, freshly re-verified
- * page structure (see config/websites/mymoneymaster.json — re-verified
- * 21-Aug-2026 during this Phase 2 build, which corrected the primary/
- * secondary selector assignment from the original architecture review).
+ * My Money Master adapter — Phase 2, migrated Phase 42 (27-Aug-2026)
+ * ====================================================================
+ * PHASE 42 MIGRATION: the project owner reported VND permanently stuck on
+ * SIMULATED for this source and attached a screenshot of a real VND row
+ * ("Viet Nam / 1M Vietnam Dong ( VND )", Buy 155.30 / Sell 157.80) that
+ * does not exist on the old liveRateUrl ('/Home/rate_board', an 8-card
+ * page). The owner identified where it actually came from:
+ * 'index.php?/Home/full_rate_board' — a much larger, ~40-currency table on
+ * the same domain. A live connected-browser session that same day
+ * confirmed: this page is a superset of the old 8-card page (the old 8
+ * currencies' Buy/Sell figures match exactly, e.g. CNY 60.20/60.47 both
+ * places — nothing about those 8 changes), it genuinely lists all 12 of
+ * this app's supported currencies including VND/THB/KRW/TWD (previously
+ * believed entirely unavailable from this source), the values are present
+ * in the RAW HTTP response (no JS required, same as before), and every
+ * currency's per-unit convention on this page (e.g. "100 Chinese Renminbi
+ * ( CNY )", "1M Vietnam Dong ( VND )") matches
+ * backend/validation/bnmCrossCheck.js's ADAPTER_CURRENCY_UNIT map exactly
+ * — see config/websites/mymoneymaster.json's "PHASE 42" note for the full
+ * verification detail, and tests/fixtures/mymoneymaster.full_rate_board.sample.html
+ * for the real captured markup.
  *
- * Primary path: plain HTTP GET of config.liveRateUrl ('/Home/rate_board')
- * + cheerio parse of the '.ratebox-table-wrap' per-country cards (Phase 25
- * fix, 25-Aug-2026: this comment still said '.smallBox3' — the class the
- * site itself used until a real production run hit EXTRACTION_ERROR and
- * config/websites/mymoneymaster.json's own "SECOND CORRECTION" note was
- * added identifying the site had switched to '.ratebox-table-wrap' as the
- * class, with 'smallBox3' surviving only as a non-unique id. The config
- * (and therefore the actual runtime behavior) was corrected at the time;
- * this comment and tests/fixtures/mymoneymaster.rate_board.sample.html
- * were not, which is why the unit tests below started failing against a
- * stale fixture despite the adapter working correctly in production — see
- * that fixture's own header for the matching fix). No browser
+ * Because this page prints each currency's own ISO code directly (e.g.
+ * "( VND )"), matching switched from a hand-maintained
+ * currencyDisplayNames lookup to direct CODE extraction — the same
+ * strategy Taj Muhabath and Jalinan Duta already use (see
+ * frontend/app.js's CODE_MATCHED_SOURCES, now including 'mymoneymaster').
+ * A currency this page genuinely doesn't list now fails the same way a
+ * missing Taj Muhabath row does — EXTRACTION_ERROR with an honest "row not
+ * found" message — instead of the old hard throw on a missing config
+ * entry, since there is no per-currency config entry left to be missing.
+ *
+ * Primary path: plain HTTP GET of config.liveRateUrl + cheerio parse of
+ * 'div.table-responsive.rate-board-table table tbody tr' rows (see
+ * config.primarySelector for the exact cell layout). No browser
  * required — confirmed the BUY/SELL values are present in the raw HTTP
- * response, independent of any JS execution.
+ * response, independent of any JS execution (re-verified 27-Aug-2026).
  *
  * Fallback path (fetchRateViaPlaywright): same URL, same selectors, read
  * from the rendered DOM instead of raw HTML. Used automatically by
@@ -29,21 +45,20 @@
  * in the future without anyone noticing until every reading starts failing.
  *
  * IMPORTANT — a note on testing in this development environment: the
- * sandbox this adapter was authored in has restricted network egress and
+ * sandbox this adapter is developed in has restricted network egress and
  * cannot reach www.mymoneymaster.com.my directly (no arbitrary outbound
- * HTTP). The extraction logic below was therefore verified two ways
- * instead: (1) the exact HTML structure was captured live, moments before
- * writing this file, via a real browser session (not simulated/invented),
- * and (2) that captured structure was used as a fixture to unit-test
- * parseHtml() locally (tests/mymoneymaster.adapter.test.js) — confirming
- * it correctly extracts CNY BUY 60.30 / SELL 60.60, the real live values
- * observed during that same session. The live network fetch() call itself
- * will run for the first time in an environment with real internet access
- * (the user's machine, or the GitHub Actions runner) — it was not possible
- * to prove that specific HTTP round-trip from inside this sandbox. Treat
- * the first live run there as the actual end-to-end confirmation, and open
- * an issue if it needs adjustment — a third-party site's markup can always
- * change between this file being written and being run for the first time.
+ * HTTP). The extraction logic is therefore verified two ways instead: (1)
+ * the exact HTML structure was captured live via a real browser session
+ * (not simulated/invented — see the fixture file's own header for exactly
+ * what was captured and how), and (2) that captured structure is used as
+ * a fixture to unit-test parseHtml() locally
+ * (tests/mymoneymaster.adapter.test.js). The live network fetch() call
+ * itself runs for real in an environment with real internet access (the
+ * user's machine, or the GitHub Actions runner) — it was not possible to
+ * prove that specific HTTP round-trip from inside this sandbox. Treat the
+ * first live run there as the actual end-to-end confirmation, and open an
+ * issue if it needs adjustment — a third-party site's markup can always
+ * change between this file being written and being run.
  *
  * @see backend/scrapers/rateAdapter.interface.js for the required return shape
  */
@@ -64,51 +79,47 @@ const FETCH_TIMEOUT_MS = 15_000;
  * network call so it can be unit-tested against a captured HTML fixture
  * without needing a live connection.
  *
+ * Phase 42: matches by ISO code extracted directly from each row's own
+ * text (config.primarySelector.codeExtractPattern against the text found
+ * at config.primarySelector.currencyTextSelector) rather than a
+ * currencyDisplayNames lookup — see this file's header comment for why.
+ *
  * @param {string} html
  * @param {string} currencyCode e.g. "CNY"
  * @returns {{ buyRate: number, sellRate: number } | null} null if the
- *   currency's card could not be located or its rows could not be parsed
+ *   currency's row could not be located or its cells could not be parsed
  */
 function parseHtml(html, currencyCode) {
-  const displayName = config.currencyDisplayNames && config.currencyDisplayNames[currencyCode];
-  if (!displayName) {
-    throw new Error(
-      `No currencyDisplayNames entry for "${currencyCode}" in ` +
-      `config/websites/mymoneymaster.json — add one before requesting this currency.`
-    );
-  }
-
   const $ = cheerio.load(html);
-  let buyRate = null;
-  let sellRate = null;
+  const { rowSelector, currencyTextSelector, buyCellIndex, sellCellIndex, codeExtractPattern } =
+    config.primarySelector;
+  const codePattern = new RegExp(codeExtractPattern);
 
-  $(config.primarySelector.cardBlockSelector).each((_, block) => {
-    if (buyRate !== null && sellRate !== null) return; // already found it
+  let result = null;
 
-    const heading = $(block).find(config.primarySelector.headingSelector).first().text().trim();
-    if (heading !== displayName) return;
+  $(rowSelector).each((_, row) => {
+    if (result) return; // already found it
 
-    $(block)
-      .find(config.primarySelector.valueRowSelector)
-      .each((__, row) => {
-        const spans = $(row).find('span');
-        if (spans.length < 2) return;
+    const currencyText = $(row).find(currencyTextSelector).first().text().trim();
+    if (!currencyText) return;
 
-        const label = $(spans[0]).text().trim().toLowerCase();
-        const rawValue = $(spans[1]).text().trim();
-        const numericValue = parseFloat(rawValue);
-        if (Number.isNaN(numericValue)) return;
+    const match = currencyText.match(codePattern);
+    if (!match) return;
 
-        if (label.startsWith('buy')) {
-          buyRate = numericValue;
-        } else if (label.startsWith('sell')) {
-          sellRate = numericValue;
-        }
-      });
+    const rowCode = match[1].toUpperCase();
+    if (rowCode !== currencyCode) return;
+
+    const cells = $(row).find('td');
+    if (cells.length <= Math.max(buyCellIndex, sellCellIndex)) return;
+
+    const buyRate = parseFloat($(cells[buyCellIndex]).text().trim());
+    const sellRate = parseFloat($(cells[sellCellIndex]).text().trim());
+    if (Number.isNaN(buyRate) || Number.isNaN(sellRate)) return;
+
+    result = { buyRate, sellRate };
   });
 
-  if (buyRate === null || sellRate === null) return null;
-  return { buyRate, sellRate };
+  return result;
 }
 
 async function fetchHtml(url, { signal } = {}) {
@@ -130,7 +141,16 @@ function buildResult({ input, buyRate, sellRate, status, validationStatus, error
     buyRate: buyRate ?? null,
     sellRate: sellRate ?? null,
     retrievedAt: new Date().toISOString(),
-    sourceTimestamp: null, // this page does not publish its own per-row timestamp
+    // Phase 42: the full_rate_board page DOES publish a per-row "at
+    // HH:MM AM/PM" time (config.primarySelector.lastUpdatedCellIndex),
+    // but no date — only the page's own top banner shows a date, once,
+    // for the whole table. Guessing which calendar day an isolated
+    // "HH:MM" belongs to (today vs. yesterday, around midnight) would be
+    // exactly the kind of unverified assumption this project's rules
+    // warn against, so this is deliberately left null rather than
+    // fabricating a full timestamp — retrievedAt above already gives an
+    // honest, unambiguous capture time.
+    sourceTimestamp: null,
     status,
     validationStatus,
     ...(errorMessage ? { errorMessage } : {}),
@@ -183,9 +203,10 @@ async function fetchRate(input) {
       status: 'EXTRACTION_ERROR',
       validationStatus: 'NOT_RUN',
       errorMessage:
-        `Could not locate a "${input.currencyCode}" card on the page ` +
-        `(looked for heading "${config.currencyDisplayNames[input.currencyCode]}"). ` +
-        `The page's structure may have changed — see config/websites/mymoneymaster.json.`,
+        `Could not locate a row for "${input.currencyCode}" on the page ` +
+        `(looked for "( ${input.currencyCode} )" in each row's currency-txt span). ` +
+        `The page's structure may have changed, or this currency genuinely isn't ` +
+        `listed there right now — see config/websites/mymoneymaster.json.`,
     });
   }
 
@@ -256,10 +277,7 @@ async function fetchRateViaPlaywright(input) {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ userAgent: DEFAULT_USER_AGENT });
     await page.goto(config.liveRateUrl, { waitUntil: 'domcontentloaded', timeout: FETCH_TIMEOUT_MS });
-    await page.waitForSelector(
-      `${config.primarySelector.cardBlockSelector} ${config.primarySelector.headingSelector}`,
-      { timeout: FETCH_TIMEOUT_MS }
-    );
+    await page.waitForSelector(config.primarySelector.rowSelector, { timeout: FETCH_TIMEOUT_MS });
     const html = await page.content();
 
     const parsed = parseHtml(html, input.currencyCode);
@@ -268,7 +286,7 @@ async function fetchRateViaPlaywright(input) {
         input,
         status: 'EXTRACTION_ERROR',
         validationStatus: 'NOT_RUN',
-        errorMessage: `[Playwright fallback] Could not locate a "${input.currencyCode}" card in the rendered DOM.`,
+        errorMessage: `[Playwright fallback] Could not locate a row for "${input.currencyCode}" in the rendered DOM.`,
       });
     }
 

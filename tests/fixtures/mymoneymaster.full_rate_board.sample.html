@@ -1,0 +1,240 @@
+<!--
+  Fixture for tests/mymoneymaster.adapter.test.js — Phase 42 (27-Aug-2026).
+
+  Replaces mymoneymaster.rate_board.sample.html (the old '/Home/rate_board'
+  8-card fixture), which is now obsolete: the adapter was migrated from
+  that page to 'index.php?/Home/full_rate_board', a full ~40-currency rate
+  table the site also publishes at the same domain. See
+  backend/scrapers/mymoneymaster.adapter.js's header comment and
+  config/websites/mymoneymaster.json's "Phase 42" notes for the full
+  rationale (short version: a user screenshot showed a real VND row on
+  this page that the old 8-card page never listed; a live browser session
+  confirmed My Money Master actually quotes all 12 of this app's
+  currencies here, including VND/THB/KRW/TWD, which had been permanently
+  stuck on SIMULATED).
+
+  NOT a fabricated mock. Every value, class name, and piece of markup
+  structure below was captured from a real, live, connected browser
+  session against http://www.mymoneymaster.com.my/index.php?/Home/full_rate_board
+  on 27-Aug-2026 (get_page_text for the row values/timestamps; a targeted
+  javascript_tool DOM walk — document.querySelectorAll + per-cell
+  className/textContent reads — for the exact table/row/cell structure,
+  confirmed against the VND row specifically since that's the one this
+  investigation was actually about). The full live page has ~40 currency
+  rows; only a representative subset is reproduced here (the app's own
+  full 12-currency set — AUD, CNY, EUR, GBP, HKD, JPY, KRW, SGD, THB, TWD,
+  USD, VND — plus one row for a currency the app does NOT support, CAD,
+  used by a test below to prove an out-of-scope code is correctly reported
+  as "not found" rather than silently matched) to keep this fixture small
+  and readable, exactly like the old fixture's own convention.
+
+  Real values observed at capture time (retrieved_at ~27-Aug-2026, times
+  below are each row's own "Last Updated" as shown live):
+    AUD  2.886 / 2.905   at 03:18 PM
+    CAD  2.89  / 2.935   at 09:50 AM  (NOT in this app's CURRENCIES list)
+    CNY  60.20 / 60.47   at 11:34 AM
+    EUR  4.678 / 4.700   at 02:16 PM
+    GBP  5.47  / 5.495   at 02:16 PM
+    HKD  51.40 / 51.60   at 02:49 PM
+    JPY  25.25 / 25.54   at 02:49 PM
+    KRW  2.925 / 2.955   at 02:16 PM
+    SGD  3.163 / 3.175   at 03:24 PM
+    THB  12.30 / 12.40   at 02:49 PM
+    TWD  12.415/ 12.495  at 02:17 PM
+    USD  4.0235/ 4.038   at 03:19 PM
+    VND  155.30/ 157.80  at 09:50 AM
+
+  Every one of these unit conventions (CNY/HKD/THB/TWD per 100, JPY/KRW
+  per 1000, VND per 1,000,000, everything else per 1) matches
+  backend/validation/bnmCrossCheck.js's existing ADAPTER_CURRENCY_UNIT map
+  exactly, with zero rescaling needed — confirmed during this same live
+  session, not assumed.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head><title>My Money Master - Money Exchange Rate</title></head>
+<body>
+  <div class="container">
+    <h2>EXCHANGE RATE</h2>
+    <p>LIVE RATES : AUG 27, 2026</p>
+
+    <!-- Mobile/compact table (hidden-lg hidden-md) — 3 cells per row, no
+         country name and no per-row timestamp. NOT what the adapter reads
+         (see rate-board-table below), included only because it's really
+         on the page and a future selector change might need it. -->
+    <div class="hidden-lg hidden-md col-sm-12 col-xs-12 pull-left">
+      <div class="table-responsive rate-grap-currency-table">
+        <table class="table">
+          <tbody id="ajaxmobval">
+            <tr class=" ajaxsltcur  ">
+              <td><span class="rate-grap-currency-short">VND</span><span class="rate-grap-currency-breif">1M Unit</span></td>
+              <td><span class="rate-grap-buy">155.30</span></td>
+              <td><span class="rate-grap-sell">157.80</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Desktop table — this is the one config.primarySelector targets.
+         tbody id="ajaxval", each row class="filtersearch". Cell order:
+         [0] currency-tbody-wrap (flag icon span + currency-txt span whose
+         text is "<Country> <Unit qty> <Currency name> ( <ISO CODE> )" +
+         arrows span), [1] Buy, [2] Sell, [3] "at HH:MM AM/PM" (no date —
+         the page's own top-level "LIVE RATES : AUG 27, 2026" banner is
+         the only date shown; per-row text never repeats it), [4] "more
+         info" link (an <a> with an href — deliberately omitted from every
+         row below since it isn't needed for extraction and its real href
+         includes a query string one internal tool guard flags). -->
+    <div class="table-responsive rate-board-table">
+      <table class="table">
+        <tbody id="ajaxval">
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Australia 1 Australian Dollar ( AUD )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>2.886</td>
+            <td>2.905</td>
+            <td>at 03:18 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Canada 1 Canadian Dollar ( CAD )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>2.89</td>
+            <td>2.935</td>
+            <td>at 09:50 AM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">China 100 Chinese Renminbi ( CNY )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>60.20</td>
+            <td>60.47</td>
+            <td>at 11:34 AM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">European Union 1 Euro Dollar ( EUR )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>4.678</td>
+            <td>4.700</td>
+            <td>at 02:16 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">United Kingdom 1 Sterling Pound ( GBP )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>5.47</td>
+            <td>5.495</td>
+            <td>at 02:16 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Hong Kong 100 Hong Kong Dollar ( HKD )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>51.40</td>
+            <td>51.60</td>
+            <td>at 02:49 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Japan 1000 Japanese Yen ( JPY )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>25.25</td>
+            <td>25.54</td>
+            <td>at 02:49 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Korea, Republic Of 1000 Korean Won ( KRW )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>2.925</td>
+            <td>2.955</td>
+            <td>at 02:16 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Singapore 1 Singapore Dollar ( SGD )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>3.163</td>
+            <td>3.175</td>
+            <td>at 03:24 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Thailand 100 Thai Baht ( THB )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>12.30</td>
+            <td>12.40</td>
+            <td>at 02:49 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Taiwan, Province Of China 100 New Taiwan Dollar ( TWD )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>12.415</td>
+            <td>12.495</td>
+            <td>at 02:17 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">United States 1 Us Dollar ( USD )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>4.0235</td>
+            <td>4.038</td>
+            <td>at 03:19 PM</td>
+            <td></td>
+          </tr>
+          <tr class="filtersearch">
+            <td class="currency-tbody-wrap">
+              <span class="rate-board-flag-img"></span>
+              <span class="currency-txt">Viet Nam 1M Vietnam Dong ( VND )</span>
+              <span class="rate-board-arrows"></span>
+            </td>
+            <td>155.30</td>
+            <td>157.80</td>
+            <td>at 09:50 AM</td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>

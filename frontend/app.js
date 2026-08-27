@@ -99,29 +99,25 @@
   // The underlying adapters split into two genuinely different matching
   // strategies, which is what actually decides whether a new currency
   // needs any config at all:
-  //   - Taj Muhabath and Jalinan Duta match a row by its ISO CODE column
-  //     directly (`code === currencyCode` — see
-  //     backend/scrapers/tajmuhabath.adapter.js / jalinanduta.adapter.js's
-  //     parseHtml()). Nothing to configure per currency — any code the
-  //     live table actually lists is picked up automatically. Confirmed
-  //     live (26-Aug-2026, real browser session) that both sites list all
-  //     12 of this app's currencies today; a code either site DOESN'T
-  //     list simply fails with an honest EXTRACTION_ERROR/
-  //     SOURCE_UNAVAILABLE, never a fabricated number.
-  //   - My Money Master and Merchantrade Asia match by each site's own
-  //     DISPLAY NAME text (e.g. "Chinese Renminbi"), which cannot be
-  //     derived from an ISO code alone — config/websites/mymoneymaster.json
-  //     and merchantradeasia.json's own currencyDisplayNames maps supply
-  //     that text, captured directly from each site's live rendered DOM
-  //     (not guessed). The two lists below mirror exactly what's in those
-  //     two config files — same hand-duplication convention already used
-  //     for SOURCE_DISPLAY_NAMES/ADAPTER_CURRENCY_UNIT elsewhere in this
-  //     project. Adding a currency to either of these two sources going
-  //     forward is just adding one line to that JSON file (the real text,
-  //     read from the live page) — not a separate verification step.
-  //     My Money Master's own live page (26-Aug-2026) only has 8 currency
-  //     cards at all — THB/KRW/VND/TWD are not listed there and never
-  //     will be until the site itself adds them, regardless of config.
+  //   - Taj Muhabath, Jalinan Duta, and (as of Phase 42) My Money Master
+  //     match a row by its ISO CODE directly — see
+  //     backend/scrapers/tajmuhabath.adapter.js / jalinanduta.adapter.js /
+  //     mymoneymaster.adapter.js's parseHtml(). Nothing to configure per
+  //     currency — any code the live page actually lists is picked up
+  //     automatically. A code a site DOESN'T list simply fails with an
+  //     honest EXTRACTION_ERROR/SOURCE_UNAVAILABLE, never a fabricated
+  //     number.
+  //   - Merchantrade Asia matches by the site's own DISPLAY NAME text
+  //     (e.g. "Chinese Renminbi"), which cannot be derived from an ISO
+  //     code alone — config/websites/merchantradeasia.json's own
+  //     currencyDisplayNames map supplies that text, captured directly
+  //     from the site's live rendered DOM (not guessed). The list below
+  //     mirrors exactly what's in that config file — same
+  //     hand-duplication convention already used for
+  //     SOURCE_DISPLAY_NAMES/ADAPTER_CURRENCY_UNIT elsewhere in this
+  //     project. Adding a currency here going forward is just adding one
+  //     line to that JSON file (the real text, read from the live page)
+  //     — not a separate verification step.
   //     Merchantrade Asia deliberately excludes USD and SGD here: the
   //     site quotes 2-3 note-size variants for each (e.g. "USD BIG",
   //     "USD MEDIUM", "USD SMALL") with no single obvious "the" rate —
@@ -132,9 +128,25 @@
   //     10x-mismatched number in the multi-source "best rate" picker. Fix
   //     requires an explicit per-source unit-conversion step, not just a
   //     config entry — left out until that's built.
-  const CODE_MATCHED_SOURCES = new Set(["tajmuhabath", "jalinanduta"]);
+  //
+  //   PHASE 42 (27-Aug-2026): My Money Master moved from the
+  //   DISPLAY_NAME_MATCHED_CURRENCIES list to CODE_MATCHED_SOURCES. The
+  //   project owner reported VND permanently stuck on SIMULATED here and
+  //   supplied a screenshot proving a real VND row exists — it just isn't
+  //   on the 8-card page (Home/rate_board) the adapter used to read. A
+  //   live browser session found the actual page
+  //   (index.php?/Home/full_rate_board): a ~40-currency table that DOES
+  //   print each row's own ISO code (e.g. "( VND )"), is a superset of
+  //   the old 8-card page (same numbers for all 8), and genuinely lists
+  //   all 12 of this app's currencies — including VND, THB, KRW, and TWD,
+  //   which the old page never had at all, not a config gap. See
+  //   backend/scrapers/mymoneymaster.adapter.js and
+  //   config/websites/mymoneymaster.json's Phase 42 notes for the full
+  //   verification detail. Because the new page prints the code directly,
+  //   My Money Master no longer needs a currencyDisplayNames-style map at
+  //   all — hence the move to the generic, code-matched group.
+  const CODE_MATCHED_SOURCES = new Set(["tajmuhabath", "jalinanduta", "mymoneymaster"]);
   const DISPLAY_NAME_MATCHED_CURRENCIES = {
-    mymoneymaster: ["CNY", "JPY", "USD", "SGD", "HKD", "EUR", "GBP", "AUD"],
     merchantradeasia: ["CNY", "VND", "TWD", "HKD", "EUR", "GBP", "AUD", "THB", "KRW"],
   };
 

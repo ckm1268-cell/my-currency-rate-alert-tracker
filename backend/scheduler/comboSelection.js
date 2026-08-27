@@ -62,20 +62,30 @@ const BRANCH_SUPPORTED_SOURCES = new Set(
 // these 4 — only an actual 5th money changer added later should need it.
 //
 // What actually decides whether a combo can succeed, mechanically, is
-// each adapter's own matching strategy (see the two adapters' parseHtml()
+// each adapter's own matching strategy (see each adapter's parseHtml()
 // for exactly this):
-//   - Taj Muhabath and Jalinan Duta match a row by its ISO CODE column
-//     directly — nothing to configure per currency; any code the live
-//     table lists works, and one it doesn't fails honestly
-//     (EXTRACTION_ERROR/SOURCE_UNAVAILABLE), never fabricated.
-//   - My Money Master and Merchantrade Asia match by each site's own
-//     DISPLAY NAME text, which config/websites/*.json's currencyDisplayNames
+//   - Taj Muhabath, Jalinan Duta, and (as of Phase 42) My Money Master
+//     match a row by its ISO CODE directly — nothing to configure per
+//     currency; any code the live table lists works, and one it doesn't
+//     fails honestly (EXTRACTION_ERROR/SOURCE_UNAVAILABLE), never
+//     fabricated.
+//   - Merchantrade Asia matches by the site's own DISPLAY NAME text,
+//     which config/websites/merchantradeasia.json's currencyDisplayNames
 //     supplies — that mapping is a real technical requirement (the parser
 //     can't derive site display text from an ISO code alone), but it's
-//     just config DATA now, not a verification gate: adding a currency to
-//     either of these two going forward means adding one line to that
-//     JSON file (the real text, read off the live page), not a separate
-//     promotion step.
+//     just config DATA now, not a verification gate: adding a currency
+//     there going forward means adding one line to that JSON file (the
+//     real text, read off the live page), not a separate promotion step.
+//
+//   PHASE 42 (27-Aug-2026) fix: this is the actual root cause of "VND
+//   always WAITING/SIMULATED for My Money Master" — this file had
+//   mymoneymaster hardcoded as DISPLAY_NAME_MATCHED with only 8
+//   currencies, so getRequiredCombos() silently never even asked the
+//   adapter to check VND/THB/KRW/TWD, no matter what the adapter itself
+//   could do. My Money Master's adapter moved to a page that prints each
+//   row's own ISO code (see mymoneymaster.adapter.js's Phase 42 header),
+//   so it moved into CODE_MATCHED_SOURCES here too — matching
+//   frontend/app.js's identical change.
 // frontend/app.js's hasRealAdapter() answers the identical question for
 // the dashboard's own real-vs-simulated split; this mirrors that same
 // split, hand-duplicated here for the same reason
@@ -84,18 +94,17 @@ const BRANCH_SUPPORTED_SOURCES = new Set(
 // IIFE with no CommonJS export can't be require()'d from here. IMPORTANT:
 // keep both lists below in sync by hand with frontend/app.js's
 // CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES.
-const CODE_MATCHED_SOURCES = new Set(['tajmuhabath', 'jalinanduta']);
+const CODE_MATCHED_SOURCES = new Set(['tajmuhabath', 'jalinanduta', 'mymoneymaster']);
 const DISPLAY_NAME_MATCHED_CURRENCIES = {
-  mymoneymaster: ['CNY', 'JPY', 'USD', 'SGD', 'HKD', 'EUR', 'GBP', 'AUD'],
   merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW'],
 };
 
 /**
  * Is this source+currency combo one the scheduler should actually attempt
  * a live check for? True unconditionally for a code-matched source (Taj
- * Muhabath, Jalinan Duta — any currency their live table lists works
- * automatically); for a display-name-matched source (My Money Master,
- * Merchantrade Asia), true only if that source's own currencyDisplayNames
+ * Muhabath, Jalinan Duta, My Money Master — any currency their live table
+ * lists works automatically); for a display-name-matched source
+ * (Merchantrade Asia), true only if that source's own currencyDisplayNames
  * config has an entry for this currency, since the parser genuinely has
  * no other way to find the right row. See this file's Phase 38 comment
  * above for why this is no longer a manual-verification allowlist.

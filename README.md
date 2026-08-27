@@ -1,135 +1,104 @@
 # MY Currency Rate Tracker
 
-Real-time currency exchange-rate monitoring and target-rate alerts for
-Malaysian money changers. Not a converter — this proves, with a timestamp,
-whether the live rate at a chosen money changer has reached your target
-*right now*, and alerts you the moment it does.
+**v1.0.0** — Real-time currency exchange-rate monitoring and target-rate
+alerts for Malaysian money changers. Not a converter — this proves, with a
+timestamp, whether the live rate at a chosen money changer has reached your
+target *right now*, and alerts you the moment it does.
 
-Initial scope: **CNY/MYR, SELL rate**, from **My Money Master**,
-**Taj Muhabath**, and (added 22-Aug-2026) **Merchantrade Asia**.
-Architecture supports adding more currencies, branches, and sources
-without a redesign — Merchantrade Asia is itself proof of that: it was
-added after the original Phase 1-10 build without touching the scheduler,
-validation, or target-comparison logic, only adding its own adapter +
-config file and a few registration lines (see the "Money changers" section
-below).
+**Live:** https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/
 
-## Current status: Phase 10 of 10
+See `CHANGELOG.md` for the full v1.0.0 feature list and the project's
+build history.
 
-| Phase | What | Status |
-|---|---|---|
-| 1 | Repo scaffold, dashboard UI on simulated data, deployed to GitHub Pages | ✅ live |
-| 2 | My Money Master live retrieval | ✅ live (CNY SELL/BUY) |
-| 3 | Taj Muhabath live retrieval | ✅ live (CNY SELL/BUY, branch: LALAPORT BBCC) |
-| 4 | Rate validation wired into adapters | ✅ done for both adapters (`backend/validation/validateRate.js`) |
-| 5 | Target comparison engine wired to real data | ✅ done — `isTargetMet` (`frontend/app.js`) operates on real readings; `backend/targetEngine/compareTarget.js` is the tested server-side twin, now actually called by Phase 8's scheduler |
-| 6 | Browser notifications wired to real alerts | ✅ live-tested end-to-end against a real trigger, not just read-through |
-| 7 | Supabase (DB, auth, multi-user) | ✅ schema + RLS + email/password sign-up + log-in + password reset + per-user saved alerts — **live-tested end-to-end**, including a real cross-account isolation check across three separate accounts (see `SUPABASE_SETUP.md`) |
-| 8 | Scheduled backend job (Supabase-backed) | ✅ implemented and **live-tested successfully** — `backend/scheduler/run.js` (wired into `.github/workflows/monitor.yml`) fetches every ACTIVE alert, checks both adapters, writes to the `rates` table, evaluates each alert against the **best rate across its selected sources**, and marks it TRIGGERED + logs a `notifications` row the moment a target is met — no browser tab required. As of Phase 14 this runs on a **recurring 5-minute schedule**, not just a manual click — see that row below and the Compliance note. |
-| 9 | Full test pass | 🟡 partial — unit tests for all three adapters' parsing logic, the target-comparison engine, the scheduler's pure combo-selection, notify-target-resolution, and due-for-check logic, and the notification-message formatting all exist and pass (69/69, updated 22-Aug-2026 with the Phase 14 due-for-check tests); no end-to-end/multi-user automated test pass yet beyond the manual proofs recorded for Phases 7/8 |
-| 10 | Email / Telegram, rate-history charts | ✅ implemented — real email (Resend) and Telegram delivery from `backend/scheduler/run.js` via `backend/notifications/notify.js` (see `NOTIFICATIONS_SETUP.md`), plus a real, Supabase-backed rate-history chart (`frontend/rateHistory.js`) for signed-in users, replacing the old session-only chart for anyone signed in. Telegram delivery has since been confirmed `DELIVERED` in a real test run; email is still blocked on Resend's sandbox-sending restriction — see `NOTIFICATIONS_SETUP.md`'s Troubleshooting section. |
-| — | Merchantrade Asia live retrieval (post-Phase 10, 22-Aug-2026) | ✅ live (CNY SELL/BUY) — added on request, alongside a documented look at three other money changers that could NOT be added yet (MaxMoney: blocked by a `403 Forbidden`; Spectrum Forex: domain does not resolve; Vital Rate: parked domain, likely absorbed into Merchantrade Asia) — see the "Money changers" section below for the full findings. |
-| — | Simultaneous multi-channel notifications (post-Phase 10, 22-Aug-2026) | ✅ done — the Notification field is now checkboxes, not a single dropdown: an alert can select any combination of Browser/Email/Telegram at once, and **all** selected channels fire together via `Promise.all` when the target is met (`resolveNotifyTargets()` + the notify loop in `backend/scheduler/run.js`), instead of only whichever one was picked. Requires the `notification_methods` (array) column added by the Phase 11 migration block at the bottom of `database/schema.sql` — the old singular `notification_method` column is backfilled into the array automatically, then dropped, so **this schema.sql must be re-run in Supabase's SQL Editor** for saving/sending to keep working. |
-| — | Edit an existing saved alert (post-Phase 10, 22-Aug-2026) | ✅ done — each saved alert now has an **Edit** button alongside Disable/Delete. It loads that alert's exact settings back into the form (`window.CKM.loadAlertIntoForm()` in `frontend/app.js`), shows an "Editing…" banner with Cancel, and re-labels Save as **Update this alert** — clicking it does a Supabase `UPDATE` on that same row instead of creating a new one. No schema change needed. |
-| 14 | Recurring schedule — the monitoring interval becomes real | ✅ done, 22-Aug-2026, **at the project owner's explicit request** — `.github/workflows/monitor.yml` now runs every 5 minutes via `schedule:`, not only on a manual click. `alerts.last_checked_at` (new column, `database/schema.sql`'s Phase 14 migration) plus `run.js`'s `isDueForCheck()` make each alert's own **Monitoring interval** dropdown actually throttle how often it's re-checked — a workflow run skips any alert whose own interval hasn't elapsed yet. A single alert can never be checked *more* often than the workflow's own 5-minute cadence, only less. See the Compliance note directly below for exactly what was (and wasn't) verified about each site's Terms of Use before this was turned on — this is a real change in how often these three real sites get automated traffic, and it deserves to be read, not just skimmed. |
-| — | Interval dropdown genuinely matches real check frequency (post-Phase 14, 22-Aug-2026) | ✅ done — the **"Every 1 minute"** option was removed from the dropdown (`frontend/index.html`). GitHub Actions doesn't reliably run scheduled workflows more often than every 5 minutes no matter what cron is set, and running real checks against three live money-changer sites every single minute would also go beyond the "low, respectful frequency" compliance decision documented below. So **5 minutes is now both the default and the true floor** — every remaining option (5/10/15/30) already maps 1:1 onto real-world check frequency via `isDueForCheck()`, with no gap between what the dropdown promises and what actually happens. `database/schema.sql`'s CHECK constraint still technically permits a stored value of `1` (harmless — treated identically to 5 — and left alone to avoid a needless extra migration), it's just no longer offered in the UI. |
-| 31 | BNM reference-rate cross-check (26-Aug-2026) | ✅ done, at the project owner's request ("will there be any free APIs... to make this app more robust"). No free API exists for a specific Malaysian money changer's own retail rate, but Bank Negara Malaysia publishes a free, no-key, official Interbank reference rate at `api.bnm.gov.my` — endpoint and real response shape confirmed live by the project owner via PowerShell. `backend/reference/bnmReference.js` fetches it (with session fallback + caching); `backend/validation/bnmCrossCheck.js` compares it against each scraped reading as an ADDITIONAL sanity layer on top of (never instead of) each adapter's own `expectedRange` bounds — only a gross deviation (>25%, well above any real retail spread) downgrades a reading to `RATE_VALIDATION_ERROR`, catching decimal-placement/unit-scaling/wrong-row bugs the static range check alone might miss. Wired into `backend/scheduler/run.js`'s `checkCombo()`; BNM being unreachable or not covering a currency silently no-ops, never blocks a real reading. 18 new tests (`tests/bnmReference.test.js`, `tests/bnmCrossCheck.test.js`), full suite 88/88. **BNM's rate is never shown as, or used as, a money changer's own live rate** — see `backend/reference/bnmReference.js`'s own header for why that would violate this project's Core Principle. |
+## What this does
 
-**CNY at all three money changers is real.** My Money Master CNY, Taj
-Muhabath CNY (branch: LALAPORT BBCC), and Merchantrade Asia CNY are
-retrieved live by a GitHub Actions job on every deploy — see
-`backend/scripts/checkRate.js` and `.github/workflows/pages.yml`. Every
-other currency, and any other Taj Muhabath branch, is still simulated by
-`frontend/app.js` and always labeled SIMULATED — never LIVE, per the
-project's core rule. See `config/websites/*.json` for the live-inspected
-extraction plan for each source (URLs, selectors, wait strategy — verified
-directly against the live sites, not guessed, and re-verified when a
-site's structure changed mid-build — see the "notes" fields in those
-config files for the full story of what changed and how it was caught).
+1. You pick a currency, a BUY/SELL rate type, a target rate, and one or
+   more money changers to watch.
+2. A scheduled backend job opens each money changer's real live webpage
+   (browser automation, not a search snippet or a cached page), reads the
+   actual rendered rate, and validates it.
+3. It compares the best available rate across your selected sources
+   against your target.
+4. The moment the target is reached, you get notified — by email,
+   Telegram, real push notification (works even with your browser fully
+   closed), and/or an in-tab browser alert if you have the dashboard open
+   — any combination at once.
 
-### Money changers — coverage and what was ruled out (22-Aug-2026)
+Every rate shown is honestly labeled **LIVE**, **SIMULATED**, **STALE**, or
+**SOURCE UNAVAILABLE**. Nothing is ever shown as live unless it was
+actually retrieved from the real site within the freshness window — see
+"What's real vs. simulated" below.
 
-The user asked to add several money changers from a reference Python
-script. Per this project's non-negotiable rule against guessing selectors
-or trusting an unverified URL, each was independently checked live before
-any adapter code was written:
+## Money changers
 
-| Money changer | Result |
+| Source | Status |
 |---|---|
-| **Merchantrade Asia** | ✅ Added. URL from the script (`https://mtradeasia.com/exchange`) was correct; real CNY data confirmed live via direct browser automation; DOM structure captured and documented in `config/websites/merchantradeasia.json`. See `backend/scrapers/merchantradeasia.adapter.js`. |
-| **My Money Master** | Already implemented (Phase 2). Note: the reference script used `https://www.moneymaster.com.my/` — the real, working domain is `http://www.mymoneymaster.com.my/` (confirmed live back in Phase 2; the script's URL does not resolve to the real site). No action needed beyond this note. |
-| **MaxMoney** | ❌ Not added. Both `https://maxmoney.com.my/` and `https://www.maxmoney.com.my/` returned a server-level `403 Forbidden` (Apache `ErrorDocument`) on direct request, live-checked 22-Aug-2026 — this reads as an access control / anti-bot response, and per this project's compliance rules (and this assistant's own operating rules), that is not bypassed. If you have a different real URL for this money changer, or know this block is geo/IP-specific and not present from your own network, let the maintainer know and this can be re-attempted. |
-| **Spectrum Forex** | ❌ Not added. `spectrumforex.com.my` does not currently resolve (confirmed NXDOMAIN via an authoritative DNS lookup, 22-Aug-2026) — there is no live site at that address to build an adapter against. If you have an updated URL for this business, it can be re-attempted. |
-| **Vital Rate** | ❌ Not added. `vitalrate.com` is a parked/for-sale domain (redirects to a domain marketplace listing), not the real company. Public information indicates Vital Rate Sdn Bhd was acquired by Merchantrade Asia Sdn Bhd in 2017 and may no longer operate as an independent brand — some of its former branches (e.g. Pavilion KL) now appear as Merchantrade Asia branches on the page the new adapter above already covers. If Vital Rate still operates independently under a different real domain, share it and this can be reconsidered. |
+| **My Money Master** | ✅ Live |
+| **Taj Muhabath** | ✅ Live, with branch selection |
+| **Merchantrade Asia** | ✅ Live |
+| **Jalinan Duta** | ✅ Live |
 
-### Currency coverage — VND and TWD added (22-Aug-2026, same day)
+Each source has its own adapter (`backend/scrapers/*.adapter.js`) and
+config file (`config/websites/*.json`) documenting the exact URL,
+selectors, and wait strategy — all captured by directly inspecting the
+live rendered page, never guessed. Adding a 5th source means adding one
+adapter + one config file, without touching the scheduler, validation, or
+target-comparison logic.
 
-Requested via the dashboard's currency dropdown. Both are now selectable, and **both are real/LIVE at Merchantrade Asia** (`config/websites/merchantradeasia.json`'s `currencyDisplayNames` and `validation.expectedRange` now cover `VND` and `TWD` alongside `CNY`; no adapter code changed, since `parseHtml()` was already currency-agnostic — only the config entries were new). My Money Master and Taj Muhabath were not re-checked for VND/TWD coverage, so those two sources still simulate them if selected — same honest LIVE/SIMULATED split already used for every other non-CNY currency.
+A few other money changers were investigated on request and not added —
+see `NEW_SOURCES_INVESTIGATION.md` for exactly why (a `403 Forbidden`, a
+non-resolving domain, a parked domain, an empty "Coming Soon" page, or a
+dynamic widget with no inspectable selectors to build against). None of
+these are guesses — every exclusion has a documented, live-checked reason.
 
-One thing worth knowing if you're reading a target rate for either: **Merchantrade Asia doesn't quote every currency per 1 unit.** CNY and TWD are per 100 units (label reads "100 CNY" / "100 TWD"), but VND is quoted per **1,000,000** units ("1000000 VND") — confirmed live, not assumed (see the `validation.notes` field in the config file). The currency dropdown's VND/TWD labels spell out the unit denomination for exactly this reason, and the simulated fallback values for both are scaled to match, so a multi-source alert comparing a simulated My Money Master reading against a real Merchantrade Asia one stays apples-to-apples.
+## Currency coverage
 
-### Compliance note (read this — `monitor.yml` now runs on a recurring schedule)
+12 currencies: **USD, SGD, EUR, GBP, AUD, JPY, THB, KRW, CNY, HKD, VND,
+TWD.**
 
-Through Phase 13, neither `pages.yml` nor `monitor.yml` ran on a cron. All
-three of `config/websites/mymoneymaster.json`,
-`config/websites/tajmuhabath.json`, and
-`config/websites/merchantradeasia.json` flagged the same open action item:
-a human should read each site's Terms of Use before this runs on a
-recurring, unattended schedule. Additionally, the Taj Muhabath adapter
-deliberately does NOT call the internal API endpoint its branch dropdown
-uses internally (discovered during the Phase 3 build) — that endpoint
-requires an authorization this adapter does not have and should not
-attempt to replicate. See the header comment in
-`backend/scrapers/tajmuhabath.adapter.js` for details. The MaxMoney
-adapter that was NOT added (see the "Money changers" section above) is a
-related example of the same principle applied at the URL-access level
-rather than the API level — a `403 Forbidden` was treated as an access
-control to respect, not a puzzle to work around.
+A currency is real/LIVE at a given source only when that source's own live
+page actually lists it — Taj Muhabath, Jalinan Duta, and My Money Master
+all match by ISO currency code directly (so any code any of those three
+sites' live table lists just works, automatically — this is how My Money
+Master picked up VND/THB/KRW/TWD support in Phase 42, once its adapter
+moved to the site's full ~40-currency rate-board page), while Merchantrade
+Asia matches by the site's own display-name text (so a new currency there
+needs one config-file line added once that text is confirmed on the live
+page). A currency/source combination with no real support is clearly
+labeled SIMULATED, never silently faked as live — see `frontend/app.js`'s
+`hasRealAdapter()` for the full logic.
 
-**Phase 14 (22-Aug-2026): the project owner explicitly decided to turn the
-schedule on**, at a modest 5-minute interval, after being told what had and
-hadn't actually been checked. For the record, here's exactly what that
-review found, tool limitations included, so this isn't overstated as more
-thorough than it was:
+VND and TWD are quoted per a specific unit denomination rather than per 1
+unit (VND per 1,000,000, TWD per 100; also THB/HKD/CNY per 100 and JPY/KRW
+per 1,000) — the currency dropdown's labels spell this out, and every
+simulated fallback is scaled to match so a multi-source comparison never
+mixes units.
 
-- **Merchantrade Asia** — its Terms & Conditions page
-  (`https://mtradeasia.com/legal/terms-and-conditions`) WAS fetched and
-  read. No clause addressing automated access, scraping, bots, or
-  crawlers was found. `robots.txt` explicitly allows the `/exchange` page
-  (see that config file's `compliance` block).
-- **My Money Master** — no `robots.txt` restriction exists (404). Its
-  Terms of Use page (`/Home/policy`) could NOT actually be fetched: the
-  site has no working HTTPS (`https://` redirects back to `http://`, which
-  the fetching tool used for this review can't follow — a real technical
-  limitation, not a skipped step). Genuinely unread.
-- **Taj Muhabath** — no public Terms of Use page could be located at all;
-  the site only exposes a Privacy link and a registration-gated "terms"
-  reference reachable after signing up. Genuinely unread.
+## Notifications
 
-In short: nothing found says "don't automate this," but two of the three
-sites' actual Terms of Use text was never read, for reasons outside the
-tooling's control. If you're the project owner reading this later and want
-to revisit that decision — tighten the interval, pause it, or actually get
-eyes on those two remaining pages (e.g. open `http://www.mymoneymaster.com.my/Home/policy`
-directly in a browser, since a browser follows that redirect fine even
-though the automated fetch tool couldn't) — comment the `schedule:` block
-back out in `.github/workflows/monitor.yml` (the `workflow_dispatch:`
-manual trigger stays available either way) and it goes back to manual-only
-immediately.
+| Channel | How it's delivered |
+|---|---|
+| **Browser** | In-tab only — `new Notification(...)`, fires while the dashboard tab is open. No setup needed. |
+| **Email** | Via Resend, sent by the scheduled backend job. See `NOTIFICATIONS_SETUP.md`. |
+| **Telegram** | Via the Bot API, sent by the scheduled backend job. See `NOTIFICATIONS_SETUP.md`. |
+| **Push** | Real Web Push — a native OS notification delivered by the scheduled backend job even with your browser fully closed. See `PUSH_SETUP.md`. |
 
-### Accounts (Phase 7 — optional)
+Any combination can be selected per alert; all selected channels fire
+together the moment a target is reached. Every delivery attempt is
+recorded honestly as `DELIVERED` or `FAILED` (with a reason) in the
+`notifications` table — never optimistically assumed. All notification
+timestamps are shown in Malaysia local time (UTC+8), regardless of which
+timezone the backend happens to be running in.
 
-The dashboard works fully without signing in, exactly as it did in Phases
-1-6. Signing in (your own email address + a password you set — "Forgot
-password?" is supported too) additionally lets you save your current alert
-configuration to your own account, isolated from every other user by
-Postgres Row-Level Security — see `database/schema.sql`. Credentials are
-never stored in this repo — Supabase Auth hashes and stores each password
-server-side (see `SUPABASE_SETUP.md`'s "why email + password instead of a
-login table in the repo" note). This
-requires a Supabase project, which you provision yourself; **see
-`SUPABASE_SETUP.md` for the full step-by-step walkthrough.** Until that's
-done, the account card on the dashboard shows a small "not configured yet"
+## Accounts (optional)
+
+The dashboard works fully signed out — you can build and watch an alert in
+this browser tab without an account. Signing in (your own email + a
+password you set) additionally lets you save alert configurations to your
+account, isolated from every other user by Postgres Row-Level Security —
+see `database/schema.sql`. This requires a Supabase project, which you
+provision yourself — see `SUPABASE_SETUP.md` for the full walkthrough.
+Until that's done, the account card just shows a "not configured yet"
 notice and nothing else on the page is affected.
 
 ## Try it
@@ -142,130 +111,123 @@ python3 -m http.server 8080
 # then open http://localhost:8080
 ```
 
-No build step, no dependencies for the frontend in this phase.
+No build step — the frontend is plain HTML/CSS/JS.
 
 ## Repository structure
 
 ```
-currency-rate-alert/
-├── frontend/                 # GitHub Pages site — static, no secrets
+my-currency-rate-alert-tracker/
+├── frontend/                  # GitHub Pages site — static, no secrets
 │   ├── index.html
 │   ├── styles.css
-│   ├── app.js
-│   ├── auth.js                # Phase 7 — sign-in + saved alerts UI, additive to app.js
-│   ├── rateHistory.js         # Phase 10 — real Supabase-backed history chart, additive to app.js
-│   └── supabaseConfig.js      # Phase 7 — your project URL + anon key (safe to commit)
-├── backend/                  # Phase 2+ — never deployed to GitHub Pages
-│   ├── scrapers/              # one adapter per money changer
-│   ├── validation/
-│   ├── targetEngine/
-│   ├── notifications/          # Phase 10 — notify.js (dispatcher) + email.js (Resend) + telegram.js (Bot API)
-│   ├── scheduler/              # Phase 8 — the real scheduled job (run.js) + its pure combo-selection helpers
+│   ├── app.js                 # core dashboard logic, live/simulated reading pipeline
+│   ├── auth.js                # sign-in + saved alerts UI
+│   ├── rateHistory.js         # real Supabase-backed history chart
+│   ├── push.js                # Web Push subscribe/unsubscribe flow
+│   ├── sw.js                  # service worker — receives push events only, not a full PWA
+│   ├── supabaseConfig.js      # your project URL + anon key (safe to commit)
+│   └── pushConfig.js          # your VAPID public key (safe to commit)
+├── backend/                   # never deployed to GitHub Pages
+│   ├── scrapers/               # one adapter per money changer
+│   ├── validation/              # rate sanity checks + BNM cross-check
+│   ├── targetEngine/           # target-comparison engine
+│   ├── notifications/          # notify.js (dispatcher) + email.js + telegram.js + webpush.js
+│   ├── scheduler/              # the real scheduled job (run.js) + its pure helpers
+│   ├── reference/              # Bank Negara Malaysia reference-rate client
 │   └── db/                    # Supabase service-role client (backend-only)
 ├── database/
-│   └── schema.sql             # Phase 7 tables + RLS; Phase 10 adds telegram_chat_id / delivery_error columns
-├── config/websites/          # per-source URLs, selectors, wait strategy
-├── .github/workflows/         # scheduled monitor (currently manual-trigger only)
+│   └── schema.sql             # tables, RLS policies, and every migration in order
+├── config/websites/           # per-source URLs, selectors, wait strategy
+├── .github/workflows/
+│   ├── pages.yml               # deploys frontend/ to GitHub Pages on every push to main
+│   └── monitor.yml             # the recurring 5-minute scheduled alert check
 ├── tests/
 ├── .env.example
-├── SUPABASE_SETUP.md          # Phase 7 — provisioning walkthrough
-├── NOTIFICATIONS_SETUP.md     # Phase 10 — Resend + Telegram walkthrough
+├── SUPABASE_SETUP.md          # provisioning walkthrough
+├── NOTIFICATIONS_SETUP.md     # Resend + Telegram walkthrough
+├── PUSH_SETUP.md              # VAPID key generation + GitHub secrets walkthrough
+├── NEW_SOURCES_INVESTIGATION.md
+├── CHANGELOG.md
 └── LICENSE
 ```
 
 ## Deploying the frontend to GitHub Pages
 
-**Live now:** https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/
+This repo deploys via **GitHub Actions**, not "Deploy from a branch" — the
+branch-deploy source only offers `/ (root)` or `/docs` as the published
+folder, not `/frontend`, so Actions is the only way to publish this
+repo's layout without moving files around.
 
-This repo deploys via **GitHub Actions**, not "Deploy from a branch". That
-matters because GitHub's branch-deploy source only lets you pick `/ (root)`
-or `/docs` as the published folder — it does **not** offer `/frontend` as an
-option (this was tested directly in the Pages settings UI; the folder
-dropdown returns "No results found" for anything else). Since this repo
-keeps `frontend/` as its own top-level folder, GitHub Actions is the only
-source that can publish it without moving files around.
-
-The workflow lives at `.github/workflows/pages.yml` and runs automatically
-on every push to `main`, plus on demand via the Actions tab ("Run workflow").
-It checks out the repo, uploads `frontend/` as the Pages artifact, and
-deploys it — no build step, since the frontend has none.
+`.github/workflows/pages.yml` runs automatically on every push to `main`,
+plus on demand via the Actions tab. It checks out the repo, uploads
+`frontend/` as the Pages artifact, and deploys it — no build step.
 
 To set this up on a fresh fork/clone:
 
-1. Push this folder's contents to your own **public** GitHub repository:
-   ```bash
-   git init
-   git add .
-   git commit -m "Phase 1: repo scaffold + dashboard UI on simulated data"
-   git branch -M main
-   git remote add origin https://github.com/<your-username>/<your-repo>.git
-   git push -u origin main
-   ```
+1. Push this folder's contents to your own **public** GitHub repository.
 2. In the repo, go to **Settings → Pages** and set **Source** to
-   **"GitHub Actions"** (not "Deploy from a branch").
-3. The `pages.yml` workflow (already in `.github/workflows/`) will run on
-   the next push, or trigger it manually from the **Actions** tab →
-   "Deploy GitHub Pages" → "Run workflow".
-4. GitHub will publish it at `https://<your-username>.github.io/<your-repo>/`
-   within a minute or two. Check the **Actions** tab for build status.
+   **"GitHub Actions"**.
+3. `pages.yml` runs on the next push, or trigger it manually from the
+   **Actions** tab → "Deploy GitHub Pages" → "Run workflow".
+4. GitHub publishes it at `https://<your-username>.github.io/<your-repo>/`
+   within a minute or two.
+
+## The recurring schedule and compliance
+
+`.github/workflows/monitor.yml` runs every 5 minutes, checking every
+active alert whose own monitoring interval has elapsed since it was last
+checked (an alert can be checked *less* often than 5 minutes via its own
+interval setting, never more). Before this was turned on, each source's
+Terms of Use and `robots.txt` were checked as far as tooling allowed:
+
+- **Merchantrade Asia** — Terms & Conditions page was fetched and read;
+  no clause addressing automated access was found; `robots.txt` explicitly
+  allows the page this app reads.
+- **My Money Master** — no `robots.txt` restriction exists, but its Terms
+  of Use page could not be fetched by the tooling used for this review
+  (a broken HTTPS redirect a browser follows fine but an automated fetch
+  couldn't) — genuinely unread.
+- **Taj Muhabath** — no public Terms of Use page could be located at all
+  — genuinely unread.
+
+In short: nothing found says "don't automate this," but two of the three
+sites' Terms of Use text was never actually read, for reasons outside the
+tooling's control — stated plainly rather than overstated. If you want to
+revisit this, comment the `schedule:` block back out in `monitor.yml` (the
+manual "Run workflow" trigger stays available either way).
 
 ## What's real vs. simulated in this build
 
-- **Real:** the UI, the form validation, the target-comparison logic
-  (`isTargetMet` in `frontend/app.js`), the duplicate-alert-suppression
-  logic, the multi-source "best rate" comparison, the rate-validation
-  sanity checks, the responsive/mobile layout, the adapter configuration in
-  `config/websites/*.json` (URLs and selectors were captured by directly
-  inspecting the live sites, not guessed) — **and, as of Phase 3 (My Money
-  Master + Taj Muhabath) and again as of 22-Aug-2026 (Merchantrade Asia),
-  the CNY rate itself from all three sources**, retrieved live by
-  `backend/scrapers/mymoneymaster.adapter.js`,
-  `backend/scrapers/tajmuhabath.adapter.js`, and
-  `backend/scrapers/merchantradeasia.adapter.js`, validated, and published
-  to `frontend/data/latest-rates.json` on every deploy.
-- **Simulated:** every other currency, and any Taj Muhabath branch other
-  than LALAPORT BBCC. `frontend/app.js` generates these with a small random
-  walk around realistic starting values and always labels them SIMULATED —
-  never LIVE, per the project's core rule.
-- **Real, confirmed live (Phase 7):** account sign-in, saved per-user
-  alerts, and their isolation — enforced by the database itself
-  (`database/schema.sql`'s Row-Level Security policies), not just by the
-  UI. Live-tested end-to-end, including cross-account isolation across
-  three separate accounts. See `SUPABASE_SETUP.md`.
-- **Real, as of Phase 8:** a saved alert's target condition IS evaluated
-  server-side — independent of any open browser tab — by
-  `backend/scheduler/run.js`, using the best rate across the alert's
-  selected sources. It marks the alert TRIGGERED and logs a
-  `notifications` row the moment a target is met. The gap is no longer
-  "this doesn't exist" — it's "this only runs when a maintainer manually
-  triggers the 'Monitor Exchange Rates' GitHub Actions workflow"; there is
-  no recurring schedule yet (see the Compliance note above).
-- **Real, as of Phase 10:** email (via Resend) and Telegram (via the Bot
-  API) notifications are actually sent by `backend/scheduler/run.js` the
-  moment a saved alert's target is reached — see `backend/notifications/
-  notify.js` and `NOTIFICATIONS_SETUP.md`. The `notifications` row records
-  the real outcome (`DELIVERED` or `FAILED`, with a reason) rather than
-  being optimistically marked delivered before a send is even attempted.
-  Also as of Phase 10: signed-in users see a **real** rate-history chart
-  (`frontend/rateHistory.js`) sourced from the `rates` table Phase 8's
-  scheduler has been writing to — not just this browser session's readings.
-- **Not yet built:** an automatic recurring schedule for the Phase 8/10 job
-  (compliance review pending — see above, this is what makes real history
-  and real alerts still depend on someone clicking "Run workflow"), and
-  WhatsApp/SMS delivery (project brief's optional Phase 3 channels).
+- **Real:** live rates from all 4 money changers listed above, for every
+  currency each site's own live page actually lists — retrieved by
+  browser automation, validated, and cross-checked against Bank Negara
+  Malaysia's free reference rate as an additional sanity layer.
+- **Real:** account sign-in, saved per-user alerts, and their isolation —
+  enforced by the database itself (Row-Level Security), not just the UI.
+- **Real:** server-side target evaluation on a recurring 5-minute
+  schedule, independent of any open browser tab.
+- **Real:** email, Telegram, and Web Push delivery, with every attempt
+  honestly recorded as delivered or failed.
+- **Simulated:** any currency/source combination that source's live page
+  doesn't actually list — always labeled SIMULATED, never shown as live.
+- **Not built:** WhatsApp/SMS delivery, and any PWA behavior beyond
+  receiving push events (no offline support, no install prompt).
 
 ## Environment variables
 
-See `.env.example`. None of these are required to run the Phase 1-6
-frontend as a signed-out demo. `SUPABASE_URL` / `SUPABASE_ANON_KEY` matter
-once you provision Supabase for Phase 7 (see `SUPABASE_SETUP.md`) — the
-anon key goes in `frontend/supabaseConfig.js`, not `.env` (that file is for
-backend-only values). `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, and
-`TELEGRAM_BOT_TOKEN` are Phase 8/10 — backend/GitHub Actions secrets only,
-never committed, never referenced anywhere in `frontend/`. See
-`NOTIFICATIONS_SETUP.md` for how to obtain the latter two.
+See `.env.example`. `SUPABASE_URL` / `SUPABASE_ANON_KEY` go in
+`frontend/supabaseConfig.js`, not `.env` — see `SUPABASE_SETUP.md`.
+`SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `TELEGRAM_BOT_TOKEN`, and
+`VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_SUBJECT` are backend/GitHub
+Actions secrets only — never committed, never referenced in `frontend/`.
+See `NOTIFICATIONS_SETUP.md` and `PUSH_SETUP.md` for how to obtain each.
+
+## Tests
+
+112 tests across 14 files — see `tests/README.md` for what each covers.
+Run with `node --test tests/` from the repo root, or `npm test` from
+`backend/`.
 
 ## License
 
-MIT — see `LICENSE`. Change this if you'd prefer something else before
-you push it publicly.
+MIT — see `LICENSE`.
