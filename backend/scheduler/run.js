@@ -126,6 +126,29 @@
  *   field specifically, since the scheduler keeps it live on its own) —
  *   only setting status to 'DISABLED' actually stops a given alert from
  *   being evaluated at all.
+ *
+ * - Phase 41 (27-Aug-2026) refinement — dedupe repeat notifications by rate
+ *   VALUE, not by trigger status. Phase 40's "no throttling" choice, above,
+ *   turned out in practice to mean an identical notification every single
+ *   5-minute run for as long as the live rate sat still at/beyond target —
+ *   reported directly as unwanted spam, with an explicit request to only
+ *   notify again once the rate has actually moved. `alerts.
+ *   last_notified_rate` (new column, see database/schema.sql) now tracks
+ *   the rate value a notification last actually went out for; evaluateAlert()
+ *   compares this run's best live rate against it and skips the notify step
+ *   (but still updates status/last_checked_at/rates history exactly as
+ *   before) when they match. Deliberately NOT reused for this:
+ *   `prevRate`/`record.prevRow` a few lines below — that's the immediately-
+ *   PREVIOUS run's raw reading, used only for PCT_CHANGE's percentage-move
+ *   math; a rate that dipped and came back to the same value across two
+ *   non-notifying runs shouldn't count as "changed" for notification-dedupe
+ *   purposes, so this needed its own explicit column rather than piggy-
+ *   backing on that unrelated concept. `last_notified_rate` is reset to
+ *   NULL the moment an alert reverts TRIGGERED -> ACTIVE (see the `!met`
+ *   branch below), so a later, unrelated re-trigger that happens to land on
+ *   the exact same numeric rate as some earlier notification is never
+ *   wrongly suppressed — only a genuinely CONTINUOUS run of unchanged
+ *   readings while still triggered gets deduplicated.
  */
 
 'use strict';
@@ -428,8 +451,18 @@ async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, e
     // that's no longer true, and so the next real crossing reads as a
     // clean ACTIVE -> TRIGGERED transition rather than "already
     // triggered, re-notifying."
+    //
+    // Phase 41 (27-Aug-2026): also clear last_notified_rate here. Once an
+    // alert un-triggers, its "memory" of the last rate it notified about
+    // should reset — otherwise a LATER re-trigger that happens to land on
+    // the exact same numeric rate as some earlier, unrelated notification
+    // would be wrongly suppressed by the Phase 41 rate-change check below,
+    // even though it's a genuinely new trigger event.
     if (alert.status === 'TRIGGERED') {
-      const { error: revertError } = await sb.from('alerts').update({ status: 'ACTIVE' }).eq('id', alert.id);
+      const { error: revertError } = await sb
+        .from('alerts')
+        .update({ status: 'ACTIVE', last_notified_rate: null })
+        .eq('id', alert.id);
       if (revertError) {
         console.error(`[scheduler] could not revert alert ${alert.id} back to ACTIVE: ${revertError.message}`);
       } else {
@@ -439,17 +472,53 @@ async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, e
     return { evaluated: true, triggered: false };
   }
 
-  // Phase 40 (27-Aug-2026): notify on EVERY run the condition holds, not
-  // just the first time — deliberately no throttling/de-duplication here,
-  // per the project owner's explicit choice. `wasAlreadyTriggered` is only
-  // used for a clearer run log, not to gate whether notify() gets called.
+  // Phase 40 (27-Aug-2026): re-evaluate on EVERY run the condition holds,
+  // not just the first time — no throttling on the STATUS/evaluation side,
+  // per the project owner's explicit choice.
+  //
+  // Phase 41 (27-Aug-2026) refinement: notifying on every run turned out to
+  // mean an identical message every 5 minutes for as long as the live rate
+  // sits still at/beyond target — reported directly as unwanted spam.
+  // Fixed by adding exactly one condition: only actually SEND a
+  // notification when this run's best live rate differs from
+  // `alerts.last_notified_rate` — the rate value captured the last time a
+  // notification genuinely went out for this alert (not the previous run's
+  // raw reading, which is a different, PCT_CHANGE-specific concept already
+  // used above as `prevRate` — conflating the two would be wrong: a rate
+  // that dipped and came back to the same value across two non-notifying
+  // runs shouldn't count as "changed" for this purpose). The alert's
+  // status/last_checked_at/rates history still update every run regardless
+  // — only the actual send is now deduplicated by rate value, matching the
+  // project owner's follow-up request to stop repeat-notifying an unchanged
+  // rate while keeping "no throttling" for everything else (status
+  // accuracy, live data freshness, and a genuinely NEW rate value while
+  // still triggered).
   const wasAlreadyTriggered = alert.status === 'TRIGGERED';
-  const { error: updateError } = await sb.from('alerts').update({ status: 'TRIGGERED' }).eq('id', alert.id);
+  const lastNotifiedRate = alert.last_notified_rate != null ? Number(alert.last_notified_rate) : null;
+  const rateUnchangedSinceLastNotify =
+    wasAlreadyTriggered && lastNotifiedRate != null && Math.abs(Number(value) - lastNotifiedRate) < 1e-9;
+
+  if (rateUnchangedSinceLastNotify) {
+    const { error: touchStatusError } = await sb.from('alerts').update({ status: 'TRIGGERED' }).eq('id', alert.id);
+    if (touchStatusError) {
+      console.error(`[scheduler] could not confirm alert ${alert.id} TRIGGERED: ${touchStatusError.message}`);
+    }
+    console.log(
+      `[scheduler] alert ${alert.id}: still triggered, rate unchanged (${value}, same as last notification) — ` +
+        `skipping repeat notification (Phase 41).`
+    );
+    return { evaluated: true, triggered: true };
+  }
+
+  const { error: updateError } = await sb
+    .from('alerts')
+    .update({ status: 'TRIGGERED', last_notified_rate: value })
+    .eq('id', alert.id);
   if (updateError) {
     console.error(`[scheduler] could not mark alert ${alert.id} TRIGGERED: ${updateError.message}`);
   }
   console.log(
-    `[scheduler] alert ${alert.id}: ${wasAlreadyTriggered ? 'still triggered — re-notifying (no throttling, Phase 40)' : 'newly triggered'}.`
+    `[scheduler] alert ${alert.id}: ${wasAlreadyTriggered ? `still triggered — rate moved to ${value}, re-notifying (Phase 41)` : 'newly triggered'}.`
   );
 
   const message =

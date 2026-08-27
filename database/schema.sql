@@ -432,6 +432,28 @@ alter table public.alerts
     check (notification_methods <@ ARRAY['browser','email','telegram','push','whatsapp','sms']::text[]
            and array_length(notification_methods, 1) > 0);
 
+-- -----------------------------------------------------------------------------
+-- Phase 41 migration (27-Aug-2026) — last_notified_rate: dedupe repeat
+-- notifications by rate value, not by trigger status. Phase 40 (same day)
+-- made backend/scheduler/run.js re-evaluate a TRIGGERED alert on every run
+-- instead of freezing it, and initially notified on every run the condition
+-- still held (no throttling at all, an explicit product choice at the
+-- time). That turned out to mean an identical notification every 5 minutes
+-- for as long as the live rate sat still at/beyond target — reported as
+-- unwanted spam. This column tracks the rate value that was actually
+-- notified about last time (NULL if the alert has never triggered, or has
+-- since reverted back to ACTIVE — see run.js's revert-to-ACTIVE branch,
+-- which explicitly clears this back to NULL so a later, unrelated
+-- re-trigger at a coincidentally-identical rate isn't wrongly suppressed).
+-- Safe to re-run: `add column if not exists` is a no-op if it's already
+-- there; every existing row simply gets last_notified_rate = NULL, which
+-- run.js already treats as "never notified, don't suppress" — no backfill
+-- needed for correctness.
+-- -----------------------------------------------------------------------------
+
+alter table public.alerts
+  add column if not exists last_notified_rate numeric;
+
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to
 -- get your Project URL / anon key into frontend/supabaseConfig.js, and your
