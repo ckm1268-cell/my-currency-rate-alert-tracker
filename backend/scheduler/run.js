@@ -98,13 +98,34 @@
  *   server-side channel for them, same "never mislabel" principle the
  *   Phase 5 fireAlert() incident and every phase since has held to.
  *
- * - Duplicate-alert suppression needs no extra bookkeeping here: this
- *   script only ever queries alerts with status = 'ACTIVE'. Once an alert
- *   is marked TRIGGERED, it simply stops appearing in that query on every
- *   later run, until the user resets it (frontend/auth.js's existing
- *   enable/disable + the account UI's own reset path) — the database
- *   itself enforces "don't re-fire" for the server-side path, the same
- *   guarantee state.triggered gives the in-browser demo.
+ * - Phase 40 (27-Aug-2026) bug fix — TRIGGERED alerts are evaluated (and
+ *   re-notified) every run, no throttling. This REPLACES the original
+ *   Phase 8 design described just above: this script used to query only
+ *   `status = 'ACTIVE'` alerts, so the moment an alert flipped to
+ *   TRIGGERED it stopped being evaluated at all — not just stopped being
+ *   re-notified. Its live rate/comparison data went stale (no `rates` row
+ *   was ever fetched again for a combo only that alert needed), and it
+ *   could sit showing TARGET REACHED for hours or days with zero further
+ *   checks, even while the real live rate kept moving. Reported directly
+ *   by the project owner, with an explicit instruction that money-changer
+ *   rates move continuously and unpredictably, so a TRIGGERED alert must
+ *   keep being evaluated on every run — and that the "don't repeat-notify"
+ *   suppression this file originally shipped with is NOT the desired
+ *   behavior here. As of this fix: main() fetches every alert whose status
+ *   is NOT 'DISABLED' (so both ACTIVE and TRIGGERED are included), and
+ *   evaluateAlert() (a) re-notifies via every selected channel on EVERY
+ *   run where the condition still holds — deliberately no de-duplication,
+ *   per the owner's explicit choice of "every scheduler run, no
+ *   throttling" over the alternative of throttling to rate-changes-only or
+ *   leaving the original once-only behavior in place — and (b) reverts a
+ *   TRIGGERED alert back to ACTIVE the moment its condition is no longer
+ *   met, so `alerts.status` (and the dashboard badge that reads it)
+ *   always reflects the CURRENT live state, not a historical "this
+ *   triggered once, at some point" flag. The "Reset alert" UI action still
+ *   works (it just also happens to be less necessary now for the status
+ *   field specifically, since the scheduler keeps it live on its own) —
+ *   only setting status to 'DISABLED' actually stops a given alert from
+ *   being evaluated at all.
  */
 
 'use strict';
@@ -398,12 +419,38 @@ async function evaluateAlert(sb, alert, readingsByComboKey, recordsByComboKey, e
       `target=${alert.target_rate} condition=${alert.condition} -> ${met ? 'TARGET REACHED' : 'waiting'}`
   );
 
-  if (!met) return { evaluated: true, triggered: false };
+  if (!met) {
+    // Phase 40 (27-Aug-2026): a TRIGGERED alert is now evaluated every run
+    // (see main()'s query below), so its status needs to actually track
+    // reality instead of freezing at TRIGGERED forever. The moment the
+    // live rate moves back off-target, revert it to ACTIVE so the
+    // dashboard badge stops claiming TARGET REACHED for a condition
+    // that's no longer true, and so the next real crossing reads as a
+    // clean ACTIVE -> TRIGGERED transition rather than "already
+    // triggered, re-notifying."
+    if (alert.status === 'TRIGGERED') {
+      const { error: revertError } = await sb.from('alerts').update({ status: 'ACTIVE' }).eq('id', alert.id);
+      if (revertError) {
+        console.error(`[scheduler] could not revert alert ${alert.id} back to ACTIVE: ${revertError.message}`);
+      } else {
+        console.log(`[scheduler] alert ${alert.id}: no longer meets its condition — reverted TRIGGERED -> ACTIVE.`);
+      }
+    }
+    return { evaluated: true, triggered: false };
+  }
 
+  // Phase 40 (27-Aug-2026): notify on EVERY run the condition holds, not
+  // just the first time — deliberately no throttling/de-duplication here,
+  // per the project owner's explicit choice. `wasAlreadyTriggered` is only
+  // used for a clearer run log, not to gate whether notify() gets called.
+  const wasAlreadyTriggered = alert.status === 'TRIGGERED';
   const { error: updateError } = await sb.from('alerts').update({ status: 'TRIGGERED' }).eq('id', alert.id);
   if (updateError) {
     console.error(`[scheduler] could not mark alert ${alert.id} TRIGGERED: ${updateError.message}`);
   }
+  console.log(
+    `[scheduler] alert ${alert.id}: ${wasAlreadyTriggered ? 'still triggered — re-notifying (no throttling, Phase 40)' : 'newly triggered'}.`
+  );
 
   const message =
     `${bestLabel} ${alert.currency} ${alert.rate_type} target reached: ${value} (target ${alert.target_rate}).`;
@@ -458,14 +505,19 @@ async function main() {
 
   const sb = getServiceRoleClient();
 
-  const { data: alerts, error: alertsError } = await sb.from('alerts').select('*').eq('status', 'ACTIVE');
+  // Phase 40 (27-Aug-2026) bug fix: was `.eq('status', 'ACTIVE')`, which
+  // excluded a TRIGGERED alert from every future run — see the header
+  // comment's Phase 40 entry above for the full rationale. Now everything
+  // except an explicitly DISABLED alert is fetched, so a TRIGGERED alert
+  // keeps getting fresh rate data and keeps re-evaluating/re-notifying.
+  const { data: alerts, error: alertsError } = await sb.from('alerts').select('*').neq('status', 'DISABLED');
   if (alertsError) {
-    console.error('[scheduler] FATAL: could not fetch active alerts:', alertsError.message);
+    console.error('[scheduler] FATAL: could not fetch alerts:', alertsError.message);
     process.exitCode = 1;
     return;
   }
 
-  console.log(`[scheduler] ${alerts.length} active alert(s).`);
+  console.log(`[scheduler] ${alerts.length} alert(s) eligible for a check (status != DISABLED).`);
   if (alerts.length === 0) {
     console.log('[scheduler] nothing to check — exiting.');
     return;
@@ -542,8 +594,9 @@ async function main() {
   }
 
   console.log(
-    `[scheduler] run complete: ${alerts.length} active alert(s), ${dueAlerts.length} due and checked, ` +
-      `${evaluatedCount} evaluated (had a LIVE reading), ${triggeredCount} newly triggered.`
+    `[scheduler] run complete: ${alerts.length} alert(s) eligible (not DISABLED), ${dueAlerts.length} due and ` +
+      `checked, ${evaluatedCount} evaluated (had a LIVE reading), ${triggeredCount} in a triggered condition this ` +
+      `run (Phase 40: includes re-notifies of already-triggered alerts, not just newly-triggered ones — no throttling).`
   );
 }
 
