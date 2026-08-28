@@ -46,7 +46,19 @@
   // wants an active service worker sooner rather than later; previously
   // this only happened lazily the first time a user opted into Push.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {
+    navigator.serviceWorker.register('sw.js').then((reg) => {
+      // Bug fix (28-Aug-2026): browsers throttle their OWN automatic
+      // update checks to roughly once per 24h per registration, so a
+      // genuinely new deploy (a new CKM_SHELL_CACHE version in sw.js)
+      // can silently sit undetected on an already-installed device for
+      // up to a day, still serving old cached CSS/JS — confirmed live
+      // after the "Build Your Alert" shortcut shipped. reg.update() is
+      // exempt from that throttle: it always fetches sw.js fresh (service
+      // worker script requests bypass normal HTTP caching by spec), so
+      // calling it here means every page load checks for a new version
+      // immediately instead of waiting out the browser's own timer.
+      reg.update().catch(() => {});
+    }).catch(() => {
       // Best-effort only — push.js will retry this itself if/when the
       // user opts into Push, and a failed registration here must never
       // block the rest of the page.
