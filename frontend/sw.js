@@ -54,7 +54,7 @@
 // touched app.js's DISPLAY_NAME_MATCHED_CURRENCIES.
 // Bumped again (28-Aug-2026): version 2.0.0 marker -- touched
 // index.html's phase chip (v1.0 -> v2.0).
-const CKM_SHELL_CACHE = 'ckm-shell-v7';
+const CKM_SHELL_CACHE = 'ckm-shell-v8';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

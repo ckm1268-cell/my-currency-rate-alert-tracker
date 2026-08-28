@@ -259,6 +259,16 @@
       if (saveAlertSection) saveAlertSection.style.display = "none";
       stopEditingAlert(); // signed out mid-edit shouldn't leave a stale "Editing..." banner for the next sign-in
 
+      // Bug fix (28-Aug-2026): the desktop auto-collapse above (see the
+      // signed-in branch) adds "form-panel-hidden" to .layout, and its
+      // ONLY way back was the "+ Build Your Alert" link that lives inside
+      // signedInPanel -- which this branch just hid. Without removing the
+      // class here too, a signed-out visitor was left with no "Build Your
+      // Alert" form and no way to get it back at all. The anonymous
+      // build-a-preview-alert flow must always show the form.
+      const layoutElOnSignOut = document.querySelector(".layout");
+      if (layoutElOnSignOut) layoutElOnSignOut.classList.remove("form-panel-hidden");
+
       // Bug fix (23-Aug-2026, Phase 17): this is the ONE place that runs
       // whenever the session becomes null, for ANY reason — the user
       // clicking "Sign out" (signOut() below ALSO does this immediately,
