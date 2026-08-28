@@ -118,16 +118,25 @@
   //     project. Adding a currency here going forward is just adding one
   //     line to that JSON file (the real text, read from the live page)
   //     — not a separate verification step.
-  //     Merchantrade Asia deliberately excludes USD and SGD here: the
-  //     site quotes 2-3 note-size variants for each (e.g. "USD BIG",
-  //     "USD MEDIUM", "USD SMALL") with no single obvious "the" rate —
-  //     picking one silently would be a guess, not a verified mapping.
-  //     JPY is also excluded there on purpose: Merchantrade Asia quotes
-  //     JPY per 100 units, not per 1,000 like every other source/CURRENCIES'
-  //     own base convention — adding it as-is would silently compare a
-  //     10x-mismatched number in the multi-source "best rate" picker. Fix
-  //     requires an explicit per-source unit-conversion step, not just a
-  //     config entry — left out until that's built.
+  //     Merchantrade Asia still excludes SGD here: the site quotes 2
+  //     note-size variants ("SGD BIG" / "SGD SMALL") with no single
+  //     obvious "the" rate, and no standard tier has been specified for
+  //     it — picking one silently would be a guess, not a verified
+  //     mapping.
+  //     USD and JPY were the same story until Phase 44 (28-Aug-2026),
+  //     requested after the project owner asked why both were still
+  //     SIMULATED and was given this exact reasoning: USD also had
+  //     BIG/MEDIUM/SMALL note-size variants (same shape as SGD's problem)
+  //     — the project owner explicitly chose BIG as the standard tier,
+  //     resolving the ambiguity SGD still has. JPY was quoted per 100
+  //     units here vs. per 1,000 everywhere else — the project owner
+  //     specified the x10 conversion; backend/scrapers/merchantradeasia
+  //     .adapter.js's parseHtml() now applies it (config.unitScaleMultiplier),
+  //     so this source's JPY output is already in the standard per-1,000
+  //     convention by the time it reaches this app, same as every other
+  //     source's JPY figures — see config/websites/merchantradeasia.json's
+  //     unitScaleMultiplierNotes/currencyDisplayNamesNotes for the full
+  //     detail on both.
   //
   //   PHASE 42 (27-Aug-2026): My Money Master moved from the
   //   DISPLAY_NAME_MATCHED_CURRENCIES list to CODE_MATCHED_SOURCES. The
@@ -147,7 +156,7 @@
   //   all — hence the move to the generic, code-matched group.
   const CODE_MATCHED_SOURCES = new Set(["tajmuhabath", "jalinanduta", "mymoneymaster"]);
   const DISPLAY_NAME_MATCHED_CURRENCIES = {
-    merchantradeasia: ["CNY", "VND", "TWD", "HKD", "EUR", "GBP", "AUD", "THB", "KRW"],
+    merchantradeasia: ["CNY", "VND", "TWD", "HKD", "EUR", "GBP", "AUD", "THB", "KRW", "JPY", "USD"],
   };
 
   const LIVE_DATA_URL = "data/latest-rates.json";

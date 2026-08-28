@@ -99,8 +99,22 @@ function parseHtml(html, currencyCode) {
     const sellVal = parseFloat(sellText);
     if (Number.isNaN(buyVal) || Number.isNaN(sellVal)) return;
 
-    buyRate = buyVal;
-    sellRate = sellVal;
+    // Phase 44 (28-Aug-2026): this site doesn't quote every currency in
+    // this app's own per-unit convention (see config.unitScaleMultiplier's
+    // own notes in config/websites/merchantradeasia.json — JPY is the one
+    // case today, quoted per 100 units here vs. per 1,000 everywhere else
+    // in this project). Applying the multiplier here, inside parseHtml(),
+    // means every caller (fetchRate() below, validateRate(), and
+    // backend/validation/bnmCrossCheck.js's cross-check) always sees an
+    // already-correctly-scaled value — never a raw number some caller
+    // might forget to convert. Rounded to 4 decimal places (this site's
+    // own observed precision for every currency) purely to avoid
+    // floating-point noise from the multiplication (e.g. 2.4299 * 10
+    // representing as 24.299000000000003) — not a meaningful rounding of
+    // real precision.
+    const scale = (config.unitScaleMultiplier && config.unitScaleMultiplier[currencyCode]) || 1;
+    buyRate = Math.round(buyVal * scale * 10000) / 10000;
+    sellRate = Math.round(sellVal * scale * 10000) / 10000;
   });
 
   if (buyRate === null || sellRate === null) return null;

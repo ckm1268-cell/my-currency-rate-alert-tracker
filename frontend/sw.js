@@ -50,7 +50,9 @@
 // feature touched styles.css and auth.js -- see their own comments.
 // Bumped again (28-Aug-2026): save/update now re-collapses the form
 // panel and scrolls to the account card -- touched auth.js/styles.css.
-const CKM_SHELL_CACHE = 'ckm-shell-v4';
+// Bumped again (28-Aug-2026): Merchantrade Asia JPY/USD enablement
+// touched app.js's DISPLAY_NAME_MATCHED_CURRENCIES.
+const CKM_SHELL_CACHE = 'ckm-shell-v5';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

@@ -139,3 +139,87 @@ test('VND fails validation if (incorrectly) checked against CNY\'s expected rang
   // 60.53" decimal-placement bug class this check exists to catch.
   assert.equal(validation.passed, false);
 });
+
+// JPY and USD added 28-Aug-2026 (Phase 44), at the project owner's explicit
+// direction, resolving the two currencies documented as deliberately
+// excluded above (Phase 38): JPY needed a unit-scale conversion (this site
+// quotes it per 100, the app convention is per 1,000), USD needed a
+// standard tier picked among three real, differently-priced BIG/MEDIUM/
+// SMALL rows (see config/websites/merchantradeasia.json's
+// currencyDisplayNamesNotes/unitScaleMultiplierNotes for the full
+// reasoning). These tests exist to prove both actually work end-to-end
+// against real captured markup, not just that the config file parses.
+
+test('parseHtml extracts the real captured JPY row AND applies the unit-scale conversion (raw site value x10)', () => {
+  const result = parseHtml(html, 'JPY');
+  assert.ok(result, 'expected a parsed result for JPY, got null');
+  // Raw site values (fixture, per 100 JPY): Buy 2.4399 / Sell 2.6830 — this
+  // page's own native convention, confirmed live. The app-wide convention
+  // (frontend/app.js CURRENCIES, every other adapter, bnmCrossCheck's
+  // ADAPTER_CURRENCY_UNIT) is per 1,000, i.e. x10 of this page's own unit.
+  assert.equal(result.buyRate, 24.399);
+  assert.equal(result.sellRate, 26.83);
+});
+
+test('the extracted JPY reading (post-conversion) passes validateRate() against the configured expected range', () => {
+  const result = parseHtml(html, 'JPY');
+  const validation = validateRate({
+    currency: 'JPY',
+    buyRate: result.buyRate,
+    sellRate: result.sellRate,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: config.validation.expectedRange.JPY,
+  });
+  assert.equal(validation.passed, true, `expected validation to pass, reasons: ${validation.reasons.join('; ')}`);
+});
+
+test('JPY would fail validation if the unit-scale conversion were skipped — proving the conversion is load-bearing, not cosmetic', () => {
+  // The raw, unconverted site value (2.4399) is nowhere near JPY's
+  // expectedRange ({min:15,max:40}, which assumes the standard per-1,000
+  // convention) — if this passed, bnmCrossCheck's own gross-deviation
+  // check against BNM's reference rate would also have silently accepted
+  // an ~10x-wrong number as a real live rate.
+  const validation = validateRate({
+    currency: 'JPY',
+    buyRate: 2.4399,
+    sellRate: 2.683,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: config.validation.expectedRange.JPY,
+  });
+  assert.equal(validation.passed, false);
+});
+
+test('parseHtml matches ONLY the USD BIG row, never USD MEDIUM or USD SMALL, even though all three rows contain "USD"', () => {
+  const result = parseHtml(html, 'USD');
+  assert.ok(result, 'expected a parsed result for USD, got null');
+  // BIG is genuinely priced differently from MEDIUM/SMALL in this fixture
+  // (real captured values) — if the matcher accidentally picked up
+  // MEDIUM or SMALL instead, this specific buyRate assertion would catch it.
+  assert.equal(result.buyRate, 3.9169);
+  assert.equal(result.sellRate, 4.11);
+});
+
+test('the extracted USD BIG reading passes validateRate() against the configured expected range', () => {
+  const result = parseHtml(html, 'USD');
+  const validation = validateRate({
+    currency: 'USD',
+    buyRate: result.buyRate,
+    sellRate: result.sellRate,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: config.validation.expectedRange.USD,
+  });
+  assert.equal(validation.passed, true, `expected validation to pass, reasons: ${validation.reasons.join('; ')}`);
+});
+
+test('parseHtml does not apply the JPY unit-scale conversion to USD (or any other currency)', () => {
+  const usd = parseHtml(html, 'USD');
+  const cny = parseHtml(html, 'CNY');
+  // Sanity check that config.unitScaleMultiplier only has a JPY entry —
+  // if USD or CNY ever accidentally got a multiplier, these real captured
+  // values would no longer match the assertions in their own dedicated
+  // tests above, but this test makes the intent explicit rather than
+  // relying on that as an indirect signal.
+  assert.equal(config.unitScaleMultiplier.USD, undefined);
+  assert.equal(config.unitScaleMultiplier.CNY, undefined);
+  assert.ok(usd && cny);
+});
