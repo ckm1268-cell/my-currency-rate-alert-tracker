@@ -80,6 +80,13 @@
   // this page load, so a later updateAuthUI() call (a token refresh,
   // etc.) never re-hides a form panel the user already revealed.
   let formPanelAutoCollapseApplied = false;
+  // Admin Module (Phase 45 / v3) -- true once we've checked the
+  // signed-in account's public.profiles.role for this page load, so a
+  // later updateAuthUI() call (a token refresh, etc.) doesn't repeat the
+  // round trip every time. Reset to false on sign-out so the NEXT sign-in
+  // (possibly a different account, e.g. a shared/kiosk device) checks
+  // fresh rather than reusing a stale answer.
+  let adminRoleChecked = false;
   let activeTab = "login"; // "login" | "signup" — which form is showing when signed out
   let awaitingPasswordReset = false; // true between a PASSWORD_RECOVERY event and a successful updateUser({password})
   // Phase 13 — the alert (row id) currently loaded into the form for
@@ -235,9 +242,17 @@
           if (layoutEl) layoutEl.classList.add("form-panel-hidden");
         }
       }
+
+      if (!adminRoleChecked) {
+        adminRoleChecked = true;
+        checkAdminRole();
+      }
     } else {
       if (pill) { pill.className = "status-pill mock"; pill.textContent = "Not signed in"; }
       if (authTabs) authTabs.style.display = "flex";
+      adminRoleChecked = false;
+      const adminLinkEl = $("adminLink");
+      if (adminLinkEl) adminLinkEl.style.display = "none";
       if (resetForm) resetForm.style.display = "none";
       showActiveTab();
       if (signedInPanel) signedInPanel.style.display = "none";
@@ -262,6 +277,34 @@
         renderHeroRows();
         syncSavedCurrencyUI();
       }
+    }
+  }
+
+  // Admin Module (Phase 45 / v3) -- checks whether the signed-in account
+  // is a Super User (public.profiles.role === 'admin') and shows/hides
+  // the topbar's Admin link accordingly. This is a UX convenience ONLY:
+  // it decides whether a link is visible, nothing more. The real
+  // authorization boundary is supabase/functions/admin-users/index.ts,
+  // which independently re-checks this same profiles.role server-side on
+  // every request it receives -- a user could edit this page's DOM/JS to
+  // force the link visible and it would still get a 403 from every
+  // actual admin action. Fails silently (link stays hidden) on any
+  // error, matching the project's "never claim something that isn't
+  // true" principle -- an error here must never be misread as "you are
+  // an admin."
+  async function checkAdminRole() {
+    const adminLinkEl = $("adminLink");
+    if (!adminLinkEl || !sb || !currentSession || !currentSession.user) return;
+    try {
+      const { data, error } = await sb
+        .from("profiles")
+        .select("role")
+        .eq("user_id", currentSession.user.id)
+        .maybeSingle();
+      if (error) throw error;
+      adminLinkEl.style.display = data && data.role === "admin" ? "inline-block" : "none";
+    } catch (_) {
+      adminLinkEl.style.display = "none";
     }
   }
 

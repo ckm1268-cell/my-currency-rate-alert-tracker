@@ -9,6 +9,24 @@ or bug fix) — that detailed build history still exists in this repo's git
 log and commit messages if you need it, but isn't repeated here entry by
 entry. This file tracks releases going forward.
 
+## [Unreleased]
+
+### Added
+
+**Admin Module — bulk manage user accounts**
+- A new Super User role (`profiles.role`) lets a promoted account open
+  `admin.html` and bulk-disable, bulk-re-enable, or bulk-delete other
+  users' accounts, with a confirmation dialog before anything destructive
+  runs and a full audit log (`admin_actions`) of every attempt.
+- Backed by a new Supabase Edge Function (`supabase/functions/admin-users`)
+  that holds its own service-role secret and re-verifies the caller's admin
+  role server-side on every request — the frontend never has, and never
+  could have, enough access on its own to disable or delete an account.
+- An admin can never act on their own account, to prevent an accidental
+  self-lockout with no other admin available to undo it.
+- See `ADMIN_SETUP.md` for the full setup walkthrough (schema migration,
+  deploying the Edge Function, promoting your first Super User).
+
 ## [2.0.0] — 2026-08-28
 
 ### Added

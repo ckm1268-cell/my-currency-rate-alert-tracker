@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — MY Currency Rate Tracker</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="description" content="Super User admin module for MY Currency Rate Tracker: bulk disable, enable, and delete user accounts.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="admin.css">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">MY <em>Currency</em> Rate Tracker</span>
+    <span class="admin-badge">Admin</span>
+  </div>
+  <div style="display:flex; align-items:center; gap:10px;">
+    <a href="index.html" class="install-btn">&larr; Back to dashboard</a>
+  </div>
+</header>
+
+<main class="admin-layout">
+
+  <!-- Shown while we don't yet know sign-in/role state -->
+  <section class="card admin-state-card" id="adminLoading">
+    <p class="lede">Checking your account…</p>
+  </section>
+
+  <!-- Shown when not signed in -->
+  <section class="card admin-state-card" id="adminSignedOut" style="display:none;">
+    <h2>Sign in required</h2>
+    <p class="lede">The Admin Module uses the same sign-in as the main dashboard. Sign in there first, then come back to this page.</p>
+    <a href="index.html" class="btn-primary" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px;">Go to sign-in</a>
+  </section>
+
+  <!-- Shown when signed in but not an admin -->
+  <section class="card admin-state-card" id="adminDenied" style="display:none;">
+    <h2>Access denied</h2>
+    <p class="lede">Your account isn't a Super User. If you believe this is wrong, ask an existing Super User to promote your account (see ADMIN_SETUP.md).</p>
+    <a href="index.html" class="btn-primary" style="display:inline-block; width:auto; text-decoration:none; padding:10px 20px;">Back to dashboard</a>
+  </section>
+
+  <!-- Shown when Supabase isn't configured at all (placeholder config) -->
+  <section class="card admin-state-card" id="adminNotConfigured" style="display:none;">
+    <h2>Not configured yet</h2>
+    <p class="lede">Supabase isn't configured (frontend/supabaseConfig.js still has placeholder values) — see SUPABASE_SETUP.md and ADMIN_SETUP.md.</p>
+  </section>
+
+  <!-- Main admin panel -->
+  <section class="card" id="adminPanel" style="display:none;">
+    <div class="admin-panel-head">
+      <div>
+        <h2>User accounts</h2>
+        <p class="lede">Signed in as <strong id="adminSelfEmail">—</strong>. Select one or more accounts, then choose a bulk action. You can never act on your own account here.</p>
+      </div>
+      <button type="button" id="refreshUsersBtn" class="alert-action">↻ Refresh</button>
+    </div>
+
+    <div class="admin-toolbar">
+      <input type="search" id="userSearch" class="admin-search" placeholder="Filter by email…" aria-label="Filter by email">
+      <span class="admin-selected-count" id="selectedCount">0 selected</span>
+      <div class="admin-toolbar-actions">
+        <button type="button" id="disableSelectedBtn" class="alert-action" disabled>Disable selected</button>
+        <button type="button" id="enableSelectedBtn" class="alert-action" disabled>Enable selected</button>
+        <button type="button" id="deleteSelectedBtn" class="alert-action alert-action-danger" disabled>Delete selected</button>
+      </div>
+    </div>
+
+    <div class="admin-table-wrap">
+      <table class="admin-table" id="usersTable">
+        <thead>
+          <tr>
+            <th class="admin-th-check"><input type="checkbox" id="selectAllCheckbox" aria-label="Select all"></th>
+            <th>Email</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Created</th>
+            <th>Last sign-in</th>
+          </tr>
+        </thead>
+        <tbody id="usersTableBody">
+          <tr><td colspan="6" class="admin-empty-row">Loading users…</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="actionResults" class="admin-results" style="display:none;"></div>
+
+    <div class="admin-activity">
+      <h3>Recent admin activity</h3>
+      <div id="adminActivityLog" class="admin-activity-log">
+        <p class="lede">Loading…</p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Confirmation dialog for destructive bulk actions -->
+<div class="admin-confirm-overlay" id="confirmOverlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="confirmTitle">
+  <div class="admin-confirm-box">
+    <h3 id="confirmTitle">Confirm action</h3>
+    <p id="confirmBody"></p>
+    <ul id="confirmUserList" class="admin-confirm-list"></ul>
+    <div class="admin-confirm-actions">
+      <button type="button" id="confirmCancelBtn" class="alert-action">Cancel</button>
+      <button type="button" id="confirmProceedBtn" class="alert-action alert-action-danger">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" role="status" aria-live="polite" style="display:none;"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="supabaseConfig.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>

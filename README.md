@@ -102,6 +102,19 @@ provision yourself — see `SUPABASE_SETUP.md` for the full walkthrough.
 Until that's done, the account card just shows a "not configured yet"
 notice and nothing else on the page is affected.
 
+## Admin Module (v3)
+
+A **Super User** account can bulk-disable, bulk-re-enable, and bulk-delete
+other users' accounts from a dedicated page, `admin.html` — reached via a
+"🛡️ Admin" link that appears in the topbar automatically once you're signed
+in with an admin account. There's no hardcoded admin email list: whether an
+account is a Super User is a `role` column on a `profiles` table, promoted
+by hand with one SQL statement. Every disable/enable/delete runs through a
+Supabase Edge Function (`supabase/functions/admin-users`) using its own
+service-role secret — this can't be done from the static frontend alone, the
+same reason the recurring rate check runs as a scheduled backend job rather
+than in the browser. See `ADMIN_SETUP.md` for the full setup walkthrough.
+
 ## Install as a mobile app (Android & iOS) — free, no app store
 
 The dashboard installs directly to a phone's home screen as a Progressive
@@ -128,12 +141,15 @@ No build step — the frontend is plain HTML/CSS/JS.
 my-currency-rate-alert-tracker/
 ├── frontend/                  # GitHub Pages site — static, no secrets
 │   ├── index.html
+│   ├── admin.html             # Admin Module (v3) — Super User bulk user management
+│   ├── admin.js
+│   ├── admin.css
 │   ├── styles.css
 │   ├── app.js                 # core dashboard logic, live/simulated reading pipeline
 │   ├── auth.js                # sign-in + saved alerts UI
 │   ├── rateHistory.js         # real Supabase-backed history chart
 │   ├── push.js                # Web Push subscribe/unsubscribe flow
-│   ├── sw.js                  # service worker — receives push events only, not a full PWA
+│   ├── sw.js                  # service worker — app shell cache + push events (see MOBILE_APP_SETUP.md)
 │   ├── supabaseConfig.js      # your project URL + anon key (safe to commit)
 │   └── pushConfig.js          # your VAPID public key (safe to commit)
 ├── backend/                   # never deployed to GitHub Pages
@@ -146,6 +162,9 @@ my-currency-rate-alert-tracker/
 │   └── db/                    # Supabase service-role client (backend-only)
 ├── database/
 │   └── schema.sql             # tables, RLS policies, and every migration in order
+├── supabase/functions/        # Edge Functions — server-side code with access to secrets
+│   ├── admin-users/           # Admin Module (v3): bulk disable/enable/delete via the Auth Admin API
+│   └── _shared/cors.ts
 ├── config/websites/           # per-source URLs, selectors, wait strategy
 ├── .github/workflows/
 │   ├── pages.yml               # deploys frontend/ to GitHub Pages on every push to main
@@ -155,6 +174,8 @@ my-currency-rate-alert-tracker/
 ├── SUPABASE_SETUP.md          # provisioning walkthrough
 ├── NOTIFICATIONS_SETUP.md     # Resend + Telegram walkthrough
 ├── PUSH_SETUP.md              # VAPID key generation + GitHub secrets walkthrough
+├── MOBILE_APP_SETUP.md        # PWA install walkthrough
+├── ADMIN_SETUP.md             # Admin Module (v3) walkthrough
 ├── NEW_SOURCES_INVESTIGATION.md
 ├── CHANGELOG.md
 └── LICENSE

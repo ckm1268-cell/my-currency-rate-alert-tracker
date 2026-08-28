@@ -1,0 +1,286 @@
+// =============================================================================
+// MY Currency Rate Tracker — Admin Module (Phase 45 / v3)
+// =============================================================================
+// Supabase Edge Function: supabase/functions/admin-users
+//
+// Why this exists: bulk-disabling, re-enabling, and deleting user accounts
+// requires Supabase's Auth Admin API, which only ever works with the
+// service-role key — a key that must NEVER reach the browser (it bypasses
+// every Row-Level Security policy in database/schema.sql entirely). This
+// app's frontend is static GitHub Pages with no server of its own (see
+// backend/scheduler/run.js and its GitHub Actions cron for the only other
+// place a privileged key is used, and note that mechanism is a scheduled
+// batch job, not something a button click can call synchronously). A
+// Supabase Edge Function is the standard fix: it runs server-side, holds
+// the service-role key as a Supabase secret (set via `supabase secrets
+// set`, never committed to this repo — see ADMIN_SETUP.md), and is called
+// over HTTPS from frontend/admin.js using the caller's own short-lived
+// session token, not the service-role key itself.
+//
+// Security model — read this before changing anything below:
+//   1. The caller's Authorization: Bearer <access_token> header (their own
+//      signed-in session, the same one supabase-js already manages) is
+//      used to look up who they are via admin.auth.getUser(jwt).
+//   2. Their role is then read from public.profiles — NOT trusted from
+//      anything the client sent in the request body. A request claiming
+//      `{"isAdmin": true}` in its JSON body would be meaningless; only the
+//      server-side profiles.role lookup below decides authorization.
+//   3. Only when that lookup returns role === 'admin' does any action run.
+//      frontend/admin.js also checks the caller's own profile before even
+//      showing the Admin UI, but that check is UX only (avoids flashing
+//      admin controls at a non-admin for a moment) — THIS function's check
+//      is the actual security boundary, and re-runs on every single call.
+//   4. A caller can never target their own account (self-disable/-delete
+//      is blocked outright) — this exists purely to prevent an admin from
+//      accidentally locking themselves out with no other admin to fix it.
+//   5. Every action attempt (success, failure, or a blocked self-action)
+//      is written to public.admin_actions for an audit trail, using the
+//      same service-role client — see database/schema.sql's Phase 45
+//      block for that table's RLS (admins can read it; nothing else can
+//      write to it except this function).
+//
+// Deploy with the Supabase CLI (`supabase functions deploy admin-users`)
+// after `supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... ALLOWED_ORIGIN=...`
+// — full walkthrough in ADMIN_SETUP.md. SUPABASE_URL and
+// SUPABASE_ANON_KEY are provided automatically by the Supabase Edge
+// Functions runtime for every project; they do not need to be set by hand.
+// =============================================================================
+
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { corsHeaders } from "../_shared/cors.ts";
+
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+
+// Supabase's Admin API has no literal "ban forever" value — its own docs
+// and examples use a very long finite duration instead. ~100 years is the
+// commonly documented convention for "effectively permanent" until the
+// admin explicitly re-enables the account (ban_duration: "none").
+const INDEFINITE_BAN_DURATION = "876000h";
+
+type Action = "list" | "disable" | "enable" | "delete";
+
+interface ActionResult {
+  userId: string;
+  action: string;
+  result: "SUCCESS" | "FAILED" | "SKIPPED";
+  email?: string | null;
+  message?: string;
+}
+
+Deno.serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  if (req.method !== "POST") {
+    return json({ error: "Method not allowed. Use POST." }, 405);
+  }
+
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+    // Fails loudly rather than silently — matches this project's own
+    // "never claim success without proof" principle (see e.g.
+    // backend/db/supabaseClient.js's equivalent check).
+    console.error("admin-users: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secret.");
+    return json({ error: "Server misconfigured — missing Supabase secrets." }, 500);
+  }
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+
+  try {
+    const authHeader = req.headers.get("Authorization") ?? "";
+    const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
+    if (!jwt) {
+      return json({ error: "Missing Authorization header." }, 401);
+    }
+
+    const { data: callerData, error: callerErr } = await admin.auth.getUser(jwt);
+    if (callerErr || !callerData?.user) {
+      return json({ error: "Invalid or expired session. Please sign in again." }, 401);
+    }
+    const caller = callerData.user;
+
+    // The real authorization check — see the header comment's point 2/3.
+    const { data: profile, error: profileErr } = await admin
+      .from("profiles")
+      .select("role")
+      .eq("user_id", caller.id)
+      .maybeSingle();
+
+    if (profileErr) {
+      console.error("admin-users: profile lookup failed:", profileErr);
+      return json({ error: "Could not verify admin role." }, 500);
+    }
+    if (!profile || profile.role !== "admin") {
+      return json({ error: "Not authorized. Super User role required." }, 403);
+    }
+
+    const body = await req.json().catch(() => null);
+    const action = body?.action as Action | undefined;
+
+    if (action === "list") {
+      const users = await listAllUsers(admin);
+      return json({ users });
+    }
+
+    if (action !== "disable" && action !== "enable" && action !== "delete") {
+      return json({ error: `Unknown or missing action: ${String(action)}` }, 400);
+    }
+
+    const userIds: string[] = Array.isArray(body?.userIds)
+      ? body.userIds.filter((id: unknown) => typeof id === "string" && id.length > 0)
+      : [];
+
+    if (userIds.length === 0) {
+      return json({ error: "No userIds provided." }, 400);
+    }
+    if (userIds.length > 500) {
+      // Sanity cap — this app's real user count is nowhere near this, and
+      // a request this large is far more likely a client bug than a
+      // legitimate bulk action.
+      return json({ error: "Too many userIds in one request (max 500)." }, 400);
+    }
+
+    const results: ActionResult[] = [];
+    for (const targetId of userIds) {
+      // Sequential, not Promise.all: each iteration writes its own
+      // admin_actions row, and keeping this sequential makes the audit
+      // log's created_at ordering match the order the caller selected
+      // users in, which is easier to read back later than an
+      // interleaved-by-network-timing order would be. Bulk actions here
+      // are expected to be tens of users at most, not thousands, so the
+      // extra wall-clock cost of sequential processing is negligible.
+      results.push(await performAction(admin, action, targetId, caller));
+    }
+
+    return json({ results });
+  } catch (err) {
+    console.error("admin-users: unhandled error:", err);
+    return json({ error: "Internal error." }, 500);
+  }
+});
+
+async function listAllUsers(admin: SupabaseClient) {
+  // auth.admin.listUsers() is paginated; walk every page rather than
+  // assuming the first page is everyone. The 20-page (20,000-user) cap is
+  // a safety valve against an infinite loop if the API's pagination
+  // signal ever behaves unexpectedly — this app's real user count is a
+  // tiny fraction of that.
+  const all: Array<{
+    id: string;
+    email?: string;
+    created_at: string;
+    last_sign_in_at?: string | null;
+    banned_until?: string | null;
+  }> = [];
+  let page = 1;
+  const perPage = 1000;
+  for (;;) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    all.push(...data.users);
+    if (data.users.length < perPage || page >= 20) break;
+    page += 1;
+  }
+
+  const { data: profileRows, error: profileErr } = await admin
+    .from("profiles")
+    .select("user_id, role");
+  if (profileErr) throw profileErr;
+
+  const roleByUser = new Map<string, string>(
+    (profileRows ?? []).map((p: { user_id: string; role: string }) => [p.user_id, p.role])
+  );
+
+  const now = Date.now();
+  return all
+    .map((u) => ({
+      id: u.id,
+      email: u.email ?? null,
+      createdAt: u.created_at,
+      lastSignInAt: u.last_sign_in_at ?? null,
+      disabled: !!u.banned_until && new Date(u.banned_until).getTime() > now,
+      role: roleByUser.get(u.id) ?? "user",
+    }))
+    .sort((a, b) => (a.email ?? "").localeCompare(b.email ?? ""));
+}
+
+async function performAction(
+  admin: SupabaseClient,
+  action: "disable" | "enable" | "delete",
+  targetId: string,
+  caller: { id: string; email?: string }
+): Promise<ActionResult> {
+  const base = { userId: targetId, action: action.toUpperCase() };
+
+  if (targetId === caller.id) {
+    await logAction(admin, caller, action, targetId, caller.email ?? null, "SKIPPED", "Cannot act on your own account.");
+    return { ...base, result: "SKIPPED", message: "You cannot act on your own account." };
+  }
+
+  let targetEmail: string | null = null;
+  try {
+    const { data: targetUserData } = await admin.auth.admin.getUserById(targetId);
+    targetEmail = targetUserData?.user?.email ?? null;
+
+    if (action === "disable") {
+      const { error } = await admin.auth.admin.updateUserById(targetId, {
+        ban_duration: INDEFINITE_BAN_DURATION,
+      });
+      if (error) throw error;
+    } else if (action === "enable") {
+      const { error } = await admin.auth.admin.updateUserById(targetId, {
+        ban_duration: "none",
+      });
+      if (error) throw error;
+    } else {
+      const { error } = await admin.auth.admin.deleteUser(targetId);
+      if (error) throw error;
+      // Cascades automatically: profiles, alerts (and alerts' own
+      // notifications, via alerts' own ON DELETE CASCADE) all reference
+      // auth.users(id) ON DELETE CASCADE — see database/schema.sql. No
+      // manual cleanup needed here.
+    }
+
+    await logAction(admin, caller, action, targetId, targetEmail, "SUCCESS", null);
+    return { ...base, result: "SUCCESS", email: targetEmail };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await logAction(admin, caller, action, targetId, targetEmail, "FAILED", message);
+    return { ...base, result: "FAILED", email: targetEmail, message };
+  }
+}
+
+async function logAction(
+  admin: SupabaseClient,
+  caller: { id: string; email?: string },
+  action: string,
+  targetId: string,
+  targetEmail: string | null,
+  result: "SUCCESS" | "FAILED" | "SKIPPED",
+  errorMessage: string | null
+) {
+  const { error } = await admin.from("admin_actions").insert({
+    admin_user_id: caller.id,
+    admin_email: caller.email ?? null,
+    action: action.toUpperCase(),
+    target_user_id: targetId,
+    target_email: targetEmail,
+    result,
+    error_message: errorMessage,
+  });
+  if (error) {
+    // Never let a logging failure mask the actual action's outcome from
+    // the caller — just surface it in the function's own logs.
+    console.error("admin-users: failed to write admin_actions row:", error);
+  }
+}
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}

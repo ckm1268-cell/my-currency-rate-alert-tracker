@@ -454,6 +454,132 @@ alter table public.alerts
 alter table public.alerts
   add column if not exists last_notified_rate numeric;
 
+-- -----------------------------------------------------------------------------
+-- Phase 45 addition (28-Aug-2026) — Admin Module (v3): Super Users can
+-- bulk-disable, bulk-re-enable, and bulk-delete other users' accounts.
+-- =============================================================================
+-- Two new tables, both idempotent / safe to re-run:
+--
+-- 1. profiles — one row per auth.users row, holding a `role` ('user' or
+--    'admin'). This is the ONLY thing that decides who is a "Super User" —
+--    there is no hardcoded email allowlist anywhere. Promoting/demoting an
+--    admin is a single manual `update public.profiles set role = ...`
+--    statement in the SQL Editor (see ADMIN_SETUP.md) — deliberately NOT
+--    exposed as a button in the Admin Module UI, since granting admin
+--    rights is a more sensitive action than the bulk disable/enable/delete
+--    this module actually asks for, and doing it by hand in the SQL Editor
+--    leaves an unambiguous, deliberate paper trail.
+--
+--    A trigger (handle_new_user) auto-creates a 'user'-role profile row for
+--    every NEW signup from now on. Existing users (everyone who signed up
+--    before this migration ran) are backfilled below in the same statement
+--    style as every other backfill in this file.
+--
+--    RLS: a signed-in user may only ever SELECT their own row (so the
+--    frontend can show/hide the Admin link) — there is no UPDATE/INSERT/
+--    DELETE policy for the normal `authenticated` role at all, matching
+--    this file's existing `rates` table pattern (service-role key, or the
+--    security-definer trigger below, bypasses RLS by design). This means a
+--    signed-in user cannot promote themselves to admin even if the
+--    frontend code had a bug that tried to.
+--
+-- 2. admin_actions — an append-only audit log: every disable/enable/delete
+--    the admin-users Edge Function performs (success, failure, or a
+--    blocked self-action) gets one row here, including a snapshot of both
+--    the admin's and the target's email at the time (so the log stays
+--    readable even after an account named in it is later deleted —
+--    admin_user_id/target_user_id themselves are not enforced as FKs to a
+--    still-existing row for that same reason, except admin_user_id, which
+--    IS a real FK with ON DELETE SET NULL: the row survives, the identity
+--    reference just clears, rather than the log entry disappearing).
+--    Readable only by admins (via the profiles.role check below); only
+--    ever written by the Edge Function's service-role client, which
+--    bypasses RLS — there is no INSERT policy for the normal role at all.
+--
+-- Neither table is written to by the frontend directly with the anon key.
+-- Every actual disable/enable/delete happens through
+-- supabase/functions/admin-users/index.ts, which is the real security
+-- boundary (it re-checks profiles.role server-side on every call — the
+-- RLS-gated client-side read of your own profile, used to show/hide the
+-- Admin link, is UX only and is never trusted as the actual gate).
+-- -----------------------------------------------------------------------------
+
+create table if not exists public.profiles (
+  user_id     uuid primary key references auth.users(id) on delete cascade,
+  role        text not null default 'user' check (role in ('user', 'admin')),
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+comment on table public.profiles is
+  'One row per auth.users row. role is the sole source of truth for "is this a Super User" — see the Admin Module (Phase 45) header comment above. Not writable by the anon/authenticated role at all; only the security-definer trigger below (on new signup) and the service-role key (manual promotion via SQL Editor) ever write here.';
+
+alter table public.profiles enable row level security;
+
+drop policy if exists "Users can view own profile" on public.profiles;
+create policy "Users can view own profile"
+  on public.profiles for select
+  using (auth.uid() = user_id);
+
+-- Auto-create a 'user'-role profile row for every new signup. security
+-- definer so it can INSERT despite the table having no INSERT policy for
+-- the normal role — the same pattern Postgres/Supabase itself documents
+-- for "sync a profiles table to auth.users".
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  insert into public.profiles (user_id, role)
+  values (new.id, 'user')
+  on conflict (user_id) do nothing;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+  after insert on auth.users
+  for each row execute function public.handle_new_user();
+
+-- Backfill: every account that signed up before this migration ran gets a
+-- default 'user'-role profile row too. Safe to re-run — `on conflict do
+-- nothing` means an existing row (including one already promoted to
+-- 'admin' by hand) is never touched or reset back to 'user'.
+insert into public.profiles (user_id, role)
+select id, 'user' from auth.users
+on conflict (user_id) do nothing;
+
+create table if not exists public.admin_actions (
+  id               uuid primary key default gen_random_uuid(),
+  admin_user_id    uuid references auth.users(id) on delete set null,
+  admin_email      text,
+  action           text not null check (action in ('DISABLE', 'ENABLE', 'DELETE')),
+  target_user_id   uuid,
+  target_email     text,
+  result           text not null check (result in ('SUCCESS', 'FAILED', 'SKIPPED')),
+  error_message    text,
+  created_at       timestamptz not null default now()
+);
+
+comment on table public.admin_actions is
+  'Append-only audit log of every bulk disable/enable/delete the Admin Module (Phase 45) has attempted, one row per target user per attempt. Written only by supabase/functions/admin-users/index.ts using the service-role client. Readable only by admins.';
+
+create index if not exists admin_actions_created_at_idx on public.admin_actions (created_at desc);
+
+alter table public.admin_actions enable row level security;
+
+drop policy if exists "Admins can view admin_actions" on public.admin_actions;
+create policy "Admins can view admin_actions"
+  on public.admin_actions for select
+  using (
+    exists (
+      select 1 from public.profiles p
+      where p.user_id = auth.uid() and p.role = 'admin'
+    )
+  );
+
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to
 -- get your Project URL / anon key into frontend/supabaseConfig.js, and your
@@ -463,4 +589,8 @@ alter table public.alerts
 -- Phase 39 (Web Push delivery) additionally needs VAPID_PUBLIC_KEY and
 -- VAPID_PRIVATE_KEY as GitHub Actions secrets (plus the public key in
 -- frontend/pushConfig.js) — see PUSH_SETUP.md.
+-- Phase 45 (Admin Module, v3) additionally needs the admin-users Edge
+-- Function deployed and its own SUPABASE_SERVICE_ROLE_KEY secret set in
+-- Supabase (separate from the GitHub Actions secret of the same name) —
+-- see ADMIN_SETUP.md, including how to promote your own account to admin.
 -- =============================================================================
