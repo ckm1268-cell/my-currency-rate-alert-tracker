@@ -33,7 +33,20 @@
  * installability wants it registered sooner than that).
  */
 
-const CKM_SHELL_CACHE = 'ckm-shell-v1';
+// Bug fix (28-Aug-2026): the last two frontend commits (Build Your
+// Alert shortcut + its colour/scroll follow-up) changed styles.css,
+// index.html and auth.js but never bumped this constant, so every
+// already-installed user kept being served the OLD cached styles.css
+// forever (cache-first, and this file itself was byte-identical, so
+// the browser never even detected an update to install fresh). Result,
+// confirmed live on Android: the new markup rendered with zero of its
+// CSS, as an unstyled stacked link. Bumping the version string here IS
+// the fix -- it changes this file's bytes, which is what makes a
+// browser notice a new service worker, run install() again (re-fetching
+// every CKM_SHELL_FILES entry fresh), and activate() clears the old
+// cache. REMINDER: bump this on every future commit that touches any
+// file in CKM_SHELL_FILES below, or this exact bug recurs silently.
+const CKM_SHELL_CACHE = 'ckm-shell-v2';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any
