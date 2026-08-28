@@ -19,11 +19,18 @@ not something a button click can call synchronously.
 
 The fix is a **Supabase Edge Function** —
 `supabase/functions/admin-users/index.ts` — a small serverless function that
-runs on Supabase's own infrastructure, holds the service-role key as a
-**Supabase secret** (completely separate from the `SUPABASE_SERVICE_ROLE_KEY`
-GitHub Actions secret you already have), and is the only thing that ever
-calls the Admin API. `frontend/admin.js` calls this function over HTTPS,
-using your own signed-in session — never the service-role key itself.
+runs on Supabase's own infrastructure. It reads the service-role key from a
+**custom Supabase secret named `SERVICE_ROLE_KEY`**, which you set yourself
+in Step 2 — a different, separate value from the `SUPABASE_SERVICE_ROLE_KEY`
+GitHub Actions secret you already have for the scheduler, though as of the
+Aug-2026 key rotation both now hold the same underlying `sb_secret_...` key
+from Project Settings → API Keys. (Earlier versions of this function relied
+on Supabase's legacy auto-injected `SUPABASE_SERVICE_ROLE_KEY` — that stopped
+being usable once this project's legacy JWT-based keys were retired, since
+the CLI won't let you set a custom secret starting with `SUPABASE_`, so this
+version reads the differently-named `SERVICE_ROLE_KEY` instead.)
+`frontend/admin.js` calls this function over HTTPS, using your own signed-in
+session — never the service-role key itself.
 
 ## What "Super User" means here
 
@@ -62,27 +69,34 @@ From the repo root:
 # project ref in the Supabase Dashboard's Project Settings > General page)
 supabase link --project-ref YOUR-PROJECT-REF
 
-# Set the two secrets the function needs. SUPABASE_URL / SUPABASE_ANON_KEY
-# are already provided automatically by the Edge Functions runtime — you
-# only need to set these two yourself:
-supabase secrets set SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+# Set the two secrets the function needs. SUPABASE_URL is provided
+# automatically by the Edge Functions runtime for every project — you only
+# need to set these two yourself. Note the secret name is SERVICE_ROLE_KEY,
+# not SUPABASE_SERVICE_ROLE_KEY — the CLI rejects any custom secret name
+# starting with SUPABASE_, since that whole prefix is reserved for the
+# platform's own auto-injected values:
+supabase secrets set SERVICE_ROLE_KEY=your-secret-api-key
 supabase secrets set ALLOWED_ORIGIN=https://your-username.github.io
 
 # Deploy
 supabase functions deploy admin-users
 ```
 
-`SUPABASE_SERVICE_ROLE_KEY` is the same value you already put in your GitHub
-Actions secrets for the scheduler — copy it from Supabase Dashboard → Project
-Settings → API → `service_role` key. `ALLOWED_ORIGIN` should be your actual
-deployed GitHub Pages origin (no trailing path) — this restricts which
-website is allowed to call the function via CORS; it defaults to
-`https://ckm1268-cell.github.io` if you don't set it, which is only correct
-if you haven't forked/renamed this repo.
+`SERVICE_ROLE_KEY` should be your project's current `sb_secret_...` key from
+Project Settings → API Keys → "Publishable and secret API keys" tab (click
+the eye icon to reveal it) — this is the modern replacement for the legacy
+JWT-based `service_role` key, and it's the same value you should also be
+using for the `SUPABASE_SERVICE_ROLE_KEY` GitHub Actions secret that the
+scheduler uses. `ALLOWED_ORIGIN` should be your actual deployed GitHub Pages
+origin (no trailing path) — this restricts which website is allowed to call
+the function via CORS; it defaults to `https://ckm1268-cell.github.io` if
+you don't set it, which is only correct if you haven't forked/renamed this
+repo.
 
-**Never** put the service-role key in any file under `frontend/`, and never
-commit it — it only ever lives as a Supabase secret (this step) or a GitHub
-Actions secret (the existing scheduler).
+**Never** put either of these values in any file under `frontend/`, and
+never commit them to the repo — `SERVICE_ROLE_KEY` only ever lives as a
+Supabase secret (this step), and the scheduler's own copy only ever lives as
+a GitHub Actions secret.
 
 ## Step 3 — promote your own account to Super User
 
@@ -157,11 +171,13 @@ loading `admin.html` from — check the exact scheme+host you're using (e.g.
 `https://` vs `http://`, or a custom domain if you've set one up) and
 re-deploy the secret + function.
 
-**"Server misconfigured — missing Supabase secrets."** `supabase secrets
-set SUPABASE_SERVICE_ROLE_KEY=...` wasn't run, or was run against a
-different linked project than the one `admin.html` is pointed at
-(`frontend/supabaseConfig.js`'s URL). Re-check `supabase secrets list`
-against the project ref you linked in Step 2.
+**"Server misconfigured — missing Supabase secrets."** This means
+`SUPABASE_URL` or `SERVICE_ROLE_KEY` weren't available at runtime. Check
+`supabase secrets list` against the project ref you linked in Step 2 — if
+`SERVICE_ROLE_KEY` isn't listed, the `supabase secrets set SERVICE_ROLE_KEY=...`
+command in Step 2 either wasn't run or was run against a different linked
+project than the one `admin.html` is pointed at
+(`frontend/supabaseConfig.js`'s URL).
 
 ## Security notes
 

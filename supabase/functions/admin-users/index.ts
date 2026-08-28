@@ -40,17 +40,26 @@
 //      write to it except this function).
 //
 // Deploy with the Supabase CLI (`supabase functions deploy admin-users`)
-// after `supabase secrets set SUPABASE_SERVICE_ROLE_KEY=... ALLOWED_ORIGIN=...`
-// — full walkthrough in ADMIN_SETUP.md. SUPABASE_URL and
-// SUPABASE_ANON_KEY are provided automatically by the Supabase Edge
-// Functions runtime for every project; they do not need to be set by hand.
+// after `supabase secrets set SERVICE_ROLE_KEY=... ALLOWED_ORIGIN=...`
+// — full walkthrough in ADMIN_SETUP.md. SUPABASE_URL is provided
+// automatically by the Supabase Edge Functions runtime and does not need
+// to be set by hand.
+//
+// Note on the secret's name: this reads a custom `SERVICE_ROLE_KEY`
+// secret, NOT the legacy auto-injected `SUPABASE_SERVICE_ROLE_KEY`. The
+// Supabase CLI refuses to let you set any secret starting with
+// `SUPABASE_` (that prefix is reserved for the platform's own
+// auto-injected values), and as of Aug-2026 this project migrated off
+// the legacy JWT-based service_role key entirely — the value you set
+// here should be your project's current `sb_secret_...` key from
+// Project Settings -> API Keys, not the retired legacy key.
 // =============================================================================
 
 import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY")!;
 
 // Supabase's Admin API has no literal "ban forever" value — its own docs
 // and examples use a very long finite duration instead. ~100 years is the
@@ -81,7 +90,7 @@ Deno.serve(async (req: Request) => {
     // Fails loudly rather than silently — matches this project's own
     // "never claim success without proof" principle (see e.g.
     // backend/db/supabaseClient.js's equivalent check).
-    console.error("admin-users: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secret.");
+    console.error("admin-users: missing SUPABASE_URL or SERVICE_ROLE_KEY secret.");
     return json({ error: "Server misconfigured — missing Supabase secrets." }, 500);
   }
 
