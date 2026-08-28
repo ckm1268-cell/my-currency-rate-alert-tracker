@@ -50,6 +50,26 @@ const { sendTelegramMessage } = require('./telegram');
 const { sendWebPush } = require('./webpush');
 
 /**
+ * Bug fix (28-Aug-2026, reported): the push notification's click-through
+ * URL was hardcoded as '/' — a ROOT-relative path. A service worker's
+ * clients.openWindow() resolves a relative URL against the page's ORIGIN,
+ * not its own directory, so '/' opened https://ckm1268-cell.github.io/
+ * instead of this project's actual GitHub Pages URL, which lives at a
+ * SUBPATH (https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/)
+ * because this is a project page, not a user/org root page. The org root
+ * has no Pages site at all, so every push notification's click landed on
+ * a real GitHub 404 ("There isn't a GitHub Pages site here") — confirmed
+ * live on a real iPhone after a real push notification arrived correctly
+ * (the push delivery itself was never the bug, only where its click led).
+ *
+ * Fix: use the actual deployed URL, overridable via an APP_URL environment
+ * variable (added to .env.example) for whoever forks/redeploys this repo
+ * under a different URL, rather than a second hardcoded value to keep in
+ * sync by hand.
+ */
+const APP_URL = process.env.APP_URL || 'https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/';
+
+/**
  * Bug fix (26-Aug-2026, reported): the "Time:" line was built with
  * `new Date(...).toLocaleString()`, which formats using whatever locale/
  * timezone the RUNNING PROCESS defaults to — not the user's. For email and
@@ -168,7 +188,7 @@ async function notify(target, payload) {
         // alert's actual trigger time — worth stating explicitly, same as
         // the other two channels.
         body: `${payload.rate} (target ${payload.targetRate}) — ${payload.source}\nTime: ${formatMalaysiaTime(payload.retrievedAt)}`,
-        url: '/',
+        url: APP_URL,
       });
       return { delivered: true, deliveryStatus: 'DELIVERED', error: null };
     }
