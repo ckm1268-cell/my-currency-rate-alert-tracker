@@ -269,6 +269,16 @@
       const layoutElOnSignOut = document.querySelector(".layout");
       if (layoutElOnSignOut) layoutElOnSignOut.classList.remove("form-panel-hidden");
 
+      // Bug fix (28-Aug-2026), part 2: formPanelAutoCollapseApplied only
+      // ever fires the auto-collapse once per PAGE LOAD ("the first time
+      // we learn this page load is signed in"). Without resetting it
+      // here, signing out and back in again within the same page visit
+      // left the form permanently expanded -- the collapse logic saw the
+      // flag already true and skipped itself. Resetting it on sign-out
+      // makes the very next sign-in re-apply the collapse, matching the
+      // original intent for a "signed-in returning desktop user."
+      formPanelAutoCollapseApplied = false;
+
       // Bug fix (23-Aug-2026, Phase 17): this is the ONE place that runs
       // whenever the session becomes null, for ANY reason — the user
       // clicking "Sign out" (signOut() below ALSO does this immediately,
