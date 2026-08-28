@@ -1,6 +1,6 @@
 {
   "name": "MY Currency Rate Tracker",
-  "short_name": "MY Currency Rate Tracker",
+  "short_name": "MY Rate Tracker",
   "description": "Track live currency exchange rates across Malaysian money changers and get alerted the moment your target rate is reached.",
   "start_url": ".",
   "scope": ".",
