@@ -402,6 +402,10 @@ select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
   padding: 22px;
   box-shadow: var(--shadow-card);
 }
+/* Breathing room when scrollToAccountCard() (auth.js) jumps here after a
+   save/update -- same pattern as .form-panel's own scroll-margin-top
+   above, just on the one card that's actually a scroll target. */
+#accountCard { scroll-margin-top: 16px; }
 .card-head {
   display: flex;
   align-items: flex-start;

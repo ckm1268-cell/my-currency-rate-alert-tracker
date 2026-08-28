@@ -864,13 +864,30 @@
   }
 
   // UX improvement (28-Aug-2026, requested after Android install testing):
-  // after a save/update actually succeeds, bring the user back down to
-  // "My saved alerts" so they can see the alert they just saved land in
-  // the list, instead of leaving them sitting at the form with only a
-  // small status line as confirmation.
-  function scrollToSavedAlerts() {
-    const heading = $("savedAlertsHeading");
-    if (heading) heading.scrollIntoView({ behavior: "smooth", block: "start" });
+  // after a save/update actually succeeds, bring the user back up to
+  // "Your Account" (the whole card -- eyebrow/heading down through My
+  // saved alerts) so they can see the alert they just saved land in the
+  // list, instead of leaving them sitting at the form with only a small
+  // status line as confirmation. Originally scrolled to just the "My
+  // saved alerts" sub-heading; widened to the full card per follow-up
+  // request the same day.
+  function scrollToAccountCard() {
+    const card = $("accountCard");
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // Desktop-only "form hidden until requested" mode, follow-up (28-Aug-
+  // 2026): the mirror image of revealFormPanelIfHidden() above -- re-
+  // collapses the form panel after a successful save/update, so the
+  // sidebar goes back to being tucked away rather than staying open
+  // indefinitely once first revealed. Same >=881px gate as the initial
+  // auto-collapse in updateAuthUI(); a no-op on mobile, where the class
+  // has no visual effect anyway (see styles.css's min-width rule).
+  function collapseFormPanelOnDesktop() {
+    if (window.matchMedia && window.matchMedia("(min-width: 881px)").matches) {
+      const layoutEl = document.querySelector(".layout");
+      if (layoutEl) layoutEl.classList.add("form-panel-hidden");
+    }
   }
 
   // ---------------------------------------------------------------------
@@ -1147,7 +1164,8 @@
       setSaveStatus("Updated. Your changes are saved.");
       stopEditingAlert();
       await loadMyAlerts();
-      scrollToSavedAlerts();
+      collapseFormPanelOnDesktop();
+      scrollToAccountCard();
       return;
     }
 
@@ -1160,7 +1178,8 @@
     loadedAlertId = data.id;
     setSaveStatus("Saved. This alert is now yours, isolated from any other account.");
     await loadMyAlerts();
-    scrollToSavedAlerts();
+    collapseFormPanelOnDesktop();
+    scrollToAccountCard();
   }
 
   // -------------------------------------------------------------------------
