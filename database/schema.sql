@@ -365,9 +365,34 @@ begin
   end if;
 end $$;
 
+-- Bug fix (28-Aug-2026): re-running this file against a real, already-live
+-- database still hit "check constraint alerts_notification_methods_check
+-- ... is violated by some row" even after 'push' was added to the allowed
+-- set above -- meaning at least one real row holds a value outside even
+-- that full 6-item set (e.g. a stray value from manual editing via the
+-- Supabase Table Editor at some point, before this constraint existed to
+-- prevent it). Rather than require hunting down and hand-fixing that row
+-- by SELECTing for it first, strip out any element that isn't currently
+-- allowed -- a self-healing step, same spirit as the "fall back to
+-- {browser}" rule immediately below, which already exists for the
+-- null/empty case and now also catches a row that ends up fully emptied
+-- by this step (since array_length of an empty array is NULL, not 0).
+update public.alerts
+set notification_methods = (
+  select coalesce(array_agg(elem order by elem), '{}'::text[])
+  from unnest(notification_methods) as elem
+  where elem = any (ARRAY['browser','email','telegram','push','whatsapp','sms'])
+)
+where notification_methods is not null
+  and not (
+    notification_methods <@ ARRAY['browser','email','telegram','push','whatsapp','sms']::text[]
+    and array_length(notification_methods, 1) > 0
+  );
+
 -- Any row with neither an old value nor a new one yet (shouldn't happen
 -- given notification_method's own NOT NULL default, but this must never
--- leave a row that fails the NOT NULL below) falls back to 'browser'.
+-- leave a row that fails the NOT NULL below) -- or one that the sanitize
+-- step just above emptied out entirely -- falls back to 'browser'.
 update public.alerts
 set notification_methods = '{browser}'::text[]
 where notification_methods is null or array_length(notification_methods, 1) is null;
