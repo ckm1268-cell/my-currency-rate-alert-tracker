@@ -243,6 +243,14 @@
 @media (max-width: 640px) {
   .admin-panel-head { flex-direction: column; }
   .admin-toolbar { flex-direction: column; align-items: stretch; }
+  /* Bug fix (28-Aug-2026): .admin-search's flex: 1 1 200px (set above)
+     was written for the toolbar's default row layout, where 200px is a
+     sensible min-width. Once the toolbar switches to flex-direction:
+     column here, that same flex-basis/flex-grow apply to the vertical
+     axis instead, stretching the input to fill all remaining vertical
+     space in the toolbar -- a large empty box instead of a normal search
+     field. Reset it back to its natural size on narrow viewports. */
+  .admin-search { flex: 0 0 auto; }
   .admin-toolbar-actions { justify-content: stretch; }
   .admin-toolbar-actions .alert-action { flex: 1 1 auto; }
 }
