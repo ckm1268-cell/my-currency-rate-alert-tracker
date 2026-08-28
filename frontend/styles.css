@@ -697,15 +697,16 @@ canvas#historyChart { width: 100%; height: 180px; display: block; }
   font-family: var(--font-body);
   font-weight: 600;
   font-size: 0.72rem;
-  color: var(--accent-strong);
-  border: 1px solid var(--line-strong);
+  color: var(--accent-ink);
+  background: var(--accent);
+  border: none;
   border-radius: 999px;
   padding: 4px 10px;
   white-space: nowrap;
   text-decoration: none;
   flex-shrink: 0;
 }
-.build-alert-shortcut:hover { border-color: var(--accent); background: var(--accent-tint); }
+.build-alert-shortcut:hover { background: var(--accent-strong); }
 .build-alert-shortcut:focus-visible { outline: 3px solid var(--accent-tint); outline-offset: 2px; }
 .alert-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .alert-empty { font-size: 0.82rem; color: var(--ink-faint); padding: 6px 0; }

@@ -826,6 +826,16 @@
     updateEditingBanner();
   }
 
+  // UX improvement (28-Aug-2026, requested after Android install testing):
+  // after a save/update actually succeeds, bring the user back down to
+  // "My saved alerts" so they can see the alert they just saved land in
+  // the list, instead of leaving them sitting at the form with only a
+  // small status line as confirmation.
+  function scrollToSavedAlerts() {
+    const heading = $("savedAlertsHeading");
+    if (heading) heading.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   // ---------------------------------------------------------------------
   // Saved-currency chips (Phase 18) — a quick-switch row, sourced from the
   // signed-in user's own saved alerts, that drives what the Multi-source
@@ -1100,6 +1110,7 @@
       setSaveStatus("Updated. Your changes are saved.");
       stopEditingAlert();
       await loadMyAlerts();
+      scrollToSavedAlerts();
       return;
     }
 
@@ -1112,6 +1123,7 @@
     loadedAlertId = data.id;
     setSaveStatus("Saved. This alert is now yours, isolated from any other account.");
     await loadMyAlerts();
+    scrollToSavedAlerts();
   }
 
   // -------------------------------------------------------------------------
