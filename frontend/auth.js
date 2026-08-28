@@ -75,6 +75,11 @@
 
   let sb = null; // Supabase client, once configured
   let currentSession = null;
+  // Desktop-only "form hidden until requested" mode (28-Aug-2026,
+  // requested) -- true once the auto-collapse below has run once for
+  // this page load, so a later updateAuthUI() call (a token refresh,
+  // etc.) never re-hides a form panel the user already revealed.
+  let formPanelAutoCollapseApplied = false;
   let activeTab = "login"; // "login" | "signup" — which form is showing when signed out
   let awaitingPasswordReset = false; // true between a PASSWORD_RECOVERY event and a successful updateUser({password})
   // Phase 13 — the alert (row id) currently loaded into the form for
@@ -211,6 +216,25 @@
       const emailEl = $("authUserEmail");
       if (emailEl) emailEl.textContent = currentSession.user.email || "(no email on session)";
       loadMyAlerts();
+
+      // Desktop-only "form hidden until requested" mode: above 880px the
+      // form panel is a persistent sticky sidebar (see styles.css) -- for
+      // a signed-in returning desktop user who already has saved alerts,
+      // collapse it by default the first time we learn this page load is
+      // signed in, revealed again only via the "+ Build Your Alert" link
+      // (see wireForm() below). Deliberately gated on being signed in:
+      // that link only exists inside signedInPanel, so a signed-OUT
+      // visitor must never have the form collapsed with no way to bring
+      // it back -- the anonymous build-a-preview-alert flow stays exactly
+      // as it was. Mobile is untouched: the class below only does
+      // anything under the existing min-width: 881px rule in styles.css.
+      if (!formPanelAutoCollapseApplied) {
+        formPanelAutoCollapseApplied = true;
+        if (window.matchMedia && window.matchMedia("(min-width: 881px)").matches) {
+          const layoutEl = document.querySelector(".layout");
+          if (layoutEl) layoutEl.classList.add("form-panel-hidden");
+        }
+      }
     } else {
       if (pill) { pill.className = "status-pill mock"; pill.textContent = "Not signed in"; }
       if (authTabs) authTabs.style.display = "flex";
@@ -787,6 +811,18 @@
     }
   }
 
+  // Desktop-only "form hidden until requested" mode: un-hides the form
+  // panel if the auto-collapse from updateAuthUI() above is currently
+  // active. Shared by every path that brings the user to the form --
+  // "Edit" on a saved alert (startEditingAlert(), right below) and the
+  // "+ Build Your Alert" shortcut (wireForm(), further down) -- so
+  // neither one can strand the user scrolling to a form that's still
+  // display:none. A no-op if the panel was never collapsed.
+  function revealFormPanelIfHidden() {
+    const layoutEl = document.querySelector(".layout");
+    if (layoutEl) layoutEl.classList.remove("form-panel-hidden");
+  }
+
   function startEditingAlert(id) {
     const alert = myAlertsCache.find((a) => String(a.id) === String(id));
     if (!alert) {
@@ -817,6 +853,7 @@
     if (typeof window.CKM.getState === "function") window.CKM.getState().userEditedForm = true;
     updateEditingBanner();
     setSaveStatus("");
+    revealFormPanelIfHidden();
     const formPanel = $("formPanel");
     if (formPanel) formPanel.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -1265,6 +1302,30 @@
 
     const cancelEditBtn = $("cancelEditBtn");
     if (cancelEditBtn) cancelEditBtn.addEventListener("click", stopEditingAlert);
+
+    // Desktop-only "form hidden until requested" mode: reveal the form
+    // panel again (see updateAuthUI() above for where it gets collapsed)
+    // and scroll to it. preventDefault + manual scrollIntoView, rather
+    // than relying on the anchor's native href="#formHeading" jump, so
+    // the reveal (removing display:none) is guaranteed to have already
+    // happened before the browser tries to scroll there -- letting the
+    // native jump fire first/instead on a hidden element would land on a
+    // zero-height target. Harmless no-op if the panel was never
+    // collapsed in the first place (signed out, or mobile width).
+    const buildAlertShortcut = document.querySelector(".build-alert-shortcut");
+    if (buildAlertShortcut) {
+      buildAlertShortcut.addEventListener("click", (e) => {
+        const layoutEl = document.querySelector(".layout");
+        if (layoutEl && layoutEl.classList.contains("form-panel-hidden")) {
+          e.preventDefault();
+          revealFormPanelIfHidden();
+          const formPanel = $("formPanel");
+          if (formPanel) formPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        // else: panel already visible (or never collapsed) -- let the
+        // native #formHeading anchor jump handle it as before.
+      });
+    }
   }
 
   function init() {

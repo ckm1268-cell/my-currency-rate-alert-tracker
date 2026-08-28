@@ -46,7 +46,9 @@
 // every CKM_SHELL_FILES entry fresh), and activate() clears the old
 // cache. REMINDER: bump this on every future commit that touches any
 // file in CKM_SHELL_FILES below, or this exact bug recurs silently.
-const CKM_SHELL_CACHE = 'ckm-shell-v2';
+// Bumped again (28-Aug-2026): desktop-only collapsed form-panel
+// feature touched styles.css and auth.js -- see their own comments.
+const CKM_SHELL_CACHE = 'ckm-shell-v3';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

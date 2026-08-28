@@ -255,6 +255,21 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 600; margin: 0; text
 }
 @media (max-width: 880px) { .form-panel { position: static; } }
 
+/* Desktop-only "hidden until requested" mode (28-Aug-2026, requested):
+   a signed-in returning desktop user gets My saved alerts as the first
+   thing they see, with the Build Your Alert sidebar collapsed until
+   they click "+ Build Your Alert" (auth.js adds/removes this class --
+   see updateAuthUI() and wireForm() there for exactly when and why).
+   Scoped to min-width so an accidentally-lingering class can never hide
+   the form on a phone -- mobile's own reordering/stacking rules above
+   are completely untouched by this. Never applied at all for a signed-
+   out visitor (auth.js only ever adds it once signed in), since that is
+   the only state with no "+ Build Your Alert" control to bring it back. */
+@media (min-width: 881px) {
+  .layout.form-panel-hidden { grid-template-columns: minmax(0, 1fr); }
+  .layout.form-panel-hidden .form-panel { display: none; }
+}
+
 .form-panel h2 { font-size: 1.15rem; margin-bottom: 4px; }
 .form-panel .lede { font-size: 0.85rem; color: var(--ink-soft); margin: 0 0 18px; }
 
