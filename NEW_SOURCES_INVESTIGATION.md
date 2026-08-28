@@ -1,3 +1,15 @@
+> **Status update (v1.0.0, 26-Aug-2026):** Jalinan Duta's live check
+> (`node backend/scripts/checkRate.js jalinanduta CNY`) has since been run
+> and confirmed `LIVE`. It is now fully wired into production — the 4th
+> real source alongside My Money Master, Taj Muhabath, and Merchantrade
+> Asia, registered in `backend/scheduler/run.js`'s `ADAPTERS`,
+> `frontend/app.js`'s `SOURCES`/`CODE_MATCHED_SOURCES`,
+> `frontend/index.html`'s money-changer checkboxes, and both GitHub Actions
+> workflows (including the recurring schedule). The rest of this document
+> is kept as-is below as the original investigation record — Wawasan Ilham,
+> Jags Money, and KL Remit Exchange remain not built, for the reasons
+> given.
+
 # New money-changer sources — investigation (24-Aug-2026)
 
 Requested: add 4 money changers for comparison, given as URLs on

@@ -581,6 +581,38 @@
   }
 
   /**
+   * Bug fix (26-Aug-2026, reported): a STALE reading — the backend's own
+   * scheduled job hasn't run recently enough for LIVE_DATA_FRESHNESS_MS to
+   * still call it current (see app.js's buildRealReadingFromEntry()) —
+   * still carries a REAL last-known buyRate/sellRate; validateReading()
+   * only marks it `valid: false` so it can never be used to actually
+   * evaluate/fire an alert, not because the number itself is missing. But
+   * both call sites below were treating ANY invalid reading identically —
+   * STALE (has a real number, just aging) and genuinely SOURCE_UNAVAILABLE/
+   * EXTRACTION_ERROR (no number at all) both collapsed to a bare "⚠
+   * Unavailable" with the number hidden. That directly contradicts this
+   * app's own written requirement (PROJECT INSTRUCTIONS section 22 —
+   * "Instead display: Last successful rate: 60.53 / Retrieved: 12:50 PM /
+   * Current status: SOURCE UNAVAILABLE", never just blank it out) and made
+   * the "Best Available Rate" card visibly disagree with the Multi-Source
+   * Comparison table right below it for the exact same alert — that table
+   * (app.js's renderCompareTable()) already correctly shows the stale
+   * number with a 🟠 STALE badge; this was the one place that didn't.
+   * Returns null when there's genuinely no last-known number to fall back
+   * to (a true SOURCE_UNAVAILABLE/EXTRACTION_ERROR), so callers can tell
+   * the two cases apart.
+   */
+  function staleFallbackReading(a, result) {
+    if (!result || !result.best || result.best.status !== "STALE") return null;
+    const value = a.rate_type === "SELL" ? result.best.sellRate : result.best.buyRate;
+    if (value == null) return null;
+    const fmt = (typeof window.CKM !== "undefined" && typeof window.CKM.formatRateFor === "function")
+      ? window.CKM.formatRateFor
+      : (v) => Number(v).toFixed(2);
+    return { value, formatted: fmt(value, a.currency), sourceName: result.best.sourceName, branch: result.best.branch };
+  }
+
+  /**
    * Phase 16 (23-Aug-2026): fills in each saved-alert card's own live/
    * simulated rate — see window.CKM.computeAlertReading()'s comment in
    * app.js for why this exists (previously only whichever ONE alert was
@@ -612,7 +644,12 @@
         return;
       }
       if (!result.valid) {
-        el.textContent = `⚠ ${result.invalidReason || "Could not get a valid rate right now"}`;
+        const stale = staleFallbackReading(a, result);
+        if (stale) {
+          el.textContent = `🟠 STALE ${a.rate_type} ${stale.formatted} · ${stale.sourceName}${stale.branch ? " — " + stale.branch : ""} — ${result.invalidReason || "last successful check is aging"}`;
+        } else {
+          el.textContent = `⚠ ${result.invalidReason || "Could not get a valid rate right now"}`;
+        }
         el.className = "alert-item-live alert-item-live-error";
         return;
       }
@@ -681,7 +718,18 @@
       } else if (!result) {
         rateCell = `<span style="color:var(--ink-faint);">No source selected</span>`;
       } else if (!result.valid) {
-        rateCell = `<span class="alert-item-live-error" title="${(result.invalidReason || "").replace(/"/g, "&quot;")}">⚠ Unavailable</span>`;
+        const stale = staleFallbackReading(a, result);
+        if (stale) {
+          rateCell = `${stale.formatted} <span class="status-pill error" style="font-size:.68rem;" title="${(result.invalidReason || "").replace(/"/g, "&quot;")}">🟠 STALE</span>`;
+          sourceCell = stale.sourceName + (stale.branch ? ` — ${stale.branch}` : "");
+          if (Number.isFinite(target)) {
+            const diff = stale.value - target;
+            const diffColor = diff <= 0 ? "var(--up)" : "var(--down)";
+            diffCell = `<span style="color:${diffColor};">${diff >= 0 ? "+" : ""}${fmt(diff, a.currency)}</span>`;
+          }
+        } else {
+          rateCell = `<span class="alert-item-live-error" title="${(result.invalidReason || "").replace(/"/g, "&quot;")}">⚠ Unavailable</span>`;
+        }
       } else {
         const isReal = result.origin === "REAL";
         const originTag = isReal

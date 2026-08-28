@@ -1,14 +1,15 @@
 {
   "name": "currency-rate-alert-backend",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
-  "description": "Scheduled live-rate retrieval, validation, target comparison, and notifications for the MY Currency Rate Tracker app. Phase 8: real Supabase-backed scheduler implemented.",
+  "description": "Scheduled live-rate retrieval, validation, target comparison, and multi-channel notifications (Email/Telegram/Push) for the MY Currency Rate Tracker app. v1.0.0 — see the repo root CHANGELOG.md for what's included.",
   "main": "index.js",
   "scripts": {
     "test": "cd .. && node --test",
     "check:mymoneymaster": "node scripts/checkRate.js mymoneymaster CNY",
     "check:tajmuhabath": "node scripts/checkRate.js tajmuhabath CNY \"LALAPORT BBCC\"",
     "check:merchantradeasia": "node scripts/checkRate.js merchantradeasia CNY",
+    "check:jalinanduta": "node scripts/checkRate.js jalinanduta CNY",
     "scheduler": "node scheduler/run.js"
   },
   "dependencies": {

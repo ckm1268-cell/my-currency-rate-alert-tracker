@@ -1,5 +1,16 @@
 {
-  "generatedAt": null,
-  "results": [],
-  "note": "Placeholder — no successful live check has run yet. This file is overwritten by backend/scripts/checkRate.js, run automatically by .github/workflows/pages.yml on every deploy (and manually via that workflow's 'Run workflow' button). The frontend treats an empty/missing/stale result here as SOURCE_UNAVAILABLE, never as a fake live rate — see frontend/app.js: loadLiveData()."
+  "generatedAt": "2026-08-25T01:49:22.986Z",
+  "results": [
+    {
+      "source": "jalinanduta",
+      "branch": null,
+      "currency": "CNY",
+      "buyRate": 59.7,
+      "sellRate": 60.6,
+      "retrievedAt": "2026-08-25T01:49:22.977Z",
+      "sourceTimestamp": null,
+      "status": "LIVE",
+      "validationStatus": "PASSED"
+    }
+  ]
 }
