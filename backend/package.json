@@ -1,8 +1,8 @@
 {
   "name": "currency-rate-alert-backend",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Scheduled live-rate retrieval, validation, target comparison, and multi-channel notifications (Email/Telegram/Push) for the MY Currency Rate Tracker app. v1.0.0 — see the repo root CHANGELOG.md for what's included.",
+  "description": "Scheduled live-rate retrieval, validation, target comparison, and multi-channel notifications (Email/Telegram/Push) for the MY Currency Rate Tracker app. v2.0.0 — see the repo root CHANGELOG.md for what's included.",
   "main": "index.js",
   "scripts": {
     "test": "cd .. && node --test",

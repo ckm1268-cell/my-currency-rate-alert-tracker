@@ -1,13 +1,14 @@
 # MY Currency Rate Tracker
 
-**v1.0.0** — Real-time currency exchange-rate monitoring and target-rate
+**v2.0.0** — Real-time currency exchange-rate monitoring and target-rate
 alerts for Malaysian money changers. Not a converter — this proves, with a
 timestamp, whether the live rate at a chosen money changer has reached your
-target *right now*, and alerts you the moment it does.
+target *right now*, and alerts you the moment it does. Installs as a free
+mobile app (PWA) on Android and iOS in addition to the browser dashboard.
 
 **Live:** https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/
 
-See `CHANGELOG.md` for the full v1.0.0 feature list and the project's
+See `CHANGELOG.md` for the full v2.0.0 feature list and the project's
 build history.
 
 ## What this does

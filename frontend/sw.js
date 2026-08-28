@@ -52,7 +52,9 @@
 // panel and scrolls to the account card -- touched auth.js/styles.css.
 // Bumped again (28-Aug-2026): Merchantrade Asia JPY/USD enablement
 // touched app.js's DISPLAY_NAME_MATCHED_CURRENCIES.
-const CKM_SHELL_CACHE = 'ckm-shell-v5';
+// Bumped again (28-Aug-2026): version 2.0.0 marker -- touched
+// index.html's phase chip (v1.0 -> v2.0).
+const CKM_SHELL_CACHE = 'ckm-shell-v6';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

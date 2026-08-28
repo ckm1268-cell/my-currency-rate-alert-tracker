@@ -9,7 +9,7 @@ or bug fix) — that detailed build history still exists in this repo's git
 log and commit messages if you need it, but isn't repeated here entry by
 entry. This file tracks releases going forward.
 
-## [Unreleased]
+## [2.0.0] — 2026-08-28
 
 ### Added
 
@@ -35,6 +35,49 @@ entry. This file tracks releases going forward.
 This supersedes the "No PWA install/offline support" line under v1.0.0's
 Known limitations below — that was accurate for v1.0.0 at the time, and
 is left as a historical record rather than edited out.
+
+**Desktop UX: quicker access to saved alerts**
+- A "+ Build Your Alert" shortcut now sits at the top right of "My saved
+  alerts", filled in the same accent colour as the primary Save button —
+  jumps straight to the alert form.
+- On desktop (≥881px) viewports, a signed-in user's "Build Your Alert"
+  form sidebar now starts collapsed rather than permanently occupying a
+  340px column — it appears on request (the shortcut above, or "Edit" on
+  a saved alert), then automatically collapses again and scrolls back to
+  "Your Account" once a save or update succeeds. Mobile is completely
+  unaffected, and a signed-out desktop visitor still sees the form
+  immediately — there's no shortcut to bring it back without an account,
+  so it was never hidden from them in the first place.
+
+**Merchantrade Asia: USD and JPY now live**
+- USD (standardized on the "BIG" note-denomination tier — this source
+  quotes USD as three separately-priced rows by banknote size, with no
+  single unqualified rate) and JPY (with an explicit x10 unit-scale
+  conversion applied in the adapter — this source quotes JPY per 100
+  units, every other source and this app's own convention is per 1,000)
+  are now retrieved live from Merchantrade Asia instead of showing
+  SIMULATED. SGD remains SIMULATED there — same denomination-tier
+  ambiguity as USD had, no standard tier specified for it yet.
+
+### Fixed
+
+- A Web Push notification's click-through opened a GitHub 404 instead of
+  the app — the payload used a root-relative URL (`/`), which a service
+  worker's `clients.openWindow()` resolves against the site's origin, not
+  this GitHub Pages *project* page's actual subpath. Now uses the real
+  deployed URL (overridable via an optional `APP_URL` environment
+  variable for anyone who forks/redeploys this repo elsewhere).
+- The installed app's home-screen label was originally too long to
+  display cleanly on an iOS icon ("MY Currency Rate Tracker" truncated
+  visually) — shortened to "MY Rate Tracker" for both the manifest's
+  `short_name` and iOS's `apple-mobile-web-app-title`. The browser-tab
+  `<title>` is deliberately unchanged and still shows the full name.
+- An already-installed app's service worker could keep serving stale
+  CSS/JS after a deploy for up to ~24 hours (the browser's own update-
+  check throttle), since the shell cache version wasn't being bumped on
+  every frontend change — every change to a cached file now bumps
+  `CKM_SHELL_CACHE`, and the service worker also proactively checks for
+  an update on every page load rather than waiting on that throttle.
 
 ## [1.0.0] — 2026-08-26
 
