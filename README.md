@@ -101,6 +101,14 @@ provision yourself — see `SUPABASE_SETUP.md` for the full walkthrough.
 Until that's done, the account card just shows a "not configured yet"
 notice and nothing else on the page is affected.
 
+## Install as a mobile app (Android & iOS) — free, no app store
+
+The dashboard installs directly to a phone's home screen as a Progressive
+Web App — same live data, same alerts, its own icon, opens full-screen
+with no browser address bar. No app-store account, review, or fee. See
+`MOBILE_APP_SETUP.md` for install steps on both platforms and the one
+extra step iOS needs before Push notifications work there.
+
 ## Try it
 
 Open `frontend/index.html` directly in a browser, or serve the folder:

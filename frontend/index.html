@@ -9,6 +9,20 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
+
+<!-- PWA: installable on Android/iOS home screens (manifest drives Android/Chrome;
+     iOS Safari ignores most of the manifest and needs its own apple-* tags below) -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#b9822a" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#d9a544" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/icons/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/icons/favicon-16.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rate Tracker">
+<meta name="mobile-web-app-capable" content="yes">
 </head>
 <body>
 
@@ -22,9 +36,15 @@
   </div>
   <div style="display:flex; align-items:center; gap:10px;">
     <span class="brand-sub" id="clockLabel">—</span>
-    <span class="phase-chip">Live rates · Email &amp; Telegram alerts</span>
+    <span class="phase-chip">v1.0 · Live rates · Email, Telegram &amp; Push alerts</span>
+    <button type="button" id="installAppBtn" class="install-btn" style="display:none;">📲 Install App</button>
   </div>
 </header>
+
+<div class="install-banner" id="iosInstallBanner" style="display:none;" role="note">
+  <span>📲 Install this app: tap <strong>Share</strong> <span aria-hidden="true">⬆️</span> in Safari's toolbar, then <strong>Add to Home Screen</strong>.</span>
+  <button type="button" id="iosInstallDismiss" class="install-banner-dismiss" aria-label="Dismiss">&times;</button>
+</div>
 
 <main class="layout">
 
@@ -399,6 +419,7 @@
 <script src="app.js"></script>
 <script src="auth.js"></script>
 <script src="rateHistory.js"></script>
+<script src="installPrompt.js"></script>
 <script src="push.js"></script>
 </body>
 </html>
