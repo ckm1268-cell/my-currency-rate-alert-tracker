@@ -381,11 +381,25 @@ alter table public.alerts
 -- Postgres has no "ADD CONSTRAINT IF NOT EXISTS" for CHECK constraints, so
 -- this uses the same drop-then-create idempotency pattern already used for
 -- every policy in this file.
+--
+-- Bug fix (28-Aug-2026): this list originally read
+-- ARRAY['browser','email','telegram','whatsapp','sms'] -- accurate for what
+-- Phase 11 itself introduced, but a full re-run of this WHOLE file against a
+-- real, already-live database now fails right here: 'push' (added by the
+-- Phase 39 migration further below) is already present in real alerts rows
+-- by the time this statement runs on a second/later full re-run, and ADD
+-- CONSTRAINT validates every existing row immediately -- it doesn't get the
+-- chance to reach Phase 39's own (correct, 'push'-inclusive) version of this
+-- same constraint a few dozen lines down before failing. Rather than leave a
+-- known-narrower intermediate constraint that can reject real data,
+-- 'push' is included here too, matching the final state this file always
+-- converges to -- Phase 39's block below still re-drops and re-creates the
+-- identical constraint immediately after, which remains a harmless no-op.
 alter table public.alerts
   drop constraint if exists alerts_notification_methods_check;
 alter table public.alerts
   add constraint alerts_notification_methods_check
-    check (notification_methods <@ ARRAY['browser','email','telegram','whatsapp','sms']::text[]
+    check (notification_methods <@ ARRAY['browser','email','telegram','push','whatsapp','sms']::text[]
            and array_length(notification_methods, 1) > 0);
 
 -- Now safe to drop — every row has been backfilled into notification_methods
