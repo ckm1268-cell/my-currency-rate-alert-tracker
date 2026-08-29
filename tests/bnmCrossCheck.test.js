@@ -113,11 +113,17 @@ test('crossCheckAgainstBnm: a deviation just over the threshold IS flagged', asy
   assert.equal(result.grosslyOffReference, true);
 });
 
-test('ADAPTER_CURRENCY_UNIT matches frontend/app.js\'s CURRENCIES unit convention for every project currency', () => {
-  assert.deepEqual(ADAPTER_CURRENCY_UNIT, {
-    CNY: 100, THB: 100, HKD: 100,
-    JPY: 1000, KRW: 1000,
-    VND: 1_000_000, TWD: 100,
-    USD: 1, SGD: 1, EUR: 1, GBP: 1, AUD: 1,
-  });
+test('ADAPTER_CURRENCY_UNIT comes from the single shared frontend/currencySupport.js file', () => {
+  // Phase 49 (29-Aug-2026): this replaces the old version of this test,
+  // which compared ADAPTER_CURRENCY_UNIT against a hardcoded literal
+  // PASTED INTO THIS TEST FILE -- it never actually read
+  // frontend/currencySupport.js (or, before Phase 48, frontend/app.js),
+  // so it structurally could not have caught a real drift, the same
+  // blind spot tests/comboSelection.test.js's old "must never drift"
+  // test had (see that file's own Phase 48 fix). This test requires the
+  // real shared file directly and asserts bnmCrossCheck.js's export is
+  // that file's data, unmodified -- proving there's no local override or
+  // second copy anywhere in this file.
+  const { CURRENCY_UNIT } = require('../frontend/currencySupport.js');
+  assert.deepEqual(ADAPTER_CURRENCY_UNIT, CURRENCY_UNIT);
 });

@@ -172,12 +172,19 @@ const ADAPTERS = {
   jalinanduta: () => require('../scrapers/jalinanduta.adapter'),
 };
 
-const SOURCE_DISPLAY_NAMES = {
-  mymoneymaster: 'My Money Master',
-  tajmuhabath: 'Taj Muhabath',
-  merchantradeasia: 'Merchantrade Asia',
-  jalinanduta: 'Jalinan Duta',
-};
+// Phase 49 (29-Aug-2026): this used to be a hand-typed object literal
+// here, independently duplicating frontend/app.js's SOURCES array `name`
+// fields — flagged in backend/validation/bnmCrossCheck.js's own (now
+// superseded) Phase 48 header comment as "the same reason
+// backend/scheduler/run.js already keeps its own SOURCE_DISPLAY_NAMES
+// map instead of sharing frontend/app.js's SOURCES array." A drift here
+// degrades rather than silently breaks -- the `|| best.source` fallback
+// below means a forgotten 5th source would show its raw id instead of a
+// real name in the actual alert a user receives (project brief Section
+// 11's "Money Changer:" line) -- but it's the same root cause as the
+// Phase 48/49 fixes elsewhere, so it gets the same fix: one file,
+// frontend/sourceNames.js, read by both sides instead of two copies.
+const { SOURCE_DISPLAY_NAMES } = require('../../frontend/sourceNames.js');
 
 async function fetchPreviousRateRow(sb, combo) {
   let query = sb
@@ -686,4 +693,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { fetchPreviousRateRow, insertRateRow, checkCombo, evaluateAlert, resolveNotifyTargets, isDueForCheck };
+module.exports = { fetchPreviousRateRow, insertRateRow, checkCombo, evaluateAlert, resolveNotifyTargets, isDueForCheck, SOURCE_DISPLAY_NAMES };

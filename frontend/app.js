@@ -74,11 +74,19 @@
   // by hand every time a source is added — exactly the kind of drift that
   // let loadAlertIntoForm() silently forget about Jalinan Duta when it was
   // added (Phase 24) and never noticed.
+  //
+  // Phase 49 (29-Aug-2026): each entry's `name` used to be typed here AND,
+  // separately, in backend/scheduler/run.js's own SOURCE_DISPLAY_NAMES
+  // object — flagged in frontend/currencySupport.js's Phase 48 comment as
+  // the same hand-duplication risk, not fixed yet at the time. Both now
+  // read from frontend/sourceNames.js's single SOURCE_DISPLAY_NAMES map
+  // (loaded here via a <script> tag, immediately before this file) instead
+  // of each typing its own copy of the same four names.
   const SOURCES = [
-    { id: "mymoneymaster", name: "My Money Master", supportsBranch: false, spreadBias: 0, checkboxId: "srcMMM" },
-    { id: "tajmuhabath", name: "Taj Muhabath", supportsBranch: true, spreadBias: 0.06, checkboxId: "srcTM" },
-    { id: "merchantradeasia", name: "Merchantrade Asia", supportsBranch: false, spreadBias: 0.03, checkboxId: "srcMTA" },
-    { id: "jalinanduta", name: "Jalinan Duta", supportsBranch: false, spreadBias: 0.02, checkboxId: "srcJD" },
+    { id: "mymoneymaster", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.mymoneymaster, supportsBranch: false, spreadBias: 0, checkboxId: "srcMMM" },
+    { id: "tajmuhabath", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.tajmuhabath, supportsBranch: true, spreadBias: 0.06, checkboxId: "srcTM" },
+    { id: "merchantradeasia", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.merchantradeasia, supportsBranch: false, spreadBias: 0.03, checkboxId: "srcMTA" },
+    { id: "jalinanduta", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.jalinanduta, supportsBranch: false, spreadBias: 0.02, checkboxId: "srcJD" },
   ];
 
   const RATE_TYPE_EXPLAINERS = {
@@ -1525,23 +1533,18 @@
   // explicit Asia/Kuala_Lumpur timezone, same DD-MMM-YYYY hh:mm:ss AM/PM
   // shape — so every channel (browser, email, Telegram, push) reports the
   // exact same time for the exact same trigger, regardless of where each
-  // one happens to run. Duplicated rather than shared because this project
-  // has no bundler/shared-module setup between frontend and backend (same
-  // reasoning as SOURCE_DISPLAY_NAMES/ADAPTER_CURRENCY_UNIT elsewhere).
+  // one happens to run.
   //
-  // Bug fix (26-Aug-2026, reported): switched from 24-hour to 12-hour clock
-  // with an AM/PM suffix — see notify.js's matching comment for the exact
-  // same change and reasoning; kept identical here so the two never drift.
-  function formatMalaysiaTime(input) {
-    const d = input ? new Date(input) : new Date();
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Kuala_Lumpur",
-      day: "2-digit", month: "short", year: "numeric",
-      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true,
-    }).formatToParts(d);
-    const get = (type) => parts.find((p) => p.type === type).value;
-    return `${get("day")}-${get("month")}-${get("year")} ${get("hour")}:${get("minute")}:${get("second")} ${get("dayPeriod")}`;
-  }
+  // Phase 49 (29-Aug-2026): this used to be a second, independent copy of
+  // notify.js's function, "duplicated rather than shared because this
+  // project has no bundler/shared-module setup between frontend and
+  // backend" — true when that reasoning was written, no longer true as of
+  // Phase 48's frontend/currencySupport.js. Now reads from
+  // frontend/timeFormat.js's single implementation (loaded here via a
+  // <script> tag, immediately before this file) instead of keeping its
+  // own copy — there is no longer a second implementation anywhere for
+  // the two to drift apart from.
+  const formatMalaysiaTime = window.CKM_TIME_FORMAT.formatMalaysiaTime;
 
   // ---------------------------------------------------------------------
   // Alerts / notifications (in-tab browser notifications; wired to both

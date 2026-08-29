@@ -84,6 +84,49 @@ entry. This file tracks releases going forward.
   file against each other (and so never could have caught either
   incident), now requires the real shared file directly. Full test
   suite verified green: 128/128.
+- **Same anti-pattern, found and fixed in two more places on a full
+  codebase sweep prompted by the fix above.** After the currency-support
+  duplication was eliminated, a repo-wide search for the same "keep two
+  copies in sync by hand" pattern turned up two more genuine instances,
+  both already flagged in code comments as risks but never actually
+  fixed:
+  - `backend/validation/bnmCrossCheck.js`'s `ADAPTER_CURRENCY_UNIT` map
+    (the per-currency denomination each money changer's rates are quoted
+    in — e.g. CNY per 100, JPY per 1,000, VND per 1,000,000) was its own
+    hand-typed object literal, independently "matching" a convention
+    that `frontend/app.js` and every `config/websites/*.json` adapter's
+    notes only ever described in prose, never enforced in code. Now
+    lives in `frontend/currencySupport.js`'s new `CURRENCY_UNIT` export.
+  - `backend/scheduler/run.js`'s `SOURCE_DISPLAY_NAMES` map (money
+    changer id → display name, e.g. `jalinanduta` → `"Jalinan Duta"`)
+    duplicated `frontend/app.js`'s `SOURCES` array by hand. A drift here
+    wouldn't have broken monitoring the way the currency-support bug
+    did, but it would have shown a raw internal id instead of a real
+    name in an actual alert a user receives. Now lives in a new
+    `frontend/sourceNames.js`.
+  - Also found: `formatMalaysiaTime()`, the Malaysia-timezone formatter
+    used in every notification's "Time:" line, was defined twice —
+    once in `backend/notifications/notify.js`, once in `frontend/app.js`'s
+    `fireAlert()` — byte-for-byte identical on purpose, with both
+    copies' comments explicitly citing "no shared module system between
+    frontend and backend" as the reason a shared version wasn't
+    possible. That reasoning stopped being true the moment
+    `frontend/currencySupport.js` was built. Now lives in a new
+    `frontend/timeFormat.js`, required by `notify.js` and loaded via
+    `<script>` by `app.js` — the exact same function reference in both,
+    not just matching output (verified directly: `notify.formatMalaysiaTime
+    === require('./frontend/timeFormat.js').formatMalaysiaTime` is `true`).
+
+  All three follow the same shape as the currency-support fix: one file
+  in `frontend/` (the only directory GitHub Pages actually publishes),
+  loaded via a `<script>` tag by the browser and via `require()` by
+  Node, so there's no second copy left anywhere to drift out of sync.
+  `tests/bnmCrossCheck.test.js`'s own "must match" test had the identical
+  blind spot as the old `comboSelection.test.js` test — it compared
+  `ADAPTER_CURRENCY_UNIT` against a literal pasted into the test file,
+  never actually reading the shared source — and has been fixed the same
+  way. A new `tests/sharedModules.test.js` covers the two new files.
+  Full test suite verified green: 133/133 (128 previous + 5 new).
 
 ## [2.0.0] — 2026-08-28
 

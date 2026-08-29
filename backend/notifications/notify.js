@@ -70,46 +70,21 @@ const { sendWebPush } = require('./webpush');
 const APP_URL = process.env.APP_URL || 'https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/';
 
 /**
- * Bug fix (26-Aug-2026, reported): the "Time:" line was built with
- * `new Date(...).toLocaleString()`, which formats using whatever locale/
- * timezone the RUNNING PROCESS defaults to — not the user's. For email and
- * Telegram, that process is the GitHub Actions runner (UTC, en-US format),
- * so a real alert triggered at, say, 16:09:45 Malaysia time showed up in
- * the email as "8/26/2026, 8:09:45 AM" — technically correct in UTC, but
- * wrong for every user of this app, all of whom are monitoring Malaysian
- * money changers. Confirmed via a real delivered email.
- *
- * Fix: always format explicitly in Asia/Kuala_Lumpur (UTC+8), regardless of
- * what timezone the server happens to be running in, in DD-MMM-YYYY HH:MM:SS
- * form — matching the exact format PROJECT INSTRUCTIONS section 8/11's own
- * examples use ("21-Aug-2026 12:45:32"). Uses Intl.DateTimeFormat with an
- * explicit `timeZone` rather than toLocaleString()'s implicit one, which is
- * the only way to get a deterministic timezone independent of the host
- * environment. Exported so frontend/app.js's client-side "browser" channel
- * notification (fireAlert()) isn't tempted to duplicate this with its own,
- * possibly-diverging implementation — see that file for why it still needs
- * its own small copy anyway (no shared module system between front/back end
- * in this project).
- *
- * Bug fix (26-Aug-2026, reported): switched from 24-hour to 12-hour clock
- * with an AM/PM suffix, per request — e.g. "26-Aug-2026 09:39:29 PM" instead
- * of "26-Aug-2026 21:39:29". `hour12: true` on its own would still need a
- * plain-English AM/PM label pulled out separately, so this reads the
- * `dayPeriod` part straight out of the same formatToParts() call rather than
- * building it by hand — en-US's dayPeriod values are already the plain
- * "AM"/"PM" this app wants, no extra mapping needed. Confirmed correct at
- * the midnight edge case too (00:00 MYT -> "12:00:00 AM", not "00:00:00").
+ * Phase 49 (29-Aug-2026): formatMalaysiaTime() used to be defined right
+ * here (see git history for the two 26-Aug-2026 bug-fix writeups this
+ * comment used to carry — explicit Asia/Kuala_Lumpur timezone regardless
+ * of host locale, then 12-hour/AM-PM), with a second, byte-for-byte
+ * identical copy hand-duplicated in frontend/app.js's fireAlert(),
+ * "kept identical here so the two never drift" per a comment that used
+ * to sit in that file. That reasoning depended on this project having
+ * no shared-module system between frontend and backend -- no longer
+ * true as of Phase 48's frontend/currencySupport.js. Now imported from
+ * frontend/timeFormat.js (this file's own header comment there has the
+ * full detail and the original bug-fix history) and re-exported below
+ * unchanged, since backend/scheduler/run.js and this project's own tests
+ * already import it from here.
  */
-function formatMalaysiaTime(input) {
-  const d = input ? new Date(input) : new Date();
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: 'Asia/Kuala_Lumpur',
-    day: '2-digit', month: 'short', year: 'numeric',
-    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true,
-  }).formatToParts(d);
-  const get = (type) => parts.find((p) => p.type === type).value;
-  return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')}:${get('second')} ${get('dayPeriod')}`;
-}
+const { formatMalaysiaTime } = require('../../frontend/timeFormat.js');
 
 /**
  * Builds the plain-text alert body, matching the exact template in the

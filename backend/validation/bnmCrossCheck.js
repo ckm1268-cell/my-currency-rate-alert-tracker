@@ -22,29 +22,17 @@
 
 const { getBnmReferenceRate: defaultGetBnmReferenceRate, toAdapterUnit } = require('../reference/bnmReference');
 
-// Matches frontend/app.js's CURRENCIES list — the per-currency denomination
-// every adapter in this project already quotes its buy/sell rates in (e.g.
-// CNY per 100, JPY per 1000, VND per 1,000,000). Duplicated here rather
-// than imported from the frontend bundle, since frontend/app.js is a
-// browser-only IIFE with no CommonJS export — the same reason
-// backend/scheduler/run.js already keeps its own SOURCE_DISPLAY_NAMES map
-// instead of sharing frontend/app.js's SOURCES array. IMPORTANT: keep this
-// in sync by hand if a currency's unit convention ever changes in
-// frontend/app.js's CURRENCIES list.
-const ADAPTER_CURRENCY_UNIT = {
-  CNY: 100,
-  THB: 100,
-  HKD: 100,
-  JPY: 1000,
-  KRW: 1000,
-  VND: 1_000_000,
-  TWD: 100,
-  USD: 1,
-  SGD: 1,
-  EUR: 1,
-  GBP: 1,
-  AUD: 1,
-};
+// Phase 49 (29-Aug-2026): this used to be a hand-typed object literal
+// here, independently "matching" a convention that frontend/app.js's
+// CURRENCIES list and every config/websites/*.json adapter's own notes
+// only ever described in prose, never enforced in code — the same
+// hand-duplication risk Phase 48 removed for CODE_MATCHED_SOURCES/
+// DISPLAY_NAME_MATCHED_CURRENCIES, applied here to this project's
+// per-currency unit-denomination convention instead. It's now defined
+// once, in frontend/currencySupport.js's CURRENCY_UNIT export, and
+// required from there — see that file's own Phase 49 note for the full
+// detail on why this data belongs there and what used to be duplicated.
+const { CURRENCY_UNIT: ADAPTER_CURRENCY_UNIT } = require('../../frontend/currencySupport.js');
 
 // How far a scraped reading's middle rate ((buy+sell)/2, converted to the
 // adapter's own quoted unit) is allowed to drift from BNM's own published

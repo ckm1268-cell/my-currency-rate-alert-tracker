@@ -49,12 +49,22 @@
  * consumption of it stay simple, synchronous data — no async fetch, no
  * build step, no risk of a load-order race.
  *
- * NOTE for whoever next audits this bug class: backend/validation/
- * bnmCrossCheck.js's ADAPTER_CURRENCY_UNIT map is a separate,
- * still-hand-duplicated allowlist of the same general shape (per-source
- * unit-scale conventions, not currency support) — flagged, not folded
- * into this file yet, since it's a different kind of data with a
- * different consumer shape. Worth the same treatment eventually.
+ * CURRENCY_UNIT (added Phase 49, 29-Aug-2026): the per-currency
+ * denomination each money changer's Buy/Sell figures are quoted against
+ * (e.g. CNY per 100, JPY per 1,000, VND per 1,000,000, most others per
+ * 1). This used to live only in backend/validation/bnmCrossCheck.js as
+ * its own ADAPTER_CURRENCY_UNIT object literal — flagged right here, in
+ * this file's own Phase 48 version of this comment, as "a separate,
+ * still-hand-duplicated allowlist of the same general shape... worth
+ * the same treatment eventually." Every config/websites/*.json adapter's
+ * own notes already describe this exact convention as something that
+ * had to be manually checked against frontend/app.js and
+ * bnmCrossCheck.js by a human (e.g. merchantradeasia.json's
+ * unitScaleMultiplierNotes names ADAPTER_CURRENCY_UNIT directly as the
+ * convention its JPY x10 correction targets) — none of that checking was
+ * ever code-enforced. This file is now the one place this data is
+ * defined; bnmCrossCheck.js require()s it instead of declaring its own
+ * copy.
  */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) {
@@ -71,8 +81,24 @@
     merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW', 'JPY', 'USD', 'SGD'],
   };
 
+  var CURRENCY_UNIT = {
+    CNY: 100,
+    THB: 100,
+    HKD: 100,
+    JPY: 1000,
+    KRW: 1000,
+    VND: 1_000_000,
+    TWD: 100,
+    USD: 1,
+    SGD: 1,
+    EUR: 1,
+    GBP: 1,
+    AUD: 1,
+  };
+
   return {
     CODE_MATCHED_SOURCES: CODE_MATCHED_SOURCES,
     DISPLAY_NAME_MATCHED_CURRENCIES: DISPLAY_NAME_MATCHED_CURRENCIES,
+    CURRENCY_UNIT: CURRENCY_UNIT,
   };
 });
