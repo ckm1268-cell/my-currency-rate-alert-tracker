@@ -139,8 +139,19 @@ test('isSupportedCombo is unconditionally true for a code-matched source, regard
 test('isSupportedCombo is true for a display-name-matched source only when currencyDisplayNames has that currency', () => {
   assert.equal(isSupportedCombo('merchantradeasia', 'TWD'), true);
   assert.equal(isSupportedCombo('merchantradeasia', 'KRW'), true); // Phase 38 addition
-  assert.equal(isSupportedCombo('merchantradeasia', 'JPY'), false); // deliberately excluded — real 10x unit-scale mismatch, not a missing config entry
-  assert.equal(isSupportedCombo('merchantradeasia', 'USD'), false); // deliberately excluded — ambiguous BIG/MEDIUM/SMALL denomination tiers, no single canonical rate
+  // Phase 47 (29-Aug-2026): JPY/USD/SGD are all real, live-supported
+  // currencies at Merchantrade Asia as of v2.0.0 (JPY/USD) and the
+  // currency-coverage audit (SGD) -- these three assertions used to say
+  // `false` here with comments claiming they were "deliberately excluded",
+  // which was true of an OLDER state of the code but had gone stale: this
+  // exact staleness is what let the Phase 47 bug (this file's own
+  // DISPLAY_NAME_MATCHED_CURRENCIES list drifting out of sync with
+  // frontend/app.js's) go undetected by the test suite. See
+  // comboSelection.js's own Phase 47 header-comment entry for the full
+  // incident writeup.
+  assert.equal(isSupportedCombo('merchantradeasia', 'JPY'), true);
+  assert.equal(isSupportedCombo('merchantradeasia', 'USD'), true);
+  assert.equal(isSupportedCombo('merchantradeasia', 'SGD'), true);
 });
 
 test('isSupportedCombo is false for an unknown source, not just an unknown currency', () => {
@@ -154,7 +165,7 @@ test('CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES match frontend/app.
   // this same check already follows elsewhere in the test suite.
   assert.deepEqual(CODE_MATCHED_SOURCES, new Set(['tajmuhabath', 'jalinanduta', 'mymoneymaster']));
   assert.deepEqual(DISPLAY_NAME_MATCHED_CURRENCIES, {
-    merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW'],
+    merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW', 'JPY', 'USD', 'SGD'],
   });
 });
 
@@ -167,17 +178,31 @@ test('getRequiredCombos now builds a combo for My Money Master + VND (Phase 42 f
 });
 
 test('getRequiredCombos never builds a combo for a source+currency the site genuinely does not support', () => {
-  const alerts = [{ sources: ['merchantradeasia'], currency: 'USD', branch: null }];
+  // Phase 47 (29-Aug-2026): USD used to be this test's example of a
+  // genuinely unsupported combo at Merchantrade Asia, but USD has been
+  // real/LIVE there since v2.0.0 (and the DISPLAY_NAME_MATCHED_CURRENCIES
+  // list this file keeps in sync was the very thing that had drifted stale
+  // -- see comboSelection.js's Phase 47 comment). Merchantrade Asia's list
+  // is now the app's full 12-currency set, so there is no longer any real
+  // app currency it doesn't support; CAD (not one of this app's 12
+  // supported currencies at all) is used here purely as a currency code
+  // guaranteed absent from every DISPLAY_NAME_MATCHED_CURRENCIES list.
+  const alerts = [{ sources: ['merchantradeasia'], currency: 'CAD', branch: null }];
   const combos = getRequiredCombos(alerts);
   assert.deepEqual(combos, []); // must not call the adapter at all
 });
 
 test('getRequiredCombos keeps a supported combo from the same alert while dropping an unsupported one', () => {
-  const alerts = [{ sources: ['merchantradeasia', 'mymoneymaster'], currency: 'USD', branch: null }];
+  // CAD used here for the same reason as the test above -- see its comment.
+  // mymoneymaster is code-matched, so it supports CAD (or any code its live
+  // table happens to print) unconditionally; merchantradeasia is
+  // display-name-matched and has no CAD entry, so only the mymoneymaster
+  // combo should survive.
+  const alerts = [{ sources: ['merchantradeasia', 'mymoneymaster'], currency: 'CAD', branch: null }];
   const combos = getRequiredCombos(alerts);
   assert.equal(combos.length, 1);
   assert.equal(combos[0].source, 'mymoneymaster');
-  assert.equal(combos[0].currency, 'USD');
+  assert.equal(combos[0].currency, 'CAD');
 });
 
 test('getRequiredCombos still builds every combo as before when all requested sources are supported', () => {
@@ -193,9 +218,10 @@ test('getSkippedUnsupportedCombos no longer reports My Money Master + VND (Phase
 });
 
 test('getSkippedUnsupportedCombos reports a genuinely unsupported combo', () => {
-  const alerts = [{ sources: ['merchantradeasia'], currency: 'USD', branch: null }];
+  // CAD used here for the same reason as the two tests above.
+  const alerts = [{ sources: ['merchantradeasia'], currency: 'CAD', branch: null }];
   const skipped = getSkippedUnsupportedCombos(alerts);
-  assert.deepEqual(skipped, [{ source: 'merchantradeasia', currency: 'USD' }]);
+  assert.deepEqual(skipped, [{ source: 'merchantradeasia', currency: 'CAD' }]);
 });
 
 test('getSkippedUnsupportedCombos returns nothing when every requested combo is supported', () => {
@@ -204,9 +230,10 @@ test('getSkippedUnsupportedCombos returns nothing when every requested combo is 
 });
 
 test('getSkippedUnsupportedCombos dedupes the same skipped source+currency across multiple alerts', () => {
+  // CAD used here for the same reason as the tests above.
   const alerts = [
-    { sources: ['merchantradeasia'], currency: 'USD', branch: null },
-    { sources: ['merchantradeasia'], currency: 'USD', branch: null }, // a second user with the same alert
+    { sources: ['merchantradeasia'], currency: 'CAD', branch: null },
+    { sources: ['merchantradeasia'], currency: 'CAD', branch: null }, // a second user with the same alert
   ];
   const skipped = getSkippedUnsupportedCombos(alerts);
   assert.equal(skipped.length, 1);

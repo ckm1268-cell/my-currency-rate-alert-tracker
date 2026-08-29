@@ -94,9 +94,30 @@ const BRANCH_SUPPORTED_SOURCES = new Set(
 // IIFE with no CommonJS export can't be require()'d from here. IMPORTANT:
 // keep both lists below in sync by hand with frontend/app.js's
 // CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES.
+//
+// Phase 47 (29-Aug-2026) incident: this list drifted out of sync with
+// frontend/app.js's copy for JPY, USD, and SGD -- each was added to the
+// frontend's DISPLAY_NAME_MATCHED_CURRENCIES.merchantradeasia (JPY/USD at
+// v2.0.0, SGD in the currency-coverage audit immediately before this fix)
+// without this file's independent copy being updated to match. The
+// consequence was severe and silent: isSupportedCombo() kept returning
+// false for these three, so getRequiredCombos() never once included them
+// -- the scheduler never attempted a live check, the `rates` table never
+// got a single row for these combos, and the dashboard correctly (per its
+// own honesty rules) kept showing SIMULATED forever, with no error anywhere
+// to signal the real cause. This is the exact same failure mode Phase 42's
+// header comment (above) already warned about for VND at My Money Master --
+// recurring here is a reminder that 'keep in sync by hand' is a standing
+// risk every time either list changes, not a one-off mistake. Whoever next
+// adds or changes a currency for a DISPLAY_NAME_MATCHED source MUST update
+// this file's list in the same commit as frontend/app.js's -- and this file
+// (or, ideally, a shared module both files import from, eliminating the
+// duplication entirely) should be the FIRST place checked whenever a
+// currency+source combo the frontend claims is real still shows SIMULATED
+// in production.
 const CODE_MATCHED_SOURCES = new Set(['tajmuhabath', 'jalinanduta', 'mymoneymaster']);
 const DISPLAY_NAME_MATCHED_CURRENCIES = {
-  merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW'],
+  merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW', 'JPY', 'USD', 'SGD'],
 };
 
 /**

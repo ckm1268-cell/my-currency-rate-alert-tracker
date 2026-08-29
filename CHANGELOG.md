@@ -48,6 +48,26 @@ entry. This file tracks releases going forward.
   to the newer `sb_publishable_.../sb_secret_...` keys, after the
   service-role key was inadvertently exposed during setup; the legacy
   keys have been revoked.
+- **Merchantrade Asia's JPY, USD, and SGD never actually went live for
+  any user, despite v2.0.0 and the SGD note above claiming they had.**
+  The backend scheduler (`backend/scheduler/comboSelection.js`) keeps
+  its own hand-maintained copy of the same currency-support list
+  `frontend/app.js` uses (a browser-only file the scheduler can't
+  `require()`), and that copy was never updated when JPY/USD were added
+  at v2.0.0 or when SGD was added just above. The result: the frontend
+  correctly believed these three combos were real, but the scheduler's
+  `isSupportedCombo()` kept silently returning false for them, so it
+  never once attempted a live check — the `rates` table had zero rows
+  for Merchantrade Asia + JPY/USD/SGD, and the dashboard correctly (per
+  its own no-fake-LIVE-label rule) kept showing them as SIMULATED
+  indefinitely, with nothing to signal why. This is the same failure
+  mode as the My Money Master + VND incident earlier in this project's
+  history, recurring because the list is duplicated by hand in two
+  files instead of shared from one. Found after a user reported the
+  SGD fix above didn't actually take effect on the live dashboard.
+  Fixed by syncing the scheduler's list to match the frontend's; see
+  `comboSelection.js`'s own header comment for the full incident
+  writeup.
 
 ## [2.0.0] — 2026-08-28
 
