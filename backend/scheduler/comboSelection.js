@@ -61,64 +61,26 @@ const BRANCH_SUPPORTED_SOURCES = new Set(
 // that per-currency ceremony gating a currency newly selected at one of
 // these 4 — only an actual 5th money changer added later should need it.
 //
-// What actually decides whether a combo can succeed, mechanically, is
-// each adapter's own matching strategy (see each adapter's parseHtml()
-// for exactly this):
-//   - Taj Muhabath, Jalinan Duta, and (as of Phase 42) My Money Master
-//     match a row by its ISO CODE directly — nothing to configure per
-//     currency; any code the live table lists works, and one it doesn't
-//     fails honestly (EXTRACTION_ERROR/SOURCE_UNAVAILABLE), never
-//     fabricated.
-//   - Merchantrade Asia matches by the site's own DISPLAY NAME text,
-//     which config/websites/merchantradeasia.json's currencyDisplayNames
-//     supplies — that mapping is a real technical requirement (the parser
-//     can't derive site display text from an ISO code alone), but it's
-//     just config DATA now, not a verification gate: adding a currency
-//     there going forward means adding one line to that JSON file (the
-//     real text, read off the live page), not a separate promotion step.
-//
-//   PHASE 42 (27-Aug-2026) fix: this is the actual root cause of "VND
-//   always WAITING/SIMULATED for My Money Master" — this file had
-//   mymoneymaster hardcoded as DISPLAY_NAME_MATCHED with only 8
-//   currencies, so getRequiredCombos() silently never even asked the
-//   adapter to check VND/THB/KRW/TWD, no matter what the adapter itself
-//   could do. My Money Master's adapter moved to a page that prints each
-//   row's own ISO code (see mymoneymaster.adapter.js's Phase 42 header),
-//   so it moved into CODE_MATCHED_SOURCES here too — matching
-//   frontend/app.js's identical change.
-// frontend/app.js's hasRealAdapter() answers the identical question for
-// the dashboard's own real-vs-simulated split; this mirrors that same
-// split, hand-duplicated here for the same reason
-// backend/validation/bnmCrossCheck.js's ADAPTER_CURRENCY_UNIT and this
-// file's own SOURCE_DISPLAY_NAMES (in run.js) already are — a browser-only
-// IIFE with no CommonJS export can't be require()'d from here. IMPORTANT:
-// keep both lists below in sync by hand with frontend/app.js's
-// CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES.
-//
-// Phase 47 (29-Aug-2026) incident: this list drifted out of sync with
-// frontend/app.js's copy for JPY, USD, and SGD -- each was added to the
-// frontend's DISPLAY_NAME_MATCHED_CURRENCIES.merchantradeasia (JPY/USD at
-// v2.0.0, SGD in the currency-coverage audit immediately before this fix)
-// without this file's independent copy being updated to match. The
-// consequence was severe and silent: isSupportedCombo() kept returning
-// false for these three, so getRequiredCombos() never once included them
-// -- the scheduler never attempted a live check, the `rates` table never
-// got a single row for these combos, and the dashboard correctly (per its
-// own honesty rules) kept showing SIMULATED forever, with no error anywhere
-// to signal the real cause. This is the exact same failure mode Phase 42's
-// header comment (above) already warned about for VND at My Money Master --
-// recurring here is a reminder that 'keep in sync by hand' is a standing
-// risk every time either list changes, not a one-off mistake. Whoever next
-// adds or changes a currency for a DISPLAY_NAME_MATCHED source MUST update
-// this file's list in the same commit as frontend/app.js's -- and this file
-// (or, ideally, a shared module both files import from, eliminating the
-// duplication entirely) should be the FIRST place checked whenever a
-// currency+source combo the frontend claims is real still shows SIMULATED
-// in production.
-const CODE_MATCHED_SOURCES = new Set(['tajmuhabath', 'jalinanduta', 'mymoneymaster']);
-const DISPLAY_NAME_MATCHED_CURRENCIES = {
-  merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW', 'JPY', 'USD', 'SGD'],
-};
+// Phase 48 (29-Aug-2026): CODE_MATCHED_SOURCES and
+// DISPLAY_NAME_MATCHED_CURRENCIES used to be hand-duplicated here and in
+// frontend/app.js, "kept in sync by hand" per a comment that used to sit
+// where this one now does. That discipline failed twice without either
+// copy ever raising an error (My Money Master + VND, Phase 42;
+// Merchantrade Asia + JPY/USD/SGD, Phase 47) — a currency added to one
+// copy and not the other just silently never got checked by the
+// scheduler, with the live dashboard the only place the gap was ever
+// visible. Both lists now live in exactly one file,
+// frontend/currencySupport.js, which this file require()s below and
+// frontend/app.js loads via a <script> tag before app.js — see that
+// file's own header comment for the full architecture (why a plain
+// require()/UMD file, not an async fetch) and the full Phase 42/47
+// incident history. There is no longer a second copy anywhere to drift
+// out of sync with.
+const {
+  CODE_MATCHED_SOURCES: CODE_MATCHED_SOURCES_LIST,
+  DISPLAY_NAME_MATCHED_CURRENCIES,
+} = require('../../frontend/currencySupport.js');
+const CODE_MATCHED_SOURCES = new Set(CODE_MATCHED_SOURCES_LIST);
 
 /**
  * Is this source+currency combo one the scheduler should actually attempt

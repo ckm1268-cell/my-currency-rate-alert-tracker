@@ -98,66 +98,28 @@
   //
   // The underlying adapters split into two genuinely different matching
   // strategies, which is what actually decides whether a new currency
-  // needs any config at all:
-  //   - Taj Muhabath, Jalinan Duta, and (as of Phase 42) My Money Master
-  //     match a row by its ISO CODE directly — see
-  //     backend/scrapers/tajmuhabath.adapter.js / jalinanduta.adapter.js /
-  //     mymoneymaster.adapter.js's parseHtml(). Nothing to configure per
-  //     currency — any code the live page actually lists is picked up
-  //     automatically. A code a site DOESN'T list simply fails with an
-  //     honest EXTRACTION_ERROR/SOURCE_UNAVAILABLE, never a fabricated
-  //     number.
-  //   - Merchantrade Asia matches by the site's own DISPLAY NAME text
-  //     (e.g. "Chinese Renminbi"), which cannot be derived from an ISO
-  //     code alone — config/websites/merchantradeasia.json's own
-  //     currencyDisplayNames map supplies that text, captured directly
-  //     from the site's live rendered DOM (not guessed). The list below
-  //     mirrors exactly what's in that config file — same
-  //     hand-duplication convention already used for
-  //     SOURCE_DISPLAY_NAMES/ADAPTER_CURRENCY_UNIT elsewhere in this
-  //     project. Adding a currency here going forward is just adding one
-  //     line to that JSON file (the real text, read from the live page)
-  //     — not a separate verification step.
-  //     Merchantrade Asia's SGD had the same problem: the site quotes 2
-  //     note-size variants ("SGD BIG" / "SGD SMALL") with no single
-  //     obvious "the" rate. Resolved 28-Aug-2026 (Phase 46) the same way
-  //     USD/JPY were below: the project owner picked BIG as the standard
-  //     tier after being shown both tiers' live values.
-  //     USD and JPY were the same story until Phase 44 (28-Aug-2026),
-  //     requested after the project owner asked why both were still
-  //     SIMULATED and was given this exact reasoning: USD also had
-  //     BIG/MEDIUM/SMALL note-size variants (same shape as SGD's problem)
-  //     — the project owner explicitly chose BIG as the standard tier,
-  //     resolving the ambiguity SGD still has. JPY was quoted per 100
-  //     units here vs. per 1,000 everywhere else — the project owner
-  //     specified the x10 conversion; backend/scrapers/merchantradeasia
-  //     .adapter.js's parseHtml() now applies it (config.unitScaleMultiplier),
-  //     so this source's JPY output is already in the standard per-1,000
-  //     convention by the time it reaches this app, same as every other
-  //     source's JPY figures — see config/websites/merchantradeasia.json's
-  //     unitScaleMultiplierNotes/currencyDisplayNamesNotes for the full
-  //     detail on both.
+  // needs any config at all — Taj Muhabath/Jalinan Duta/My Money Master
+  // match a row by its ISO CODE directly (nothing to configure per
+  // currency), while Merchantrade Asia matches by the site's own DISPLAY
+  // NAME text, which does need an explicit per-currency entry. See
+  // frontend/currencySupport.js's own header comment for the full detail
+  // on both, including the SGD/USD/JPY denomination-tier decisions and
+  // the Phase 42/47 incident history.
   //
-  //   PHASE 42 (27-Aug-2026): My Money Master moved from the
-  //   DISPLAY_NAME_MATCHED_CURRENCIES list to CODE_MATCHED_SOURCES. The
-  //   project owner reported VND permanently stuck on SIMULATED here and
-  //   supplied a screenshot proving a real VND row exists — it just isn't
-  //   on the 8-card page (Home/rate_board) the adapter used to read. A
-  //   live browser session found the actual page
-  //   (index.php?/Home/full_rate_board): a ~40-currency table that DOES
-  //   print each row's own ISO code (e.g. "( VND )"), is a superset of
-  //   the old 8-card page (same numbers for all 8), and genuinely lists
-  //   all 12 of this app's currencies — including VND, THB, KRW, and TWD,
-  //   which the old page never had at all, not a config gap. See
-  //   backend/scrapers/mymoneymaster.adapter.js and
-  //   config/websites/mymoneymaster.json's Phase 42 notes for the full
-  //   verification detail. Because the new page prints the code directly,
-  //   My Money Master no longer needs a currencyDisplayNames-style map at
-  //   all — hence the move to the generic, code-matched group.
-  const CODE_MATCHED_SOURCES = new Set(["tajmuhabath", "jalinanduta", "mymoneymaster"]);
-  const DISPLAY_NAME_MATCHED_CURRENCIES = {
-    merchantradeasia: ["CNY", "VND", "TWD", "HKD", "EUR", "GBP", "AUD", "THB", "KRW", "JPY", "USD", "SGD"],
-  };
+  // Phase 48 (29-Aug-2026): CODE_MATCHED_SOURCES and
+  // DISPLAY_NAME_MATCHED_CURRENCIES used to be defined right here, with a
+  // second, independent copy hand-duplicated in
+  // backend/scheduler/comboSelection.js — "kept in sync by hand" per a
+  // comment that used to sit where this one now does. That discipline
+  // failed twice (Phase 42, Phase 47) without either copy ever raising
+  // an error. Both lists now live in exactly one file,
+  // frontend/currencySupport.js (loaded via a <script> tag in
+  // frontend/index.html, immediately before this file), and this file
+  // reads from window.CKM_CURRENCY_SUPPORT instead of defining its own
+  // copy — there is no longer a second copy anywhere to drift out of
+  // sync with.
+  const CODE_MATCHED_SOURCES = new Set(window.CKM_CURRENCY_SUPPORT.CODE_MATCHED_SOURCES);
+  const DISPLAY_NAME_MATCHED_CURRENCIES = window.CKM_CURRENCY_SUPPORT.DISPLAY_NAME_MATCHED_CURRENCIES;
 
   const LIVE_DATA_URL = "data/latest-rates.json";
   const LIVE_DATA_POLL_MS = 60_000; // re-check the static file every minute

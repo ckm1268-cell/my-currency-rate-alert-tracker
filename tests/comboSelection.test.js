@@ -158,15 +158,21 @@ test('isSupportedCombo is false for an unknown source, not just an unknown curre
   assert.equal(isSupportedCombo('doesnotexist', 'CNY'), false);
 });
 
-test('CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES match frontend/app.js\'s copies exactly', () => {
-  // These two pairs must never drift — see comboSelection.js's own
-  // comment for why they're hand-duplicated instead of shared, and
-  // bnmCrossCheck.js's ADAPTER_CURRENCY_UNIT for the established pattern
-  // this same check already follows elsewhere in the test suite.
-  assert.deepEqual(CODE_MATCHED_SOURCES, new Set(['tajmuhabath', 'jalinanduta', 'mymoneymaster']));
-  assert.deepEqual(DISPLAY_NAME_MATCHED_CURRENCIES, {
-    merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW', 'JPY', 'USD', 'SGD'],
-  });
+test('CODE_MATCHED_SOURCES / DISPLAY_NAME_MATCHED_CURRENCIES come from the single shared frontend/currencySupport.js file', () => {
+  // Phase 48 (29-Aug-2026): this replaces the old version of this test,
+  // which compared two hardcoded literals PASTED INTO THIS TEST FILE
+  // against each other -- it never actually read frontend/app.js, so it
+  // could not have caught (and did not catch) the Phase 42/47 drift
+  // incidents it was meant to guard against. There is now only one real
+  // file to check: this test requires it directly (the exact same
+  // module comboSelection.js itself requires) and asserts
+  // comboSelection.js's exports are that file's data, unmodified --
+  // proving there's no local override or second copy anywhere in this
+  // file. See frontend/currencySupport.js's own header comment for the
+  // full architecture and incident history.
+  const shared = require('../frontend/currencySupport.js');
+  assert.deepEqual(CODE_MATCHED_SOURCES, new Set(shared.CODE_MATCHED_SOURCES));
+  assert.deepEqual(DISPLAY_NAME_MATCHED_CURRENCIES, shared.DISPLAY_NAME_MATCHED_CURRENCIES);
 });
 
 test('getRequiredCombos now builds a combo for My Money Master + VND (Phase 42 fix for the originally reported bug)', () => {

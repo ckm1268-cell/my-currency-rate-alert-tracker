@@ -68,6 +68,22 @@ entry. This file tracks releases going forward.
   Fixed by syncing the scheduler's list to match the frontend's; see
   `comboSelection.js`'s own header comment for the full incident
   writeup.
+- **Structural follow-up to the fix above:** re-syncing the two
+  hand-duplicated currency-support lists was the second time that
+  "keep in sync by hand" discipline had silently failed (the first
+  was My Money Master + VND, `[2.0.0]`'s Phase 42 fix), so this time
+  the duplication itself was removed rather than repaired again. Both
+  lists now live in exactly one file, `frontend/currencySupport.js`
+  (a small UMD-style module with no dependencies), which
+  `frontend/app.js` loads via a `<script>` tag and
+  `backend/scheduler/comboSelection.js` loads via `require()` — the
+  same bytes, read synchronously by both the browser and Node, so
+  there is no longer a second copy anywhere that can drift out of
+  sync. `tests/comboSelection.test.js`'s "must never drift" test,
+  which used to compare two hardcoded literals pasted into the test
+  file against each other (and so never could have caught either
+  incident), now requires the real shared file directly. Full test
+  suite verified green: 128/128.
 
 ## [2.0.0] — 2026-08-28
 

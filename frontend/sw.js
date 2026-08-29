@@ -54,7 +54,10 @@
 // touched app.js's DISPLAY_NAME_MATCHED_CURRENCIES.
 // Bumped again (28-Aug-2026): version 2.0.0 marker -- touched
 // index.html's phase chip (v1.0 -> v2.0).
-const CKM_SHELL_CACHE = 'ckm-shell-v10';
+// Bumped again (29-Aug-2026, Phase 48): new shared
+// frontend/currencySupport.js file added to the shell -- touched
+// index.html (new <script> tag) and app.js (now reads from it).
+const CKM_SHELL_CACHE = 'ckm-shell-v11';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any
@@ -65,6 +68,7 @@ const CKM_SHELL_FILES = [
   'index.html',
   'styles.css',
   'app.js',
+  'currencySupport.js',
   'auth.js',
   'rateHistory.js',
   'push.js',
