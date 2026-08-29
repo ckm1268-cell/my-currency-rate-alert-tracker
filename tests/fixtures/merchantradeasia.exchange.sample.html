@@ -42,6 +42,20 @@
   is "USD BIG") and never accidentally picks up MEDIUM or SMALL, which
   would otherwise be a real risk given all three rows contain the
   substring "USD".
+
+  SGD BIG/SMALL added 28-Aug-2026 (Phase 46) — same denomination-split
+  pattern as USD, but only two tiers, not three, and this page's own
+  display text for this currency uses "SINGAPORE", not "SGD" (verified
+  live, not assumed — see config/websites/merchantradeasia.json's
+  currencyDisplayNamesNotes for why this mattered). Real markup/values
+  captured live via mcp__claude-in-chrome that same day: BIG We Buy 3.0799
+  / We Sell 3.2880; SMALL We Buy 3.0799 / We Sell 3.2880 (identically
+  priced at capture time, same as USD's MEDIUM/SMALL were — genuinely
+  independent DOM rows regardless). Both are included so the test suite
+  can prove parseHtml('SGD') matches ONLY the BIG row
+  (config.currencyDisplayNames.SGD is "SINGAPORE BIG") and never
+  accidentally picks up SMALL, which would otherwise be a real risk given
+  both rows contain the substring "SINGAPORE".
 -->
 <!DOCTYPE html>
 <html>
@@ -58,6 +72,10 @@
     <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-us fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">1 USD MEDIUM</span><small class="text-muted lh-1 fs-6">/ USD MEDIUM (10,20)</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">3.8169</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">4.1100</span></div></div>
 
     <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-us fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">1 USD SMALL</span><small class="text-muted lh-1 fs-6">/ USD SMALL (1,2,5)</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">3.8169</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">4.1100</span></div></div>
+
+    <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-sg fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">1 SGD BIG</span><small class="text-muted lh-1 fs-6">/ SINGAPORE BIG (1000,500,100,50)</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">3.0799</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">3.2880</span></div></div>
+
+    <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-sg fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">1 SGD SMALL</span><small class="text-muted lh-1 fs-6">/ SINGAPORE SMALL (20,10,5,2)</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">3.0799</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">3.2880</span></div></div>
 
 
     <div class="row mx-0 mb-3 exchange-arrow-row align-items-center  bg-white rounded-4"><div class="col-6 py-3 px-2 px-lg-4"><span class="d-flex align-items-center gap-2"><span class="d-inline-block flex-shrink-0 border rounded-circle overflow-hidden position-relative h-32 w-32"><span class="fi fi-cn fis  h-100 w-100 position-absolute top-0 start-0"></span></span><span class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center gap-2"><span class="text-dark lh-1 fw-semibold">100 CNY</span><small class="text-muted lh-1 fs-6">/ CHINESE RENMINBI</small></span></span></div><div class="col-3 py-3 px-4 text-center"><span class="currency text-dark ftw-400">59.2199</span></div><div class="col-3 py-3 px-4 text-end"><span class="currency text-dark ftw-400">61.8000</span></div></div>

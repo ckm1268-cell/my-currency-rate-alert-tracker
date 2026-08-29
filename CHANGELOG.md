@@ -27,6 +27,28 @@ entry. This file tracks releases going forward.
 - See `ADMIN_SETUP.md` for the full setup walkthrough (schema migration,
   deploying the Edge Function, promoting your first Super User).
 
+**Live rates**
+- Merchantrade Asia's SGD is now live (previously SIMULATED): the site
+  splits SGD into two note-denomination tiers with no single obvious
+  rate, same ambiguity USD had until Phase 44 — the project owner picked
+  BIG as the standard tier, same as USD.
+
+### Fixed
+
+- The Admin Module's "🛡️ Admin" link and "← Back to dashboard" button
+  rendered as underlined text links instead of pill buttons.
+- Signing out left the "Build Your Alert" form permanently hidden on
+  desktop for any account that had it auto-collapsed while signed in,
+  with no way to bring it back.
+- Signing back in during the same page visit (after signing out) no
+  longer re-collapsed "Build Your Alert" the way a fresh page load would.
+- The Admin Module's "Filter by email" search box rendered as a large
+  empty box on mobile instead of a normal-sized field.
+- Migrated off the legacy JWT-based Supabase `anon`/`service_role` keys
+  to the newer `sb_publishable_.../sb_secret_...` keys, after the
+  service-role key was inadvertently exposed during setup; the legacy
+  keys have been revoked.
+
 ## [2.0.0] — 2026-08-28
 
 ### Added

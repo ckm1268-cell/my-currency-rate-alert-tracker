@@ -223,3 +223,46 @@ test('parseHtml does not apply the JPY unit-scale conversion to USD (or any othe
   assert.equal(config.unitScaleMultiplier.CNY, undefined);
   assert.ok(usd && cny);
 });
+
+// SGD added 28-Aug-2026 (Phase 46), same reasoning and same denomination-
+// split shape as USD (Phase 44): the project owner picked a standard tier
+// (BIG) among real, structurally-independent BIG/SMALL rows — see
+// config/websites/merchantradeasia.json's currencyDisplayNamesNotes for
+// the full reasoning, including why this page's own display text uses
+// "SINGAPORE" rather than "SGD".
+
+test('parseHtml extracts the real captured SGD BIG row', () => {
+  const result = parseHtml(html, 'SGD');
+  assert.ok(result, 'expected a parsed result for SGD, got null');
+  assert.equal(result.buyRate, 3.0799);
+  assert.equal(result.sellRate, 3.288);
+});
+
+test('the extracted SGD BIG reading passes validateRate() against the configured expected range', () => {
+  const result = parseHtml(html, 'SGD');
+  const validation = validateRate({
+    currency: 'SGD',
+    buyRate: result.buyRate,
+    sellRate: result.sellRate,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: config.validation.expectedRange.SGD,
+  });
+  assert.equal(validation.passed, true, `expected validation to pass, reasons: ${validation.reasons.join('; ')}`);
+});
+
+test('config.currencyDisplayNames.SGD ("SINGAPORE BIG") is a targeted match: it appears in the BIG row\'s display name but NOT the SMALL row\'s', () => {
+  // Unlike USD's three tiers, this fixture's real captured SGD BIG/SMALL
+  // values happen to be identical (3.0799/3.2880 for both, same as USD's
+  // MEDIUM/SMALL coincidence) — so the buyRate/sellRate assertions above
+  // can't by themselves prove the matcher is targeting the right row
+  // rather than accidentally landing on SMALL. This test proves the
+  // substring match is genuinely selective regardless: if the site's two
+  // tiers ever diverge in price, config.currencyDisplayNames.SGD is
+  // guaranteed to resolve to BIG specifically, not whichever row happens
+  // to come first.
+  const bigRowText = '/ SINGAPORE BIG (1000,500,100,50)';
+  const smallRowText = '/ SINGAPORE SMALL (20,10,5,2)';
+  const needle = config.currencyDisplayNames.SGD.toLowerCase();
+  assert.ok(bigRowText.toLowerCase().includes(needle), 'expected SGD config value to match the BIG row');
+  assert.ok(!smallRowText.toLowerCase().includes(needle), 'SGD config value must NOT also match the SMALL row');
+});

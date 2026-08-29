@@ -118,11 +118,11 @@
   //     project. Adding a currency here going forward is just adding one
   //     line to that JSON file (the real text, read from the live page)
   //     — not a separate verification step.
-  //     Merchantrade Asia still excludes SGD here: the site quotes 2
+  //     Merchantrade Asia's SGD had the same problem: the site quotes 2
   //     note-size variants ("SGD BIG" / "SGD SMALL") with no single
-  //     obvious "the" rate, and no standard tier has been specified for
-  //     it — picking one silently would be a guess, not a verified
-  //     mapping.
+  //     obvious "the" rate. Resolved 28-Aug-2026 (Phase 46) the same way
+  //     USD/JPY were below: the project owner picked BIG as the standard
+  //     tier after being shown both tiers' live values.
   //     USD and JPY were the same story until Phase 44 (28-Aug-2026),
   //     requested after the project owner asked why both were still
   //     SIMULATED and was given this exact reasoning: USD also had
@@ -156,7 +156,7 @@
   //   all — hence the move to the generic, code-matched group.
   const CODE_MATCHED_SOURCES = new Set(["tajmuhabath", "jalinanduta", "mymoneymaster"]);
   const DISPLAY_NAME_MATCHED_CURRENCIES = {
-    merchantradeasia: ["CNY", "VND", "TWD", "HKD", "EUR", "GBP", "AUD", "THB", "KRW", "JPY", "USD"],
+    merchantradeasia: ["CNY", "VND", "TWD", "HKD", "EUR", "GBP", "AUD", "THB", "KRW", "JPY", "USD", "SGD"],
   };
 
   const LIVE_DATA_URL = "data/latest-rates.json";
