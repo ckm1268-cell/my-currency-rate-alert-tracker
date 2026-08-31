@@ -2,10 +2,11 @@
 
 This is the setup guide for the **Admin Module**: a page (`admin.html`) where a
 **Super User** can bulk-disable, bulk-re-enable, and bulk-delete other users'
-accounts. It follows the same "what's real, what needs your action" style as
-`SUPABASE_SETUP.md`, `NOTIFICATIONS_SETUP.md`, `PUSH_SETUP.md`, and
-`MOBILE_APP_SETUP.md` — read those first if you haven't set this app up at
-all yet.
+accounts, and (Step 5, optional) get notified by email/Telegram the instant
+someone new signs up. It follows the same "what's real, what needs your
+action" style as `SUPABASE_SETUP.md`, `NOTIFICATIONS_SETUP.md`,
+`PUSH_SETUP.md`, and `MOBILE_APP_SETUP.md` — read those first if you haven't
+set this app up at all yet.
 
 ## Why this needs a separate piece of infrastructure
 
@@ -142,6 +143,100 @@ You can promote more than one account the same way, and demote one back to
 6. Every action (success, failure, or a blocked self-action) is recorded and
    shown in the **"Recent admin activity"** log at the bottom of the page.
 
+## Step 5 — (optional) notify the admin when someone new signs up
+
+This is a separate, optional piece of infrastructure — everything above
+(Steps 1-4) works completely on its own without it. It adds a second
+Supabase Edge Function, `supabase/functions/notify-admin-signup`, called the
+instant a new row lands in `auth.users` (via a database trigger + `pg_net` —
+see `database/schema.sql`'s Phase 51 block), which emails and/or
+Telegram-messages **one fixed admin contact** the moment someone signs up.
+It does not look up every `profiles.role = 'admin'` account — it's a single
+configured destination, the same "keep it simple" choice this project makes
+elsewhere (see `backend/notifications/telegram.js`'s per-alert, not
+per-user, chat ID storage).
+
+### 5a — deploy the function
+
+```bash
+# --no-verify-jwt is required: this function is called by Postgres itself
+# (via pg_net), which has no Supabase user session/JWT to present. Without
+# this flag, Supabase's platform-level auth check rejects the call before
+# this function's own code (the X-Signup-Webhook-Secret check) ever runs.
+supabase functions deploy notify-admin-signup --no-verify-jwt
+```
+
+### 5b — set its secrets
+
+```bash
+# A random value you generate yourself (e.g. `openssl rand -hex 32`) — this
+# is NOT your Supabase service-role key. It only proves the call genuinely
+# came from this project's own database trigger, not a stranger who found
+# the function's URL. You'll reuse this same value again in Step 5c below.
+supabase secrets set SIGNUP_WEBHOOK_SECRET=your-random-secret-here
+
+# Where the notification goes. Set either or both — whichever you don't set
+# is simply skipped (reported as "skipped, not attempted" in the function's
+# logs), it never causes an error.
+supabase secrets set ADMIN_NOTIFY_EMAIL=you@example.com
+supabase secrets set ADMIN_NOTIFY_TELEGRAM_CHAT_ID=your-telegram-chat-id
+
+# Same Resend/Telegram credentials the scheduler already uses — but Edge
+# Functions run on Supabase's own infrastructure, completely separate from
+# GitHub Actions, so they CANNOT read your GitHub Actions secrets. These
+# have to be set again, here, as their own Supabase secrets, even though
+# the values are identical to what's already in your GitHub Actions repo
+# secrets. See NOTIFICATIONS_SETUP.md if you haven't set these up at all.
+supabase secrets set RESEND_API_KEY=your-resend-api-key
+supabase secrets set TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+```
+
+### 5c — connect the database trigger to the function
+
+The trigger added by Step 1's schema migration (`database/schema.sql`'s
+Phase 51 block) needs to know this function's URL and the same webhook
+secret from Step 5b — read from **Supabase Vault**, not written into the
+repo (this file is public; the webhook secret must never be committed). Run
+this once in the Supabase SQL Editor, filling in your own project ref (find
+it in Project Settings → General, or in the URL the Edge Functions page
+gives you after deploying) and the exact same secret value you set in 5b:
+
+```sql
+select vault.create_secret(
+  'https://YOUR-PROJECT-REF.supabase.co/functions/v1/notify-admin-signup',
+  'admin_signup_webhook_url'
+);
+select vault.create_secret(
+  'your-random-secret-here',   -- must match SIGNUP_WEBHOOK_SECRET from 5b exactly
+  'admin_signup_webhook_secret'
+);
+```
+
+If either statement fails with something like `schema "vault" does not
+exist`, enable the Vault extension first via Dashboard → Database →
+Extensions → search "Vault" → Enable, then re-run the two statements above.
+
+Then (re-)run the whole `database/schema.sql` file in the SQL Editor if you
+haven't already picked up the Phase 51 block from Step 1 — it's idempotent,
+same as every other migration in that file, so re-running it in full is
+always safe.
+
+### 5d — test it
+
+Sign up a genuinely disposable test account (or use one you're about to
+delete anyway) and confirm the admin contact(s) you configured in 5b
+receive a "🆕 New User Registered" email and/or Telegram message within a
+few seconds — not up to 5 minutes, since this doesn't go through the
+GitHub Actions scheduler at all. If nothing arrives, see Troubleshooting
+below.
+
+To change the admin contact or rotate the webhook secret later, re-run the
+relevant `supabase secrets set ...` command from 5b (and, if you rotate the
+webhook secret, re-run the matching `vault.create_secret` — actually
+`select vault.update_secret((select id from vault.secrets where name =
+'admin_signup_webhook_secret'), 'the-new-secret-value');` — the two must
+always match).
+
 ## Testing checklist
 
 - [ ] Sign in as a non-admin account and confirm `admin.html` shows "Access
@@ -158,6 +253,9 @@ You can promote more than one account the same way, and demote one back to
       show up anywhere).
 - [ ] Confirm the "Recent admin activity" log shows a row for each of the
       above.
+- [ ] (If Step 5 is set up) Sign up a disposable test account and confirm
+      the configured admin contact(s) receive a new-signup email and/or
+      Telegram message within a few seconds.
 
 ## Troubleshooting
 
@@ -181,6 +279,22 @@ command in Step 2 either wasn't run or was run against a different linked
 project than the one `admin.html` is pointed at
 (`frontend/supabaseConfig.js`'s URL).
 
+**(Step 5) No email/Telegram arrives after a test signup.** Check, in order:
+1. Supabase Dashboard → Edge Functions → `notify-admin-signup` → Logs — every
+   attempt logs a `notify-admin-signup: {...}` line with per-channel
+   `delivered`/`error` detail, including "skipped, not attempted" if a
+   secret from Step 5b is missing.
+2. Supabase Dashboard → Logs → Postgres Logs — search for
+   `notify_admin_of_new_signup failed`. This means the trigger fired but
+   couldn't call the function at all (most often: the two `vault.create_secret`
+   calls from Step 5c were never run, or the pg_net extension isn't enabled).
+3. If neither log shows anything at all, the trigger itself likely isn't
+   installed — re-run `database/schema.sql`'s Phase 51 block (or the whole
+   file) in the SQL Editor.
+4. A `401` in the function's own logs means the `SIGNUP_WEBHOOK_SECRET`
+   secret (5b) and the `admin_signup_webhook_secret` Vault value (5c) don't
+   match exactly — they must be the identical string.
+
 ## Security notes
 
 - The Edge Function re-verifies the caller's `profiles.role` on **every**
@@ -194,3 +308,10 @@ project than the one `admin.html` is pointed at
 - Promoting an account to admin is intentionally a manual SQL statement, not
   a UI action anywhere in this app, so it always leaves a deliberate, visible
   trail in whoever ran it, rather than being one more button to click.
+- (Step 5) `notify-admin-signup` is deployed with `--no-verify-jwt` since it's
+  called by Postgres, not a signed-in browser — its `X-Signup-Webhook-Secret`
+  header check is a much lighter authorization boundary than admin-users'
+  `profiles.role` re-check, but the function never reads or writes user data
+  and never returns anything sensitive in its response, so the worst a
+  bypass could do is trigger a fake notification, not a data or account
+  compromise.

@@ -27,6 +27,20 @@ entry. This file tracks releases going forward.
 - See `ADMIN_SETUP.md` for the full setup walkthrough (schema migration,
   deploying the Edge Function, promoting your first Super User).
 
+**Admin Module — notify the admin on every new signup (optional)**
+- A new Supabase Edge Function (`supabase/functions/notify-admin-signup`),
+  triggered directly off `auth.users` INSERTs via a database trigger +
+  `pg_net`, emails and/or Telegram-messages one configured admin contact
+  within seconds of any new signup — not on a delay from the 5-minute
+  scheduler.
+- The webhook URL and its shared authentication secret are stored in
+  Supabase Vault, never committed to this repo.
+- Fails safe: a problem anywhere in the notification path (missing config,
+  network error, the function itself being down) can never block or fail
+  the actual signup.
+- Fully optional — everything else in the Admin Module works with or
+  without this set up. See `ADMIN_SETUP.md` Step 5 for the walkthrough.
+
 **Live rates**
 - Merchantrade Asia's SGD is now live (previously SIMULATED): the site
   splits SGD into two note-denomination tiers with no single obvious

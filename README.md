@@ -114,7 +114,12 @@ by hand with one SQL statement. Every disable/enable/delete runs through a
 Supabase Edge Function (`supabase/functions/admin-users`) using its own
 service-role secret — this can't be done from the static frontend alone, the
 same reason the recurring rate check runs as a scheduled backend job rather
-than in the browser. See `ADMIN_SETUP.md` for the full setup walkthrough.
+than in the browser. Optionally, a second Edge Function
+(`supabase/functions/notify-admin-signup`) emails and/or Telegram-messages a
+configured admin contact within seconds of any new signup, triggered
+directly off `auth.users` via a database trigger + `pg_net` — not the
+5-minute scheduler. See `ADMIN_SETUP.md` for the full setup walkthrough of
+both.
 
 ## Install as a mobile app (Android & iOS) — free, no app store
 
@@ -165,6 +170,7 @@ my-currency-rate-alert-tracker/
 │   └── schema.sql             # tables, RLS policies, and every migration in order
 ├── supabase/functions/        # Edge Functions — server-side code with access to secrets
 │   ├── admin-users/           # Admin Module (v3): bulk disable/enable/delete via the Auth Admin API
+│   ├── notify-admin-signup/   # Admin Module: emails/Telegrams the admin on every new signup
 │   └── _shared/cors.ts
 ├── config/websites/           # per-source URLs, selectors, wait strategy
 ├── .github/workflows/

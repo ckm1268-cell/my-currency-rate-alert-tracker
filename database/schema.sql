@@ -619,6 +619,107 @@ create policy "Admins can view admin_actions"
     )
   );
 
+-- -----------------------------------------------------------------------------
+-- Phase 51 addition (31-Aug-2026) — notify the admin the instant someone new
+-- signs up. Requested: "notify the Administrator / Superuser when there is
+-- new user registered."
+-- =============================================================================
+-- A second, independent trigger on auth.users (alongside Phase 45's
+-- on_auth_user_created, which creates the new profiles row) that calls a
+-- new Supabase Edge Function — supabase/functions/notify-admin-signup — over
+-- HTTP via the pg_net extension, the moment the INSERT actually happens.
+-- That function sends an email (Resend) and/or a Telegram message to a
+-- single fixed admin contact, mirroring backend/notifications/email.js and
+-- telegram.js's real delivery calls. See ADMIN_SETUP.md Step 5 for the full
+-- setup walkthrough (deploying the function, setting its secrets, and the
+-- two `vault.create_secret(...)` calls this block depends on).
+--
+-- Why a second trigger, not one extra line inside handle_new_user(): keeps
+-- the two concerns independently debuggable/toggleable (profile creation
+-- must never be affected by a notification problem, and vice versa) — same
+-- reasoning as this project's separate small files per notification channel
+-- (email.js / telegram.js / webpush.js).
+--
+-- Why the webhook URL and shared secret are read from Supabase Vault
+-- (vault.decrypted_secrets) instead of being written directly into this
+-- function's SQL: this file is committed to a public GitHub repo. The
+-- shared secret in particular must never appear in it — Vault is Supabase's
+-- own standard mechanism for a database trigger to hold a value like this
+-- safely (it's what the Dashboard's own "Database Webhooks" feature is
+-- built on internally). The two vault secrets are created ONCE, by hand, in
+-- the Supabase SQL Editor (ADMIN_SETUP.md Step 5) — never by re-running this
+-- file, and this file makes no attempt to create or overwrite them.
+--
+-- Safety: this must NEVER cause a real signup to fail or roll back, no
+-- matter what goes wrong with the notification itself (Vault not
+-- configured yet, pg_net not enabled, the Edge Function down, a bad
+-- network hiccup). The function body is wrapped in EXCEPTION WHEN OTHERS,
+-- matching backend/notifications/notify.js's own "notifications are
+-- best-effort, the core action must never depend on them" principle. If
+-- the two vault secrets simply haven't been created yet (fresh install,
+-- or this feature deliberately left unconfigured), this is a silent,
+-- expected no-op — not a warning logged on every single signup forever.
+--
+-- Safe to re-run: `create extension if not exists`, `create or replace
+-- function`, and the drop-then-create trigger pattern are all the same
+-- idempotency style already used throughout this file.
+-- -----------------------------------------------------------------------------
+
+-- pg_net gives Postgres itself the ability to make an outbound HTTP call
+-- (net.http_post below) — a standard Supabase extension, already used
+-- internally by the platform's own Database Webhooks feature. If this
+-- statement fails with a permissions error, enable it instead via
+-- Dashboard -> Database -> Extensions -> search "pg_net" -> Enable, then
+-- re-run this file.
+create extension if not exists pg_net;
+
+create or replace function public.notify_admin_of_new_signup()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+declare
+  webhook_url    text;
+  webhook_secret text;
+begin
+  select decrypted_secret into webhook_url
+    from vault.decrypted_secrets where name = 'admin_signup_webhook_url';
+  select decrypted_secret into webhook_secret
+    from vault.decrypted_secrets where name = 'admin_signup_webhook_secret';
+
+  if webhook_url is null or webhook_secret is null then
+    return new;
+  end if;
+
+  perform net.http_post(
+    url := webhook_url,
+    headers := jsonb_build_object(
+      'Content-Type', 'application/json',
+      'X-Signup-Webhook-Secret', webhook_secret
+    ),
+    body := jsonb_build_object(
+      'type', 'INSERT',
+      'table', 'users',
+      'record', jsonb_build_object(
+        'id', new.id,
+        'email', new.email,
+        'created_at', new.created_at
+      )
+    )
+  );
+
+  return new;
+exception when others then
+  raise warning 'notify_admin_of_new_signup failed (signup itself was not affected): %', sqlerrm;
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created_notify_admin on auth.users;
+create trigger on_auth_user_created_notify_admin
+  after insert on auth.users
+  for each row execute function public.notify_admin_of_new_signup();
+
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to
 -- get your Project URL / anon key into frontend/supabaseConfig.js, and your
@@ -632,4 +733,8 @@ create policy "Admins can view admin_actions"
 -- Function deployed and its own SUPABASE_SERVICE_ROLE_KEY secret set in
 -- Supabase (separate from the GitHub Actions secret of the same name) —
 -- see ADMIN_SETUP.md, including how to promote your own account to admin.
+-- Phase 51 (new-signup admin notification) additionally needs the
+-- notify-admin-signup Edge Function deployed, its own Supabase secrets set,
+-- and two vault.create_secret(...) calls run by hand in the SQL Editor —
+-- see ADMIN_SETUP.md Step 5.
 -- =============================================================================
