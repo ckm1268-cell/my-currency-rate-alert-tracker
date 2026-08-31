@@ -59,16 +59,28 @@ Phase 45 block near the end. It creates:
 
 ## Step 2 — deploy the Edge Function
 
-You'll need the [Supabase CLI](https://supabase.com/docs/guides/cli) (`npm
-install -g supabase`, or see that page for other install methods) and to be
-logged in (`supabase login`).
+You'll need the [Supabase CLI](https://supabase.com/docs/guides/local-development/cli/getting-started).
+**Don't use `npm install -g supabase`** — Supabase's own npm package refuses
+a global install and errors out (this is the most common cause of a
+`'supabase' is not recognized as the name of a cmdlet...` error in
+PowerShell). Use `npx` instead, which needs no separate install step at all
+— every command below is written that way. (If you'd rather have a real
+`supabase` command on your PATH, `scoop install supabase` is the supported
+way to do that on Windows — see the docs link above — but it's optional;
+`npx` works fine without it.)
 
-From the repo root:
+From the repo root, log in once (opens a browser to authorize):
+
+```bash
+npx -y supabase@latest login
+```
+
+Then:
 
 ```bash
 # Link this local checkout to your Supabase project (one-time; find your
 # project ref in the Supabase Dashboard's Project Settings > General page)
-supabase link --project-ref YOUR-PROJECT-REF
+npx -y supabase@latest link --project-ref YOUR-PROJECT-REF
 
 # Set the two secrets the function needs. SUPABASE_URL is provided
 # automatically by the Edge Functions runtime for every project — you only
@@ -76,12 +88,18 @@ supabase link --project-ref YOUR-PROJECT-REF
 # not SUPABASE_SERVICE_ROLE_KEY — the CLI rejects any custom secret name
 # starting with SUPABASE_, since that whole prefix is reserved for the
 # platform's own auto-injected values:
-supabase secrets set SERVICE_ROLE_KEY=your-secret-api-key
-supabase secrets set ALLOWED_ORIGIN=https://your-username.github.io
+npx -y supabase@latest secrets set SERVICE_ROLE_KEY=your-secret-api-key
+npx -y supabase@latest secrets set ALLOWED_ORIGIN=https://your-username.github.io
 
 # Deploy
-supabase functions deploy admin-users
+npx -y supabase@latest functions deploy admin-users
 ```
+
+(`npx -y supabase@latest ...` downloads and runs the CLI fresh each time
+rather than requiring any install step — the first run of each session is a
+few seconds slower than a truly-installed `supabase` command, that's the
+only difference. Every `supabase ...` command anywhere else in this project's
+docs can be run the same way, with `npx -y supabase@latest` in front.)
 
 `SERVICE_ROLE_KEY` should be your project's current `sb_secret_...` key from
 Project Settings → API Keys → "Publishable and secret API keys" tab (click
@@ -163,7 +181,7 @@ per-user, chat ID storage).
 # (via pg_net), which has no Supabase user session/JWT to present. Without
 # this flag, Supabase's platform-level auth check rejects the call before
 # this function's own code (the X-Signup-Webhook-Secret check) ever runs.
-supabase functions deploy notify-admin-signup --no-verify-jwt
+npx -y supabase@latest functions deploy notify-admin-signup --no-verify-jwt
 ```
 
 ### 5b — set its secrets
@@ -173,13 +191,13 @@ supabase functions deploy notify-admin-signup --no-verify-jwt
 # is NOT your Supabase service-role key. It only proves the call genuinely
 # came from this project's own database trigger, not a stranger who found
 # the function's URL. You'll reuse this same value again in Step 5c below.
-supabase secrets set SIGNUP_WEBHOOK_SECRET=your-random-secret-here
+npx -y supabase@latest secrets set SIGNUP_WEBHOOK_SECRET=your-random-secret-here
 
 # Where the notification goes. Set either or both — whichever you don't set
 # is simply skipped (reported as "skipped, not attempted" in the function's
 # logs), it never causes an error.
-supabase secrets set ADMIN_NOTIFY_EMAIL=you@example.com
-supabase secrets set ADMIN_NOTIFY_TELEGRAM_CHAT_ID=your-telegram-chat-id
+npx -y supabase@latest secrets set ADMIN_NOTIFY_EMAIL=you@example.com
+npx -y supabase@latest secrets set ADMIN_NOTIFY_TELEGRAM_CHAT_ID=your-telegram-chat-id
 
 # Same Resend/Telegram credentials the scheduler already uses — but Edge
 # Functions run on Supabase's own infrastructure, completely separate from
@@ -187,8 +205,8 @@ supabase secrets set ADMIN_NOTIFY_TELEGRAM_CHAT_ID=your-telegram-chat-id
 # have to be set again, here, as their own Supabase secrets, even though
 # the values are identical to what's already in your GitHub Actions repo
 # secrets. See NOTIFICATIONS_SETUP.md if you haven't set these up at all.
-supabase secrets set RESEND_API_KEY=your-resend-api-key
-supabase secrets set TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+npx -y supabase@latest secrets set RESEND_API_KEY=your-resend-api-key
+npx -y supabase@latest secrets set TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 ```
 
 ### 5c — connect the database trigger to the function
@@ -231,7 +249,7 @@ GitHub Actions scheduler at all. If nothing arrives, see Troubleshooting
 below.
 
 To change the admin contact or rotate the webhook secret later, re-run the
-relevant `supabase secrets set ...` command from 5b (and, if you rotate the
+relevant `npx -y supabase@latest secrets set ...` command from 5b (and, if you rotate the
 webhook secret, re-run the matching `vault.create_secret` — actually
 `select vault.update_secret((select id from vault.secrets where name =
 'admin_signup_webhook_secret'), 'the-new-secret-value');` — the two must
@@ -273,7 +291,7 @@ re-deploy the secret + function.
 
 **"Server misconfigured — missing Supabase secrets."** This means
 `SUPABASE_URL` or `SERVICE_ROLE_KEY` weren't available at runtime. Check
-`supabase secrets list` against the project ref you linked in Step 2 — if
+`npx -y supabase@latest secrets list` against the project ref you linked in Step 2 — if
 `SERVICE_ROLE_KEY` isn't listed, the `supabase secrets set SERVICE_ROLE_KEY=...`
 command in Step 2 either wasn't run or was run against a different linked
 project than the one `admin.html` is pointed at
@@ -294,6 +312,15 @@ project than the one `admin.html` is pointed at
 4. A `401` in the function's own logs means the `SIGNUP_WEBHOOK_SECRET`
    secret (5b) and the `admin_signup_webhook_secret` Vault value (5c) don't
    match exactly — they must be the identical string.
+
+**`supabase : The term 'supabase' is not recognized as the name of a
+cmdlet...`** The CLI isn't (successfully) installed as a global command on
+this machine — very common on Windows, and the reason every command in
+Steps 2 and 5 above is written as `npx -y supabase@latest ...` rather than
+bare `supabase ...`. Just add that same `npx -y supabase@latest` prefix to
+whichever command failed and re-run it — no install step needed. (The very
+first `npx` run of a session takes a few extra seconds while it fetches the
+package; that's expected, not a hang.)
 
 ## Security notes
 
