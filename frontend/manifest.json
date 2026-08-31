@@ -1,7 +1,7 @@
 {
   "name": "MY Currency Rate Tracker",
   "short_name": "MY Rate Tracker",
-  "description": "Track live currency exchange rates across Malaysian money changers and get alerted the moment your target rate is reached.",
+  "description": "Track live currency exchange rates across Malaysian money changers (My Money Master, Taj Muhabath, Jalinan Duta, Merchantrade Asia) and get alerted by email, Telegram, or push notification the moment your target rate is reached. Rates are read directly from each source's live site, not cached or estimated.",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",
@@ -49,6 +49,16 @@
       "name": "Build a new alert",
       "url": ".#formHeading",
       "description": "Jump straight to the alert form"
+    }
+  ],
+  "version": "2.0.0",
+  "screenshots": [
+    {
+      "src": "assets/screenshots/wide-1.jpg",
+      "sizes": "1568x773",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "MY Currency Rate Tracker — build an alert and view live rate comparisons on desktop"
     }
   ]
 }
