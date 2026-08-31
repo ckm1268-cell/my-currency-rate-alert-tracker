@@ -59,6 +59,22 @@
       "type": "image/jpeg",
       "form_factor": "wide",
       "label": "MY Currency Rate Tracker — build an alert and view live rate comparisons on desktop"
+    },
+    {
+      "src": "assets/screenshots/narrow-ios.jpg",
+      "sizes": "499x1080",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "platform": "ios",
+      "label": "MY Currency Rate Tracker on iPhone — build an alert and sign in to save it"
+    },
+    {
+      "src": "assets/screenshots/narrow-android.jpg",
+      "sizes": "1080x2340",
+      "type": "image/jpeg",
+      "form_factor": "narrow",
+      "platform": "android",
+      "label": "MY Currency Rate Tracker on Android — build an alert and sign in to save it"
     }
   ]
 }
