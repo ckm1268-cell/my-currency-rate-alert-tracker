@@ -50,16 +50,25 @@ Supabase's email auth is on by default, but double-check:
    Either setting works with the app as built — `frontend/auth.js` handles
    both cases (it shows "check your inbox" only when Supabase says
    confirmation is required).
-3. **Authentication** → **URL Configuration** → set **Site URL** to your
-   deployed GitHub Pages URL, e.g.
-   `https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/`
+3. **Authentication** → **URL Configuration** → set **Site URL** to the app's
+   custom domain (added 31-Aug-2026 to hide the raw GitHub Pages URL from
+   users):
+   `https://app.mycurrencyalerts.abrdns.com/`
    This is where Supabase redirects a user back to after they click a
    confirmation or password-reset link in their email — if this is wrong,
    that link will silently send them to the wrong page (or Supabase's own
    default page).
-4. On the same **URL Configuration** page, add the same URL under **Redirect
-   URLs** as well (some Supabase project defaults require the exact URL to
-   also be allow-listed there, not just set as the Site URL).
+4. On the same **URL Configuration** page, add BOTH of the following under
+   **Redirect URLs** (some Supabase project defaults require the exact URL to
+   also be allow-listed there, not just set as the Site URL — and the app's
+   own `frontend/auth.js` computes its redirect dynamically from whichever
+   origin the user is actually on, so both need to be allow-listed for sign-in
+   to work correctly no matter which URL a user opens the app from):
+   - `https://app.mycurrencyalerts.abrdns.com/`
+   - `https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/`
+   **This is a Supabase Dashboard setting, not something in this repo — it
+   must be updated by hand in the Supabase project itself, and code changes
+   alone cannot fix it.**
 
 You don't need to touch the email templates for this to work — Supabase's
 default confirmation and password-reset emails are fine to start with.

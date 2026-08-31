@@ -6,7 +6,8 @@ timestamp, whether the live rate at a chosen money changer has reached your
 target *right now*, and alerts you the moment it does. Installs as a free
 mobile app (PWA) on Android and iOS in addition to the browser dashboard.
 
-**Live:** https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/
+**Live:** https://app.mycurrencyalerts.abrdns.com/
+(also reachable at the original https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/ — GitHub Pages serves both, but the custom domain is what's shared with users.)
 
 See `CHANGELOG.md` for the full v2.0.0 feature list and the project's
 build history.

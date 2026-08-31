@@ -87,11 +87,13 @@ Project Settings → API Keys → "Publishable and secret API keys" tab (click
 the eye icon to reveal it) — this is the modern replacement for the legacy
 JWT-based `service_role` key, and it's the same value you should also be
 using for the `SUPABASE_SERVICE_ROLE_KEY` GitHub Actions secret that the
-scheduler uses. `ALLOWED_ORIGIN` should be your actual deployed GitHub Pages
+scheduler uses. `ALLOWED_ORIGIN` should be your actual deployed app
 origin (no trailing path) — this restricts which website is allowed to call
-the function via CORS; it defaults to `https://ckm1268-cell.github.io` if
-you don't set it, which is only correct if you haven't forked/renamed this
-repo.
+the function via CORS; it defaults to `https://app.mycurrencyalerts.abrdns.com`
+(this project's custom domain, added 31-Aug-2026) if you don't set it, which is
+only correct if you haven't forked/renamed this repo. If you ever open the Admin
+Module from the original `https://ckm1268-cell.github.io` URL instead, set this
+secret to that origin or the Edge Function call will be blocked by CORS.
 
 **Never** put either of these values in any file under `frontend/`, and
 never commit them to the repo — `SERVICE_ROLE_KEY` only ever lives as a

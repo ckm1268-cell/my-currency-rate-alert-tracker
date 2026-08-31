@@ -66,8 +66,16 @@ const { sendWebPush } = require('./webpush');
  * variable (added to .env.example) for whoever forks/redeploys this repo
  * under a different URL, rather than a second hardcoded value to keep in
  * sync by hand.
+ *
+ * Updated 31-Aug-2026: default switched from the raw GitHub Pages URL
+ * (https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/) to the
+ * custom domain (https://app.mycurrencyalerts.abrdns.com/), added so users
+ * never need to see the github.io address. The custom domain serves at
+ * its OWN root, not the old repo subpath, so no trailing path segment.
+ * The github.io URL still works (GitHub serves both), but every outbound
+ * link this app generates should point users at the custom domain.
  */
-const APP_URL = process.env.APP_URL || 'https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/';
+const APP_URL = process.env.APP_URL || 'https://app.mycurrencyalerts.abrdns.com/';
 
 /**
  * Phase 49 (29-Aug-2026): formatMalaysiaTime() used to be defined right

@@ -41,7 +41,7 @@ for now.
 ## Installing it — Android
 
 1. Open the live site in Chrome (or Edge/Samsung Internet):
-   `https://ckm1268-cell.github.io/my-currency-rate-alert-tracker/`
+   `https://app.mycurrencyalerts.abrdns.com/`
 2. Either tap the **"📲 Install App"** button that now appears in the top
    bar, or use the browser's own menu → **Add to Home screen** / **Install app**.
 3. Confirm. The app icon appears on the home screen and opens full-screen,
