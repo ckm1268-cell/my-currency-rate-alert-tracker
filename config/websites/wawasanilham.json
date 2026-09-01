@@ -1,0 +1,96 @@
+{
+  "id": "wawasanilham",
+  "displayName": "Wawasan Ilham",
+  "officialUrl": "https://www.wawasanilham.com/home",
+  "liveRateUrl": "https://www.wawasanilham.com/home",
+  "notes": "Investigated 24-Aug-2026 (see NEW_SOURCES_INVESTIGATION.md) as a real, first-party candidate — a genuine dynamic, branch-selectable 'Rateboard' widget, the same category of legitimate source as Taj Muhabath's branch-select pattern. Originally NOT built: the only tooling available in that session was a markdown-converting fetch, which strips every HTML attribute, leaving no <select> id/name and no table id/class to target — writing selectors against zero real attributes would have been pure guessing, exactly the kind of 'silently substitute and hope' behavior this project's Core Principle exists to prevent. RESOLVED 01-Sep-2026: the project owner captured the real DOM, real Network-tab requests/responses, and the real client-side JS (frontend main.js excerpt) directly from their own browser session across several rounds of back-and-forth, which is what this file and wawasanilham.adapter.js are built from. Nothing in this file is guessed.",
+  "verificationLimitation": "None of the usual caveats apply here — this is the best-verified new source added to this project since Jalinan Duta, and arguably better-verified than Jalinan Duta was at launch. Confirmed directly, live, in the same session: (1) the real <select id=\"branch_id\"> and its 5 real <option value=\"...\"> branch IDs, (2) the real AJAX endpoint the page's own JS calls (site/getRateHistory/{branch_id}), read straight from the page's own <script> block, (3) the real JSON response shape ({table, mobile, currency}), (4) a full real 'table' HTML fragment for a live branch (Seri Kembangan, branch_id=6) with real buy/sell values for 23 currencies, and (5) the real currency dropdown's name-to-ISO-code mapping ('CHINESE RENMINBI - CNY', etc.), used below to match a currency-name cell to an ISO code since the rate table itself has no ISO-code column. A separate per-currency endpoint (site/getCurrencyDetails/{branch_id}/{cur_id}) was also investigated at length and confirmed to be UNRELATED to this table — it only powers the page's own 'I Have/I Want' currency-converter widget, is not used by this adapter, and its intermittent 500 errors (an ArgumentCountError in the site's own PHP, confirmed via the site's own error page) are the site's bug, not something this adapter needs to work around.",
+  "requiresBrowserAutomation": false,
+  "requiresBrowserAutomationReason": "The real rate data is served directly as JSON by a plain POST to site/getRateHistory/{branch_id} — confirmed live by capturing that exact request/response in the project owner's own browser. No client-side JS execution is needed to obtain the numbers themselves; this adapter POSTs to the same endpoint the page's own script (site's home page inline JS) calls, with the same headers a real page load would send (Referer, Origin, X-Requested-With), and parses the 'table' field of the JSON response with cheerio. This mirrors the page's own documented behavior rather than reverse-engineering or bypassing anything — no authentication token is involved, only the ordinary session cookie the site issues to any client automatically.",
+  "playwrightFallback": true,
+  "playwrightFallbackReason": "Defensive fallback matching every other adapter in this project: if the plain POST path is ever blocked (e.g. the site adds a stricter session/CSRF requirement later), this fallback drives a real headless browser to the real page, selects the branch via the confirmed #branch_id selector, and reads the resulting rendered #rateHistoryTable instead — same target data, rendered path instead of direct-API path.",
+  "extractionMethod": "HTTP_FETCH_JSON_TABLE_PARSE",
+  "branchSupport": true,
+  "branchNotes": "5 real branches, confirmed live 01-Sep-2026 from <select id=\"branch_id\">'s actual <option> elements (see verificationLimitation). IMPORTANT: branch_id values are NOT sequential/guessable from display order — an earlier assumption in this session that Chowkit=6 (based on a stale/coincidental network request) was caught and corrected before shipping; always trust this table, not the order branches appear in the UI.",
+  "branches": [
+    { "id": "1", "name": "NSK Trade City, Kuchai Lama" },
+    { "id": "5", "name": "Chowkit" },
+    { "id": "6", "name": "Seri Kembangan" },
+    { "id": "10", "name": "Bandar Puteri" },
+    { "id": "11", "name": "Melawati Mall" }
+  ],
+  "defaultBranch": "1",
+  "endpoint": {
+    "method": "POST",
+    "url": "https://www.wawasanilham.com/site/getRateHistory/{branchId}",
+    "description": "Confirmed live 01-Sep-2026 by reading the page's own inline <script>: on page load, and again every 100 seconds (setInterval(...,100000) — the SITE'S OWN chosen polling cadence, a useful signal for what this project's own interval should not undercut), the page itself POSTs to this exact URL with the currently-selected branch_id and gets back JSON. This adapter replicates that same call directly rather than driving a browser, since no rendering step is actually needed to obtain it.",
+    "requestBody": "Empty/near-empty form body ($('#formData').serialize() on the real page, which is an empty form) — this adapter sends an empty body to match.",
+    "responseShape": "{ table: '<tr>...</tr>...' (desktop HTML fragment, one row per currency), mobile: '...' (mobile HTML fragment, not used), currency: '<select>...</select>' (the unrelated 'I Have/I Want' converter dropdown, not used) }. Confirmed live for branch_id=6 (Seri Kembangan) with real rows for 23 currencies — see currencyDisplayNames below for the exact set."
+  },
+  "primarySelector": {
+    "description": "The 'table' field of the JSON response above is an HTML fragment of <tr> rows with NO header row (confirmed live — every row is a data row), so columns are matched by fixed position rather than by header text (unlike Jalinan Duta's header-driven discovery, which was needed there specifically because that site's header row WAS confirmed available). Fixed column order, confirmed from a real captured row: [0] currency name (inside a nested <span class=\"currency-txt\">, e.g. 'Chinese Renminbi' — NOT an ISO code), [1] unit, [2] We Buy, [3] We Sell, [4] last-updated time (site-local, no date — see sourceTimestamp handling below).",
+    "rowSelector": "tr (every row in the 'table' JSON field)",
+    "nameCellSelector": "td:nth-of-type(1) span.currency-txt (fallback: td:nth-of-type(1) full text if the span is ever restructured)",
+    "unitCellIndex": 1,
+    "buyCellIndex": 2,
+    "sellCellIndex": 3,
+    "updatedCellIndex": 4,
+    "currencyMatchStrategy": "The rate table has NO ISO-code column at all — matching is done by currency NAME instead, against currencyDisplayNames below (built from the site's own currency-converter <select>, which DOES pair each name with its ISO code, e.g. option text 'CHINESE RENMINBI - CNY'). Confirmed identical naming between the two widgets for every currency checked (e.g. table cell 'Chinese Renminbi' vs dropdown 'CHINESE RENMINBI - CNY' — same name, different case only).",
+    "sampleObservedRow": "Chinese Renminbi | 100 | 59.150 | 61.950 | 12:47 PM  (branch_id=6, Seri Kembangan, observed 01-Sep-2026)"
+  },
+  "currencyDisplayNames": {
+    "US DOLLAR": "USD",
+    "USD (1$,2$,5$,10$ & 20$)": "USS",
+    "STERLING POUND": "GBP",
+    "SINGAPORE DOLLAR": "SGD",
+    "AUSTRALIAN DOLLAR": "AUD",
+    "EURO": "EUR",
+    "HONG KONG DOLLAR": "HKD",
+    "CHINESE RENMINBI": "CNY",
+    "THAI BHAT": "THB",
+    "SAUDI RIYAL": "SAR",
+    "INDONESIAN RUPIAH": "IDR",
+    "BRUNEI DOLLAR": "BND",
+    "SWISS FRANC": "CHF",
+    "CANADIAN DOLLAR": "CAD",
+    "INDIAN RUPEE": "INR",
+    "JAPANESE YEN": "JPY",
+    "NEW ZEALAND DOLLAR": "NZD",
+    "SOUTH KOREAN WON": "KRW",
+    "VIETNAMESE DONG": "VND",
+    "NEW TAIWAN DOLLAR": "TWD",
+    "UAE DIRHAM": "AED",
+    "PHILIPPINE PESO": "PHP",
+    "TURKISH LIRA": "TRY",
+    "_note": "Keys are uppercased currency-table names; matching is case-insensitive on the table's own text. Confirmed live 01-Sep-2026 from the site's own currency-converter <select> (each <option> is 'NAME - CODE'), cross-checked against the same names appearing in a real captured 'table' HTML fragment for branch_id=6. All 12 of this project's own supported currencies (see frontend/currencySupport.js) are present in Wawasan Ilham's own list."
+  },
+  "waitStrategy": {
+    "httpFetch": "none required — this is a direct JSON API POST, not a page render",
+    "playwrightFallback": "navigate to liveRateUrl, wait for #branch_id to be attached, call page.selectOption('#branch_id', { value: branchId }) which fires the page's own onchange (getRateHistory), then wait for #rateHistoryTable tr to be populated before reading page.content()"
+  },
+  "validation": {
+    "expectedRange": {
+      "CNY": { "min": 40, "max": 80 },
+      "USD": { "min": 3, "max": 5.5 },
+      "SGD": { "min": 2.5, "max": 3.6 },
+      "THB": { "min": 8, "max": 16 },
+      "JPY": { "min": 15, "max": 35 },
+      "KRW": { "min": 2, "max": 4 },
+      "HKD": { "min": 40, "max": 60 },
+      "EUR": { "min": 3.5, "max": 5.5 },
+      "GBP": { "min": 4, "max": 7 },
+      "AUD": { "min": 2, "max": 4 },
+      "VND": { "min": 100, "max": 250 },
+      "TWD": { "min": 8, "max": 20 }
+    },
+    "notes": "Same 12-currency bound set already established in config/websites/jalinanduta.json, reused here because Wawasan Ilham's own real observed values (Seri Kembangan, branch_id=6, 01-Sep-2026: CNY 59.15/61.95, USD 3.950/4.075, HKD 50.35/52.95 (unit 100), THB 12.22/12.83 (unit 100), JPY 24.30/26.95 (unit 1000), KRW 2.75/3.05 (unit 1000), VND 152.00/179.00 (unit 1,000,000), TWD 12.22/12.89 (unit 100), SGD 3.11/3.23, AUD 2.82/2.96, EUR 4.62/4.75, GBP 5.42/5.54) fall comfortably inside every one of these ranges with no adjustment needed."
+    ,
+    "unitConvention": "Confirmed 01-Sep-2026 directly from a real captured row set (branch_id=6): CNY/HKD/THB/TWD per 100, JPY/KRW per 1000, VND per 1,000,000, everything else per 1 — matches frontend/currencySupport.js's base convention exactly, same as Jalinan Duta and Merchantrade Asia. No rescaling needed."
+  },
+  "compliance": {
+    "robotsTxt": "Not yet checked against a live robots.txt fetch (this sandbox cannot reach wawasanilham.com — see repo-wide network restriction note in other configs). Should be checked by the project owner the same way Jalinan Duta's was (PowerShell Invoke-WebRequest) before this is wired into scheduled/production polling, per this project's Compliance section 26.",
+    "termsOfUseUrl": "Not located/checked.",
+    "actionRequired": "NOT YET wired into production (backend/scheduler/run.js's ADAPTERS map, frontend/app.js's SOURCES/REAL_ADAPTER_SUPPORT, frontend/index.html's money-changer checkboxes, or either GitHub Actions workflow) — deliberately, matching this project's own pattern for Jalinan Duta at the equivalent stage. Before wiring in: (1) check robots.txt per above, (2) run `node backend/scripts/checkRate.js wawasanilham CNY --branch=6` (or whichever branch) for real, confirm status LIVE / validationStatus PASSED, and (3) independently cross-check that value against wawasanilham.com open live in a browser at the same moment — the same 2-step bar every other real source here was held to before going live."
+  },
+  "lastVerified": "2026-09-01 — endpoint, JSON shape, branch IDs, and one full live sample row set (branch_id=6) all confirmed directly from the project owner's own browser session in this conversation. Not yet run end-to-end through backend/scripts/checkRate.js from a machine with real network access — see compliance.actionRequired."
+}

@@ -48,6 +48,12 @@ const ADAPTERS = {
   // anything scheduled — registering it here is that verification step,
   // not a decision to start polling it automatically.
   jalinanduta: () => require('../scrapers/jalinanduta.adapter'),
+  // 01-Sep-2026 — same precedent as jalinanduta above: wawasanilham is
+  // registered here ONLY, not yet in backend/scheduler/run.js's ADAPTERS
+  // map, frontend/app.js's SOURCES, or any GitHub Actions workflow. See
+  // config/websites/wawasanilham.json's compliance.actionRequired for
+  // exactly what a passing run here should look like before that changes.
+  wawasanilham: () => require('../scrapers/wawasanilham.adapter'),
 };
 
 const DATA_FILE = path.join(__dirname, '..', '..', 'frontend', 'data', 'latest-rates.json');

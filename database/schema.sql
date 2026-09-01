@@ -730,9 +730,12 @@ create trigger on_auth_user_created_notify_admin
 -- VAPID_PRIVATE_KEY as GitHub Actions secrets (plus the public key in
 -- frontend/pushConfig.js) — see PUSH_SETUP.md.
 -- Phase 45 (Admin Module, v3) additionally needs the admin-users Edge
--- Function deployed and its own SUPABASE_SERVICE_ROLE_KEY secret set in
--- Supabase (separate from the GitHub Actions secret of the same name) —
--- see ADMIN_SETUP.md, including how to promote your own account to admin.
+-- Function deployed and its own SERVICE_ROLE_KEY secret set in Supabase
+-- (note: SERVICE_ROLE_KEY, NOT SUPABASE_SERVICE_ROLE_KEY — the Supabase
+-- CLI rejects any custom secret name starting with the reserved
+-- SUPABASE_ prefix; see supabase/functions/admin-users/index.ts's header
+-- comment) — see ADMIN_SETUP.md, including how to promote your own
+-- account to admin.
 -- Phase 51 (new-signup admin notification) additionally needs the
 -- notify-admin-signup Edge Function deployed, its own Supabase secrets set,
 -- and two vault.create_secret(...) calls run by hand in the SQL Editor —
