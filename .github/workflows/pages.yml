@@ -53,7 +53,7 @@ jobs:
         working-directory: backend
         run: npm install
 
-      - name: Install Playwright Chromium (fallback path for My Money Master, primary path for Taj Muhabath and Merchantrade Asia)
+      - name: Install Playwright Chromium (fallback path for My Money Master, Wawasan Ilham, and Merchantrade Asia; primary path for Taj Muhabath)
         working-directory: backend
         run: npx playwright install --with-deps chromium
 
@@ -73,8 +73,16 @@ jobs:
         continue-on-error: true
 
       - name: Check Merchantrade Asia CNY rate
+        # Phase 55 (02-Sep-2026): a real "Select Branch" control was found
+        # live on this site, genuinely changing the Counter Exchange Rates
+        # table (see config/websites/merchantradeasia.json's branchNotes).
+        # Deliberately checks a NON-default branch here ("The Gardens Mall
+        # KL", not "Pavilion KL") — same reasoning Taj Muhabath's own check
+        # above already uses: proves the branch argument actually reaches
+        # the adapter and changes the result, not just that the default
+        # happens to work.
         working-directory: backend
-        run: node scripts/checkRate.js merchantradeasia CNY
+        run: node scripts/checkRate.js merchantradeasia CNY "The Gardens Mall KL"
         continue-on-error: true
 
       - name: Check Jalinan Duta CNY rate

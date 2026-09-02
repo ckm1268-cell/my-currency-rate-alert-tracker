@@ -266,3 +266,148 @@ test('config.currencyDisplayNames.SGD ("SINGAPORE BIG") is a targeted match: it 
   assert.ok(bigRowText.toLowerCase().includes(needle), 'expected SGD config value to match the BIG row');
   assert.ok(!smallRowText.toLowerCase().includes(needle), 'SGD config value must NOT also match the SMALL row');
 });
+
+/**
+ * Phase 55 (02-Sep-2026) — branch selection added. This page was found,
+ * during a live connected-browser session, to now have a real "Select
+ * Branch" control whose value genuinely changes the Counter Exchange
+ * Rates table's numbers — see config/websites/merchantradeasia.json's
+ * Phase 55 notes for the full evidence. The adapter's PRIMARY path
+ * switched from Playwright DOM-scraping to a direct GET against this
+ * page's own confirmed JSON endpoint (config.endpoint) — see the
+ * adapter's own header comment for why this mirrors
+ * wawasanilham.adapter.js's precedent rather than tajmuhabath.adapter.js's
+ * (that endpoint requires an auth token this project deliberately does
+ * not attempt to replicate; this one does not).
+ *
+ * These tests exercise parseJsonRates() (the new primary path's pure
+ * parsing function) against two real, live-captured JSON fixtures — one
+ * per branch, captured moments apart in the same session — plus
+ * resolveBranch(). parseHtml() (the DOM path, now the Playwright
+ * fallback's own parser) is unchanged and already covered by every test
+ * above this point.
+ */
+
+const { parseJsonRates, resolveBranch } = require('../backend/scrapers/merchantradeasia.adapter');
+
+const PAVILION_KL_FIXTURE_PATH = path.join(
+  __dirname,
+  'fixtures',
+  'merchantradeasia.branch.pavilionkl.sample.json'
+);
+const GARDENS_MALL_FIXTURE_PATH = path.join(
+  __dirname,
+  'fixtures',
+  'merchantradeasia.branch.gardensmall.sample.json'
+);
+const pavilionKlJson = JSON.parse(fs.readFileSync(PAVILION_KL_FIXTURE_PATH, 'utf8'));
+const gardensMallJson = JSON.parse(fs.readFileSync(GARDENS_MALL_FIXTURE_PATH, 'utf8'));
+
+test('resolveBranch resolves a real branch code from config.branches', () => {
+  const branch = resolveBranch('MY0100083');
+  assert.ok(branch, 'expected MY0100083 to resolve');
+  assert.equal(branch.name, 'Pavilion KL');
+});
+
+test('resolveBranch resolves by display name too, case-insensitively', () => {
+  const branch = resolveBranch('the gardens mall kl');
+  assert.ok(branch, 'expected a case-insensitive name match to resolve');
+  assert.equal(branch.id, 'MY0100141');
+});
+
+test('resolveBranch falls back to config.defaultBranch (Pavilion KL) when no branch is requested', () => {
+  const branch = resolveBranch();
+  assert.ok(branch);
+  assert.equal(branch.id, config.defaultBranch);
+  assert.equal(branch.id, 'MY0100083');
+});
+
+test('resolveBranch returns null for an unrecognized branch rather than guessing', () => {
+  assert.equal(resolveBranch('Not A Real Branch'), null);
+});
+
+test('parseJsonRates extracts the real captured CNY row from the Pavilion KL fixture', () => {
+  const result = parseJsonRates(pavilionKlJson, 'CNY');
+  assert.ok(result, 'expected a parsed result for CNY, got null');
+  assert.equal(result.buyRate, 59.1599);
+  assert.equal(result.sellRate, 61.6);
+});
+
+test('parseJsonRates produces a genuinely different CNY reading for a different branch, from real data', () => {
+  // Both fixtures were captured live, moments apart, in the same session —
+  // proving branch selection actually changes the number, not just that
+  // two different fixture files exist.
+  const pavilion = parseJsonRates(pavilionKlJson, 'CNY');
+  const gardens = parseJsonRates(gardensMallJson, 'CNY');
+  assert.equal(pavilion.buyRate, 59.1599);
+  assert.equal(pavilion.sellRate, 61.6);
+  assert.equal(gardens.buyRate, 60.35);
+  assert.equal(gardens.sellRate, 60.55);
+  assert.notEqual(pavilion.buyRate, gardens.buyRate);
+  assert.notEqual(pavilion.sellRate, gardens.sellRate);
+});
+
+test('parseJsonRates applies the same JPY unit-scale conversion (x10) as parseHtml does', () => {
+  const result = parseJsonRates(pavilionKlJson, 'JPY');
+  assert.ok(result, 'expected a parsed result for JPY, got null');
+  // Raw endpoint value * unit = 0.024179 * 100 = 2.4179, then x10 per
+  // config.unitScaleMultiplier.JPY — same conversion parseHtml() applies,
+  // same real live value observed on-page (see config/websites/
+  // merchantradeasia.json's Phase 55 notes).
+  assert.equal(result.buyRate, 24.179);
+  assert.equal(result.sellRate, 26.4);
+});
+
+test('parseJsonRates matches ONLY the USD BIG row, never USD MEDIUM or USD SMALL, even though all three rows contain "USD"', () => {
+  const result = parseJsonRates(pavilionKlJson, 'USD');
+  assert.ok(result, 'expected a parsed result for USD, got null');
+  assert.equal(result.buyRate, 3.9289);
+  assert.equal(result.sellRate, 4.143);
+});
+
+test('parseJsonRates matches ONLY the SGD BIG row, never SGD SMALL', () => {
+  const result = parseJsonRates(pavilionKlJson, 'SGD');
+  assert.ok(result, 'expected a parsed result for SGD, got null');
+  assert.equal(result.buyRate, 3.0689);
+  assert.equal(result.sellRate, 3.283);
+});
+
+test('parseJsonRates extracts VND (quoted per 1,000,000 units) correctly', () => {
+  const result = parseJsonRates(pavilionKlJson, 'VND');
+  assert.ok(result, 'expected a parsed result for VND, got null');
+  assert.equal(result.buyRate, 148);
+  assert.equal(result.sellRate, 168.5);
+});
+
+test('parseJsonRates returns null for a currency with a configured display name but no matching row in the fixture', () => {
+  // Neither fixture includes a KRW row.
+  const result = parseJsonRates(pavilionKlJson, 'KRW');
+  assert.equal(result, null);
+});
+
+test('parseJsonRates throws a clear error for a currency with no currencyDisplayNames config entry', () => {
+  assert.throws(() => parseJsonRates(pavilionKlJson, 'ZZZ'), /No currencyDisplayNames entry/);
+});
+
+test('parseJsonRates returns null for a malformed response missing a data array', () => {
+  assert.equal(parseJsonRates({}, 'CNY'), null);
+  assert.equal(parseJsonRates(null, 'CNY'), null);
+});
+
+test('the extracted CNY reading (Pavilion KL) passes validateRate() against the configured expected range', () => {
+  const result = parseJsonRates(pavilionKlJson, 'CNY');
+  const validation = validateRate({
+    currency: 'CNY',
+    buyRate: result.buyRate,
+    sellRate: result.sellRate,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: config.validation.expectedRange.CNY,
+  });
+  assert.equal(validation.passed, true, `expected validation to pass, reasons: ${validation.reasons.join('; ')}`);
+});
+
+test('config.branchSupport is true and config.branches lists all 14 real branch codes', () => {
+  assert.equal(config.branchSupport, true);
+  assert.equal(config.branches.length, 14);
+  assert.ok(config.branches.every((b) => typeof b.id === 'string' && typeof b.name === 'string'));
+});

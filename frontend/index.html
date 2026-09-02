@@ -82,9 +82,14 @@
            choosing is never separated from the money changer it belongs
            to. frontend/app.js's renderBranchFields() fills a container with
            a <label>+<select> when that source is checked, and empties it
-           (collapsing to zero height via CSS :empty) when it isn't. My
-           Money Master and Merchantrade Asia have no container at all --
-           they each publish one site-wide rate, no branch to choose. -->
+           (collapsing to zero height via CSS :empty) when it isn't.
+           Phase 55 (02-Sep-2026): Merchantrade Asia joined Taj Muhabath/
+           Wawasan Ilham/Jalinan Duta as branch-aware -- a real "Select
+           Branch" control was found live on its site (see
+           config/websites/merchantradeasia.json's branchNotes). My Money
+           Master is the only money changer left with no container at all --
+           confirmed live to publish one site-wide rate, no branch selector
+           on the page at all. -->
       <div class="field">
         <label>Money changer</label>
         <div class="checkbox-row">
@@ -100,6 +105,7 @@
           <input type="checkbox" id="srcMTA" value="merchantradeasia" checked>
           <label for="srcMTA">Merchantrade Asia</label>
         </div>
+        <div class="branch-field" id="branchField-merchantradeasia"></div>
         <div class="checkbox-row">
           <input type="checkbox" id="srcJD" value="jalinanduta">
           <label for="srcJD">Jalinan Duta</label>

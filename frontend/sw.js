@@ -72,7 +72,12 @@
 // containers replacing the old single #branchFieldsContainer),
 // app.js's renderBranchFields(), and styles.css's new .branch-field
 // rules.
-const CKM_SHELL_CACHE = 'ckm-shell-v14';
+// Bumped again (02-Sep-2026, Phase 55): Merchantrade Asia joined the
+// branch-aware sources (a real "Select Branch" control was found live
+// on its site) -- touched index.html (new branchField-merchantradeasia
+// container) and app.js (MTA_BRANCHES, SOURCES/BRANCHES_BY_SOURCE/
+// state.branches entries, srcMTA's change handler).
+const CKM_SHELL_CACHE = 'ckm-shell-v15';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

@@ -3,14 +3,14 @@
   "displayName": "Merchantrade Asia",
   "officialUrl": "https://mtradeasia.com/exchange",
   "liveRateUrl": "https://mtradeasia.com/exchange",
-  "notes": "Requested by the user 22-Aug-2026 via a pasted Python/Selenium reference script (which used the URL https://mtradeasia.com/exchange — confirmed correct on direct inspection, unlike two of the other three sites in that same script). Verified LIVE 22-Aug-2026 via direct browser automation (mcp__claude-in-chrome), not WebFetch/WebSearch — WebFetch converts a page to markdown through a summarizing model and cannot see real DOM structure or confirm JS-rendering, which is exactly why this step was needed before writing this adapter. Confirmed via fetch(location.href) from within the live page: the raw HTML response DOES already contain the '.exchange-arrow-row' row skeleton and the 'Counter Exchange Rates' heading (both server-rendered), but does NOT contain the string 'RENMINBI' or any other currency name/rate value anywhere in that raw response (grep-confirmed on the actual fetched text) — the rows are structurally present but their currency name, buy rate, and sell rate content is filled in by client-side JavaScript after load. This is the same 'skeleton present, values missing' pattern as Taj Muhabath, not the same as My Money Master (which is Pfully server-rendered). Playwright is therefore required for the primary (only) extraction path. Real CNY row observed live: '100 CNY / CHINESE RENMINBI', We Buy 59.2199, We Sell 61.8000 (22-Aug-2026, no branch selected — this page's rate table is NOT branch-specific; branch selection on this page only changes which physical branches are shown/highlighted elsewhere on the page, not the Counter Exchange Rates table, which is a single site-wide list). The page also offers a 'Digital Rates' tab (prepaid card rates) as an alternative to the default 'Counter Rates' tab this adapter reads — Counter Rates is what loads by default with no interaction required, and is the correct one per the project's CNY SELL scope (counter/cash rate, not a prepaid-card rate).",
-  "requiresBrowserAutomation": true,
-  "requiresBrowserAutomationReason": "Confirmed live via fetch(location.href) executed from within the loaded page: the raw HTTP response contains the '.exchange-arrow-row' row markup and column headers (We Buy / We Sell) but zero occurrences of any currency name or numeric rate anywhere in that response — every row's actual content (currency, buy, sell) is populated by client-side JavaScript after the initial load. A plain HTTP fetch + HTML parse cannot see this data at all.",
-  "playwrightFallback": false,
-  "playwrightFallbackReason": "Playwright IS the primary (and only) path here, not a fallback — there is nothing simpler to fall back FROM (same situation as Taj Muhabath).",
-  "extractionMethod": "PLAYWRIGHT_RENDERED_DOM",
-  "branchSupport": false,
-  "branchNotes": "The Counter Exchange Rates table on this page is a single site-wide list, not per-branch — confirmed live 22-Aug-2026 (the page separately lists 14 physical branch names elsewhere on the page for 'find a branch' purposes, but that list does not gate or filter the rate table). If a future re-check finds this has changed, branchSupport should be flipped to true and this note updated — do not assume it silently stays this way forever.",
+  "notes": "Requested by the user 22-Aug-2026 via a pasted Python/Selenium reference script (which used the URL https://mtradeasia.com/exchange — confirmed correct on direct inspection, unlike two of the other three sites in that same script). Verified LIVE 22-Aug-2026 via direct browser automation (mcp__claude-in-chrome), not WebFetch/WebSearch — WebFetch converts a page to markdown through a summarizing model and cannot see real DOM structure or confirm JS-rendering, which is exactly why this step was needed before writing this adapter. Confirmed via fetch(location.href) from within the live page: the raw HTML response DOES already contain the '.exchange-arrow-row' row skeleton and the 'Counter Exchange Rates' heading (both server-rendered), but does NOT contain the string 'RENMINBI' or any other currency name/rate value anywhere in that raw response (grep-confirmed on the actual fetched text) — the rows are structurally present but their currency name, buy rate, and sell rate content is filled in by client-side JavaScript after load. This is the same 'skeleton present, values missing' pattern as Taj Muhabath, not the same as My Money Master (which is Pfully server-rendered). Playwright is therefore required for the primary (only) extraction path. Real CNY row observed live: '100 CNY / CHINESE RENMINBI', We Buy 59.2199, We Sell 61.8000 (22-Aug-2026, no branch selected — this page's rate table is NOT branch-specific; branch selection on this page only changes which physical branches are shown/highlighted elsewhere on the page, not the Counter Exchange Rates table, which is a single site-wide list). The page also offers a 'Digital Rates' tab (prepaid card rates) as an alternative to the default 'Counter Rates' tab this adapter reads — Counter Rates is what loads by default with no interaction required, and is the correct one per the project's CNY SELL scope (counter/cash rate, not a prepaid-card rate).\n\nPHASE 55 (02-Sep-2026) -- this page's branch selection claim REVERSED. Requested explicitly: check My Money Master and Merchantrade Asia's official live sites for real branch selection and, if found, build it the same way as Taj Muhabath/Wawasan Ilham/Jalinan Duta. A real connected-browser session against https://mtradeasia.com/exchange (02-Sep-2026) found the page redesigned since the 28-Aug-2026 (Phase 46) verification: it now shows a 'Select Branch' control (native <select id=\"branch\">, 14 <option>s, each value a real branch code like \"MY0100083\") directly above the Counter Exchange Rates table, with its own caption text 'Rates may vary by branch location' -- the OPPOSITE of what the previous branchNotes below claimed. Confirmed this is real, not decorative: changing the select's value (via the page's own React onChange, not by faking anything) fires a real GET to this exact page's own https://mtradeasia.com/api/exchange/soap?branch=<code> endpoint, and the CNY row's own We-Buy/We-Sell numbers genuinely differ branch to branch -- e.g. (buy/sell, 100 CNY unit) Pavilion KL 0.591599/0.61600, The Gardens Mall KL 0.60350/0.60550, Giant Hypermart Senawang 0.57000/0.63400, Paradigm Mall (Johor) 0.58500/0.62000, Imago 0.60005/0.61900, Giant Plentong JB 0.58500/0.62000 -- captured live by fetching that same endpoint directly for all 14 branch codes, not guessed. branchSupport flipped false -> true; see branches/defaultBranch/endpoint below for the full picture, and this file's own note under branchNotes for why the OLD false claim was correct AT THE TIME it was written (a real site change since then, exactly the 'do not assume it silently stays this way forever' scenario the prior branchNotes itself already flagged as possible). The Counter Exchange Rates row markup itself (the '.exchange-arrow-row' structure documented in primarySelector below) is UNCHANGED -- re-confirmed live, byte-for-byte the same classes/structure as the 22-Aug/26-Aug/28-Aug verifications -- so the existing DOM-parsing logic (parseHtml() in backend/scrapers/merchantradeasia.adapter.js) needed no changes at all, only a branch-select step ahead of it for the Playwright fallback path. The NEW primary path (see endpoint below) needed a new parser (parseJsonRates()) since its response shape is a JSON object, not an HTML fragment -- see endpoint.description.",
+  "requiresBrowserAutomation": false,
+  "requiresBrowserAutomationReason": "Phase 55 (02-Sep-2026): superseded by the branch-aware JSON endpoint discovery above. The real rate data (all 41 currency/tier rows, branch-scoped) is served directly as JSON by a plain unauthenticated GET to https://mtradeasia.com/api/exchange/soap?branch=<branchCode> -- confirmed live by capturing that exact request in a real connected-browser session's network log after changing the page's own branch selector, then independently re-fetching it directly (fetch(), no page interaction) for all 14 branches and getting the same numbers back. No client-side JS execution or authentication is needed to obtain the numbers themselves -- unlike Taj Muhabath's own internal API (see that adapter's header comment), an unauthenticated call here returns real data, not an access-control error, and the domain's robots.txt (see compliance below) already allows '/'. This mirrors wawasanilham.adapter.js's own primary-path reasoning: the page's own script calls this exact endpoint, this adapter replicates that same call rather than reverse-engineering a different one.",
+  "playwrightFallback": true,
+  "playwrightFallbackReason": "Phase 55 (02-Sep-2026): defensive fallback matching every other branch-aware adapter in this project -- if the direct-GET path is ever blocked (e.g. the site adds a stricter session/CSRF requirement later), this fallback drives a real headless browser to liveRateUrl, selects the requested branch via the confirmed '#branch' native <select>, waits for the resulting re-render, and reads the Counter Exchange Rates table via the EXACT SAME primarySelector-driven parseHtml() this adapter already used as its only path before this phase -- that DOM structure was re-confirmed live, byte-for-byte unchanged, during this same verification session.",
+  "extractionMethod": "HTTP_FETCH_JSON_LIST_PARSE",
+  "branchSupport": true,
+  "branchNotes": "REVERSED 02-Sep-2026 (Phase 55) -- see the Phase 55 note in `notes` above for the full evidence chain. The ORIGINAL claim below (kept, struck through in spirit, for history) was accurate as of 22-Aug-2026: 'The Counter Exchange Rates table on this page is a single site-wide list, not per-branch... If a future re-check finds this has changed, branchSupport should be flipped to true and this note updated -- do not assume it silently stays this way forever.' That future re-check is this one: the page was redesigned at some point between 28-Aug-2026 and 02-Sep-2026 to add a real 'Select Branch' control that genuinely changes the Counter Exchange Rates table's numbers (see `notes` for real observed CNY figures across 6 different branches, and `branches`/`endpoint` below for the full branch list and the API that serves them). The page separately still shows no OTHER branch-scoped UI (no per-branch address/hours panel next to the rate table) -- branch selection here is purely about which branch's rates are shown, same conceptual model as Taj Muhabath's branch dropdown.",
   "primarySelector": {
     "description": "Counter Exchange Rates section: each currency is one '.exchange-arrow-row' div (42 observed on the page, including the header row itself, which shares the same class — filter for a row containing a recognizable currency-name element, do not just take index 0). A data row has three column divs: [0] '.col-6' containing the unit+code (e.g. a '<span class=\"text-dark fw-semibold\">100 CNY</span>') and the display name (a sibling '<small class=\"text-muted\">/ CHINESE RENMINBI</small>'); [1] '.col-3.text-center' containing a '<span class=\"currency\">' with the We-Buy numeric value; [2] '.col-3.text-end' containing a '<span class=\"currency\">' with the We-Sell numeric value. Confirmed live that the header row uses the identical column-class pattern (col-3 text-center for its 'We Buy' label, col-3 text-end for its 'We Sell' label) in the same left-to-right order as the data rows, so Buy-then-Sell column order is verified, not assumed.",
     "page": "https://mtradeasia.com/exchange",
@@ -46,18 +46,54 @@
   },
   "validation": {
     "expectedRange": {
-      "CNY": { "min": 40, "max": 80 },
-      "VND": { "min": 100, "max": 250 },
-      "TWD": { "min": 8, "max": 20 },
-      "HKD": { "min": 30, "max": 90 },
-      "EUR": { "min": 2.5, "max": 9 },
-      "GBP": { "min": 3, "max": 10 },
-      "AUD": { "min": 1.5, "max": 5.5 },
-      "THB": { "min": 7, "max": 22 },
-      "KRW": { "min": 1.5, "max": 5 },
-      "JPY": { "min": 15, "max": 40 },
-      "USD": { "min": 2, "max": 8 },
-      "SGD": { "min": 1.5, "max": 6 }
+      "CNY": {
+        "min": 40,
+        "max": 80
+      },
+      "VND": {
+        "min": 100,
+        "max": 250
+      },
+      "TWD": {
+        "min": 8,
+        "max": 20
+      },
+      "HKD": {
+        "min": 30,
+        "max": 90
+      },
+      "EUR": {
+        "min": 2.5,
+        "max": 9
+      },
+      "GBP": {
+        "min": 3,
+        "max": 10
+      },
+      "AUD": {
+        "min": 1.5,
+        "max": 5.5
+      },
+      "THB": {
+        "min": 7,
+        "max": 22
+      },
+      "KRW": {
+        "min": 1.5,
+        "max": 5
+      },
+      "JPY": {
+        "min": 15,
+        "max": 40
+      },
+      "USD": {
+        "min": 2,
+        "max": 8
+      },
+      "SGD": {
+        "min": 1.5,
+        "max": 6
+      }
     },
     "notes": "Same scale/reasoning as the other two sources for CNY: this page quotes CNY per 100 units (label reads '100 CNY'), so BUY/SELL values are directly comparable in scale to My Money Master and Taj Muhabath's CNY figures without any /100 or *100 adjustment. VND and TWD were added 22-Aug-2026 alongside a currency-selection request — unlike CNY, these two are ONLY live at Merchantrade Asia (My Money Master and Taj Muhabath were not re-checked for VND/TWD coverage, so they remain simulated for those two currencies). Each currency here uses whatever per-unit denomination this page itself quotes, not a uniform per-1 or per-100 basis: VND is quoted per 1,000,000 units (label reads '1000000 VND') and TWD per 100 units (label reads '100 TWD') — confirmed live, not assumed. frontend/app.js's CURRENCIES.base values for VND and TWD are deliberately scaled to match these same per-unit conventions, since a simulated reading at a different scale than the one real source would break the multi-source 'best rate' comparison. Reject a reading where buyRate > sellRate, or where the value looks like it's missing the relevant unit scaling for that currency. HKD/EUR/GBP/AUD/THB/KRW ranges added 26-Aug-2026 (Phase 38), built around real values observed live that same day (see primarySelector's Phase 38 note), generous padding matching this file's existing convention. JPY and USD added 28-Aug-2026 (Phase 44) — see currencyDisplayNamesNotes and unitScaleMultiplierNotes above for the full reasoning (note-denomination tier for USD; unit-scale conversion for JPY). JPY's range ({min:15,max:40}) matches the exact bounds already used at My Money Master and Taj Muhabath for the same currency in the same (post-conversion) per-1,000 convention — same real-world market, no reason for a different window. USD's range ({min:2,max:8}) matches My Money Master and Taj Muhabath's own USD bounds. SGD added 28-Aug-2026 (Phase 46) once the project owner picked BIG as the standard tier (same BIG/SMALL denomination-tier ambiguity USD had) — see currencyDisplayNamesNotes above; range ({min:1.5,max:6}) matches My Money Master and Taj Muhabath's own SGD bounds."
   },
@@ -66,5 +102,70 @@
     "termsOfUseUrl": "not located during this inspection — check the site footer / About Us page before continuous production polling.",
     "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. Unlike the other two sites, this one's actual Terms & Conditions page (https://mtradeasia.com/legal/terms-and-conditions) WAS fetched and read — no clause addressing automated access, scraping, bots, or crawlers was found, and robots.txt explicitly allows the /exchange page. Use a low, respectful request frequency (5 minutes, matching the dashboard's default) — this is a real production site serving real customers, not a sandbox. See README.md's Compliance note for the full picture across all three sites. Phase 38 (26-Aug-2026) — HKD/EUR/GBP/AUD/THB/KRW added to currencyDisplayNames/expectedRange above without a separate manual-promotion step: the project owner asked that the old per-currency verification ceremony (checkRate.js run + live cross-check before each new currency) no longer gate a currency at one of the 4 already-trusted money changers — see frontend/app.js's Phase 38 comment for the full architecture change. These six were captured the same rigorous way CNY/VND/TWD originally were (a real connected-browser session reading the live rendered DOM directly), just without the separate human sign-off step. Phase 44 (28-Aug-2026) — JPY and USD added the same way, this time WITH explicit human sign-off (the project owner directly specified the JPY unit-conversion factor and the USD tier to standardize on), after the project owner asked why both were still SIMULATED and was given the Phase 38 reasoning above."
   },
-  "lastVerified": "2026-08-28 (Phase 46 — SGD BIG added live via a real connected-browser JS session; Phase 44 — JPY and USD BIG added the same way; CNY/VND/TWD/HKD/EUR/GBP/AUD/THB/KRW previously re-confirmed 2026-08-26 Phase 38; original page-structure verification 2026-08-22)"
+  "lastVerified": "2026-09-02 (Phase 55 -- branch selection discovered and confirmed real via a live connected-browser session + direct endpoint cross-check across all 14 branches; Counter Exchange Rates row markup re-confirmed byte-for-byte unchanged from the 28-Aug-2026 Phase 46 verification). Previously: 2026-08-28 (Phase 46 -- SGD BIG added; Phase 44 -- JPY and USD BIG added; CNY/VND/TWD/HKD/EUR/GBP/AUD/THB/KRW previously re-confirmed 2026-08-26 Phase 38; original page-structure verification 2026-08-22).",
+  "branches": [
+    {
+      "id": "MY0100083",
+      "name": "Pavilion KL"
+    },
+    {
+      "id": "MY0100087",
+      "name": "MyTown Mall"
+    },
+    {
+      "id": "MY0100086",
+      "name": "Giant Taman Pertama"
+    },
+    {
+      "id": "MY0100079",
+      "name": "Da Men Mall"
+    },
+    {
+      "id": "MY0100081",
+      "name": "Giant Hypermarket Senawang Branch"
+    },
+    {
+      "id": "MY0100092",
+      "name": "Paradigm Johor Branch"
+    },
+    {
+      "id": "MY0100070",
+      "name": "Imago Branch"
+    },
+    {
+      "id": "MY0100103",
+      "name": "Giant Shah Alam Branch"
+    },
+    {
+      "id": "MY0100082",
+      "name": "KL Sentral Station Branch"
+    },
+    {
+      "id": "MY0100058",
+      "name": "KL Main Branch (WISWA GTK)"
+    },
+    {
+      "id": "MY0100138",
+      "name": "Giant Hypermarket Rawang Branch"
+    },
+    {
+      "id": "MY0100135",
+      "name": "Pavilion Damansara Branch"
+    },
+    {
+      "id": "MY0100137",
+      "name": "Giant Plentong JB Branch"
+    },
+    {
+      "id": "MY0100141",
+      "name": "The Gardens Mall KL"
+    }
+  ],
+  "branchesNote": "id values are this site's own real branch codes (the <option value=\"...\"> on the live page's '#branch' select, and the same codes the branchEndpoint accepts), captured live 02-Sep-2026 -- not invented. name values are each branch's own on-page dropdown label, shown to users exactly as the live site shows them. Note: the JSON endpoint's own per-row 'name' field for MY0100086 says 'GIANT TAMAN PERMATA BRANCH' (Permata), while the dropdown's own label reads 'Giant Taman Pertama' (Pertama) -- a real spelling inconsistency ON THE SITE ITSELF between its two own surfaces, not a typo introduced here. The dropdown's label is used as this app's branch name since that's what a user actually sees and picks.",
+  "defaultBranch": "MY0100083",
+  "endpoint": {
+    "method": "GET",
+    "url": "https://mtradeasia.com/api/exchange/soap?branch={branchId}",
+    "description": "Confirmed live 02-Sep-2026 by capturing the exact request the page's own React app fires when its '#branch' select's value changes, then independently re-fetching the same URL directly (no page interaction) and getting matching data back. Response shape: a JSON object with a top-level 'data' array (41 entries for every branch observed) plus an unrelated metadata field this adapter does not use. Each data entry is one currency/ tier row: { branch_code, name (branch name, all-caps -- see branchesNote's spelling-discrepancy note), id, unit (e.g. \"100.00\"), short_name (the ISO code, or e.g. \"USD BIG\" for note-tiered currencies -- matches this config's own currencyDisplayNames values' distinguishing suffix), long_name (e.g. \"CHINESE RENMINBI\", or \"USD BIG (100,50)\" -- what this adapter actually matches against, via the exact same currencyDisplayNames substring strategy primarySelector.matchStrategy already used for the DOM path), counter_webuy_rate / counter_wesell_rate (raw per-unit rate as a string, e.g. \"0.59159900\" -- multiply by `unit` to get this app's displayed-scale value, e.g. 0.591599 * 100 = 59.1599, matching the on-page CNY figure exactly), plus 'stock' (observed as \"00.00\" on every row/branch checked -- not used, meaning unconfirmed) and 'errorcd' (observed as \"20050\" on every successful row checked -- not used as a success/failure signal since its meaning was never confirmed; this adapter judges success by whether a matching row with parseable numeric rates was found, same as every other adapter in this project)."
+  }
 }

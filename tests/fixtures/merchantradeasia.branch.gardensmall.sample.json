@@ -1,0 +1,6 @@
+{
+  "_fixtureNote": "Real data captured live 02-Sep-2026 (Phase 55) from https://mtradeasia.com/api/exchange/soap?branch=MY0100141 (The Gardens Mall KL) via a real connected-browser session's fetch() call -- not invented. Deliberately just the CNY row: this fixture exists only to prove parseJsonRates() produces a genuinely DIFFERENT reading for a different branch given the same currency, against merchantradeasia.branch.pavilionkl.sample.json's own CNY row (0.591599/0.616) -- both captured in the same live session, moments apart.",
+  "data": [
+    {"branch_code":"MY0100141","name":"THE GARDENS MALL BRANCH","id":"2946","image":"cn.png","unit":"100.00","short_name":"CNY","long_name":"CHINESE RENMINBI","counter_webuy_rate":"0.60350000","counter_wesell_rate":"0.60550000","stock":"00.00","errorcd":"20050","currency_tag":null}
+  ]
+}

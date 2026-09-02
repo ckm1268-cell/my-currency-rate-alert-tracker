@@ -85,13 +85,33 @@
   // rates match Bukit Bintang's subpage exactly.
   const JD_BRANCHES = ["Bukit Bintang", "Masjid India", "Nu Sentral"];
 
+  // Phase 55 (02-Sep-2026) — real branch names, captured live from this
+  // site's own <select id="branch"> during a real connected-browser
+  // session (this site was previously believed to have no branch
+  // selection at all — see config/websites/merchantradeasia.json's
+  // branchNotes for the full reversal). Cross-checked live: CNY's own
+  // rate genuinely differs branch to branch (e.g. Pavilion KL 59.1599/
+  // 61.6000 vs The Gardens Mall KL 60.3500/60.5500). "Pavilion KL" is
+  // first/default since it's the branch the live page itself defaults to.
+  const MTA_BRANCHES = [
+    "Pavilion KL", "MyTown Mall", "Giant Taman Pertama", "Da Men Mall",
+    "Giant Hypermarket Senawang Branch", "Paradigm Johor Branch",
+    "Imago Branch", "Giant Shah Alam Branch", "KL Sentral Station Branch",
+    "KL Main Branch (WISWA GTK)", "Giant Hypermarket Rawang Branch",
+    "Pavilion Damansara Branch", "Giant Plentong JB Branch",
+    "The Gardens Mall KL",
+  ];
+
   // Phase 52 — which BRANCHES list backs each branch-aware source's own
-  // dropdown (see renderBranchFields() below). One place to add a 4th
-  // branch-aware source later, instead of a new hardcoded if/else.
+  // dropdown (see renderBranchFields() below). Phase 55 added a 4th entry
+  // (merchantradeasia) here — this map was already the one place that
+  // needed touching, no new if/else required, exactly as the Phase 52
+  // comment above originally intended.
   const BRANCHES_BY_SOURCE = {
     tajmuhabath: TM_BRANCHES,
     wawasanilham: WI_BRANCHES,
     jalinanduta: JD_BRANCHES,
+    merchantradeasia: MTA_BRANCHES,
   };
 
   // checkboxId added 25-Aug-2026 (bug fix, see loadAlertIntoForm() below): each
@@ -113,7 +133,11 @@
   const SOURCES = [
     { id: "mymoneymaster", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.mymoneymaster, supportsBranch: false, spreadBias: 0, checkboxId: "srcMMM" },
     { id: "tajmuhabath", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.tajmuhabath, supportsBranch: true, spreadBias: 0.06, checkboxId: "srcTM" },
-    { id: "merchantradeasia", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.merchantradeasia, supportsBranch: false, spreadBias: 0.03, checkboxId: "srcMTA" },
+    // Phase 55 (02-Sep-2026): supportsBranch flipped false -> true — a
+    // real "Select Branch" control was found live on this site, genuinely
+    // changing the Counter Exchange Rates table (see MTA_BRANCHES above
+    // and config/websites/merchantradeasia.json's branchNotes).
+    { id: "merchantradeasia", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.merchantradeasia, supportsBranch: true, spreadBias: 0.03, checkboxId: "srcMTA" },
     // Phase 52 (02-Sep-2026): supportsBranch flipped false -> true — real,
     // confirmed-different per-branch rates (see JD_BRANCHES above and
     // config/websites/jalinanduta.json's branchNotes).
@@ -201,6 +225,10 @@
       // branchNotes: "The page loads with a default branch already selected").
       wawasanilham: WI_BRANCHES[0], // NSK Trade City, Kuchai Lama — matches config.defaultBranch
       jalinanduta: JD_BRANCHES[0], // Bukit Bintang — matches config.defaultBranch / the homepage's own numbers
+      // Phase 55 (02-Sep-2026): merchantradeasia added — Pavilion KL is
+      // the branch the live page itself defaults to, matching
+      // config.defaultBranch ("MY0100083").
+      merchantradeasia: MTA_BRANCHES[0], // Pavilion KL
     },
     condition: "AT_OR_BELOW",
     interval: 5,
@@ -1780,9 +1808,11 @@
 
     on("srcMMM", "change", (e) => { state.userEditedForm = true; state.sources.mymoneymaster = e.target.checked; });
     on("srcTM", "change", (e) => { state.userEditedForm = true; state.sources.tajmuhabath = e.target.checked; renderBranchFields(); });
-    on("srcMTA", "change", (e) => { state.userEditedForm = true; state.sources.merchantradeasia = e.target.checked; });
+    // Phase 55: srcMTA now also re-renders the branch fields — Merchantrade
+    // Asia is a branch-aware source as of this phase.
+    on("srcMTA", "change", (e) => { state.userEditedForm = true; state.sources.merchantradeasia = e.target.checked; renderBranchFields(); });
     // Phase 52: srcJD and srcWI now also re-render the branch fields —
-    // both are branch-aware sources as of this phase.
+    // both are branch-aware sources as of that phase.
     on("srcJD", "change", (e) => { state.userEditedForm = true; state.sources.jalinanduta = e.target.checked; renderBranchFields(); });
     on("srcWI", "change", (e) => { state.userEditedForm = true; state.sources.wawasanilham = e.target.checked; renderBranchFields(); });
 

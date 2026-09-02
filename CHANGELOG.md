@@ -11,16 +11,36 @@ entry. This file tracks releases going forward.
 
 ## [Unreleased]
 
+### Added
+
+**Merchantrade Asia is now branch-aware**
+
+- A real "Select Branch" control was found live on Merchantrade Asia's own
+  exchange-rate page during a fresh check of both remaining non-branch
+  money changers (My Money Master and Merchantrade Asia) — confirmed to
+  genuinely change the Counter Exchange Rates table's numbers (e.g. CNY
+  sell 61.60 at Pavilion KL vs 60.55 at The Gardens Mall KL, checked live
+  across all 14 branches). Merchantrade Asia now gets the same branch
+  dropdown treatment as Taj Muhabath, Wawasan Ilham, and Jalinan Duta,
+  defaulting to Pavilion KL (the live page's own default). My Money Master
+  was re-checked the same way and confirmed to still have no branch
+  selection at all — it stays a single site-wide rate.
+- Under the hood, the adapter's primary extraction path switched from
+  Playwright DOM-scraping to a direct call to the same JSON endpoint the
+  live page's own branch selector calls — simpler and no browser required
+  — with the old Playwright approach kept as a defensive fallback.
+
 ### Changed
 
 **Branch selection moved inline, directly under its money changer**
 
 - Each branch-aware money changer's (Taj Muhabath, Wawasan Ilham, Jalinan
-  Duta) branch dropdown now renders immediately under that money changer's
-  own checkbox in the "Build Your Alert" form, appearing the instant it's
-  checked and disappearing when unchecked. Previously all branch dropdowns
-  were grouped together in one shared block lower down the form, separated
-  from the checkboxes they belonged to.
+  Duta, and now Merchantrade Asia) branch dropdown now renders immediately
+  under that money changer's own checkbox in the "Build Your Alert" form,
+  appearing the instant it's checked and disappearing when unchecked.
+  Previously all branch dropdowns were grouped together in one shared
+  block lower down the form, separated from the checkboxes they belonged
+  to.
 
 ## [3.0.0] — 2026-09-02
 

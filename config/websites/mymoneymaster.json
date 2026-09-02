@@ -10,7 +10,7 @@
   "playwrightFallbackReason": "If the site migrates this page to client-side rendering in the future, plain-fetch extraction will start failing validation (fails safe, never silently stale). The Playwright fallback re-uses the exact same selectors against the rendered DOM of the same URL, so it keeps working whether or not JS involvement changes.",
   "extractionMethod": "HTTP_FETCH_HTML_PARSE",
   "branchSupport": false,
-  "branchNotes": "No branch/location selector was found on the public site; My Money Master publishes a single site-wide rate per currency.",
+  "branchNotes": "No branch/location selector was found on the public site; My Money Master publishes a single site-wide rate per currency. RE-CONFIRMED 02-Sep-2026 (Phase 55) via a real connected-browser session against both the homepage and index.php?/Home/full_rate_board: still exactly one physical address in the footer (Mid Valley Megamall), no <select>/dropdown/location control anywhere on either page (checked via a full interactive-elements DOM read, not just a visual look), and the rate table is one single site-wide list, unchanged from the original finding. Requested explicitly alongside the same check for Merchantrade Asia, which DID turn out to have gained real branch selection since its own last check — this negative result for My Money Master is a genuine, deliberate re-check, not an assumption carried forward.",
   "primarySelector": {
     "description": "Phase 42 (27-Aug-2026): the desktop rate table on 'index.php?/Home/full_rate_board' — a 'div.table-responsive.rate-board-table' wrapping 'table.table', body id 'ajaxval', one 'tr.filtersearch' per currency (there is also a separate compact/mobile table on the same page, tbody id 'ajaxmobval', with only 3 cells and no country name — NOT used here, since it carries the same data with less context). Each row has 5 <td> cells: [0] 'td.currency-tbody-wrap' containing a 'span.currency-txt' whose text is '<Country name> <unit quantity> <Currency name> ( <ISO CODE> )' (e.g. 'Viet Nam 1M Vietnam Dong ( VND )', 'China 100 Chinese Renminbi ( CNY )'); [1] Buy rate (plain text); [2] Sell rate (plain text); [3] 'at HH:MM AM/PM' (this row's own last-updated time — no date; the page's own top banner shows the date once for the whole table); [4] a 'more info' link, unused.",
     "page": "http://www.mymoneymaster.com.my/index.php?/Home/full_rate_board",
@@ -50,18 +50,54 @@
   },
   "validation": {
     "expectedRange": {
-      "CNY": { "min": 40, "max": 80 },
-      "JPY": { "min": 15, "max": 40 },
-      "USD": { "min": 2, "max": 8 },
-      "GBP": { "min": 3, "max": 10 },
-      "EUR": { "min": 2.5, "max": 9 },
-      "HKD": { "min": 30, "max": 90 },
-      "AUD": { "min": 1.5, "max": 5.5 },
-      "SGD": { "min": 1.5, "max": 6 },
-      "VND": { "min": 100, "max": 250 },
-      "TWD": { "min": 8, "max": 20 },
-      "THB": { "min": 7, "max": 22 },
-      "KRW": { "min": 1.5, "max": 5 }
+      "CNY": {
+        "min": 40,
+        "max": 80
+      },
+      "JPY": {
+        "min": 15,
+        "max": 40
+      },
+      "USD": {
+        "min": 2,
+        "max": 8
+      },
+      "GBP": {
+        "min": 3,
+        "max": 10
+      },
+      "EUR": {
+        "min": 2.5,
+        "max": 9
+      },
+      "HKD": {
+        "min": 30,
+        "max": 90
+      },
+      "AUD": {
+        "min": 1.5,
+        "max": 5.5
+      },
+      "SGD": {
+        "min": 1.5,
+        "max": 6
+      },
+      "VND": {
+        "min": 100,
+        "max": 250
+      },
+      "TWD": {
+        "min": 8,
+        "max": 20
+      },
+      "THB": {
+        "min": 7,
+        "max": 22
+      },
+      "KRW": {
+        "min": 1.5,
+        "max": 5
+      }
     },
     "notes": "Range is a sanity bound only, not a hard limit — widen per-currency ranges as real historical data accumulates. Reject a reading where BUY > SELL, or where the value looks like it's missing the relevant unit scaling for that currency. JPY range added 26-Aug-2026 (Phase 37). USD/GBP/EUR/HKD/AUD/SGD ranges added 26-Aug-2026 (Phase 38). VND/TWD/THB/KRW ranges added 27-Aug-2026 (Phase 42), deliberately reusing the exact same bounds already in production for these four currencies at Merchantrade Asia (config/websites/merchantradeasia.json) rather than inventing new ones — same currency, same real-world market, no reason for a different sanity window per source."
   },
@@ -70,5 +106,5 @@
     "termsOfUseUrl": "linked from the site footer",
     "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. This site's Terms of Use page (/Home/policy) could NOT actually be read as part of that decision — the site has no working HTTPS and the fetching tool used could not follow its http-to-https-back-to-http redirect loop. Genuinely unread, not cleared; still true as of Phase 42. Phase 38 (26-Aug-2026) added JPY/USD/GBP/EUR/HKD/AUD/SGD without a separate manual-promotion step per the project owner's request that a per-currency verification ceremony no longer gate a currency newly selected at one of the 4 already-trusted money changers — see frontend/app.js's Phase 38 comment. Phase 42 (27-Aug-2026) extends the SAME already-trusted-source reasoning to VND/THB/KRW/TWD: no new site, no new ceremony, just a different (larger) page on the exact same already-approved domain, discovered because the old 8-currency page turned out not to be the full picture."
   },
-  "lastVerified": "2026-08-27 (Phase 42 — migrated to full_rate_board and re-confirmed all 12 app currencies, incl. VND/THB/KRW/TWD, live via a real connected-browser session; CNY/JPY/USD/GBP/EUR/HKD/AUD/SGD previously re-confirmed 2026-08-26 Phase 38; original card-layout verification 2026-08-21)"
+  "lastVerified": "2026-09-02 (Phase 55 -- branch selection re-checked live and reconfirmed absent, alongside the same check for Merchantrade Asia which found the opposite result). Previously: 2026-08-27 (Phase 42 — migrated to full_rate_board...)"
 }

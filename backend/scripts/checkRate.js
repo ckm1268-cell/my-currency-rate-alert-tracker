@@ -4,18 +4,23 @@
  * ===================================
  * Usage: node scripts/checkRate.js <source> <currencyCode> [branch]
  *   e.g. node scripts/checkRate.js mymoneymaster CNY
- *   e.g. node scripts/checkRate.js tajmuhabath CNY "LALAPORT BBCC"
- *   e.g. node scripts/checkRate.js merchantradeasia CNY
+ *   e.g. node scripts/checkRate.js tajmuhabath CNY "THE EXCHANGE TRX"
+ *   e.g. node scripts/checkRate.js merchantradeasia CNY "Pavilion KL"
  *
  * [branch] is optional and only meaningful for adapters whose config sets
- * branchSupport: true (Taj Muhabath). My Money Master and Merchantrade Asia
- * ignore a branch argument if one is passed, since each publishes one
- * site-wide rate (not per-branch — see config/websites/merchantradeasia.json's
- * branchNotes for how that was confirmed for Merchantrade Asia specifically).
+ * branchSupport: true (Taj Muhabath, Wawasan Ilham, Jalinan Duta, and — as
+ * of Phase 55, 02-Sep-2026 — Merchantrade Asia too; see
+ * config/websites/merchantradeasia.json's branchNotes for how a real,
+ * previously-absent branch selector was found live on that site). My
+ * Money Master is the only adapter left that ignores a branch argument if
+ * one is passed — confirmed live to publish one site-wide rate, no
+ * per-branch selector on the page at all.
  *
- * Runs the named adapter's fetchRateWithFallback() (HTTP first, Playwright
- * fallback where applicable — Taj Muhabath's and Merchantrade Asia's
- * adapters are both Playwright-only), prints the StandardRateResult as
+ * Runs the named adapter's fetchRateWithFallback() (HTTP/direct-fetch
+ * first, Playwright fallback where applicable — Taj Muhabath's adapter is
+ * Playwright-only; My Money Master, Wawasan Ilham, and — as of Phase 55 —
+ * Merchantrade Asia all try a direct fetch first and only fall back to a
+ * real browser if that fails), prints the StandardRateResult as
  * JSON to stdout, and merges it
  * into frontend/data/latest-rates.json — the flat-file "API" the static
  * GitHub Pages frontend reads (see frontend/app.js: loadLiveData()).
