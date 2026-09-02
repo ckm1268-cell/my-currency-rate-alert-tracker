@@ -11,7 +11,16 @@ entry. This file tracks releases going forward.
 
 ## [Unreleased]
 
-Nothing yet.
+### Changed
+
+**Branch selection moved inline, directly under its money changer**
+
+- Each branch-aware money changer's (Taj Muhabath, Wawasan Ilham, Jalinan
+  Duta) branch dropdown now renders immediately under that money changer's
+  own checkbox in the "Build Your Alert" form, appearing the instant it's
+  checked and disappearing when unchecked. Previously all branch dropdowns
+  were grouped together in one shared block lower down the form, separated
+  from the checkboxes they belonged to.
 
 ## [3.0.0] — 2026-09-02
 

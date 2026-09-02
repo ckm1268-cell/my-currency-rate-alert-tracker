@@ -351,6 +351,25 @@ select:focus, input:focus {
 .checkbox-row input { width: 16px; height: 16px; accent-color: var(--accent); }
 .checkbox-row label { text-transform: none; font-weight: 500; letter-spacing: 0; color: var(--ink); font-size: 0.9rem; }
 
+/* Phase 54 (02-Sep-2026): a branch-aware money changer's branch dropdown,
+   nested directly under that money changer's own checkbox row (see
+   frontend/app.js's renderBranchFields()). Indented 24px to line up under
+   the checkbox row's own label text (16px checkbox + 8px gap). Collapses
+   to zero height and margin via :empty when the source is unchecked, so
+   it takes no visual space until it has something to show. */
+.branch-field { margin: 2px 0 10px 24px; }
+.branch-field:empty { margin: 0; }
+.branch-field label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+  margin-bottom: 4px;
+}
+.branch-field select { width: 100%; }
+
 select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
 
 .btn-primary {

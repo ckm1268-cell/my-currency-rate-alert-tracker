@@ -1706,44 +1706,35 @@
     currencySel.value = state.currency;
   }
 
-  // Phase 52 (02-Sep-2026) replaces updateBranchAvailability(): the old
-  // single, static <select id="branch"> only ever had to handle ONE
-  // branch-aware source (Taj Muhabath). With Wawasan Ilham and Jalinan
-  // Duta also branch-aware, more than one such source can be checked at
-  // once (comparing money changers is this app's own core feature), and
-  // each needs its own dropdown with its own branch list — a shared
-  // dropdown can't represent two sources' branches at the same time. This
-  // rebuilds #branchFieldsContainer's contents from scratch on every call
-  // (checkbox toggle, or a saved alert loading) — one <div class="field">
-  // block per currently-selected branch-aware source, each wired straight
-  // to its own state.branches[sourceId] entry.
+  // Phase 54 (02-Sep-2026) replaces the Phase 52 shared-container version:
+  // that version rendered every selected branch-aware source's dropdown
+  // into one #branchFieldsContainer block lower down the form, separated
+  // from the money-changer checkboxes above it. Requested explicitly: "the
+  // branch selection for the selected Money Changer need to be displayed
+  // right after the selected Money Changer" — so each branch-aware source
+  // now owns its own container (id="branchField-<sourceId>") sitting
+  // directly under that source's own checkbox row in index.html. This
+  // fills that source's container with a label+select when the source is
+  // checked, and empties it (collapsing to zero height via the
+  // .branch-field:empty CSS rule) when it's unchecked or not branch-aware
+  // at all. Called on every checkbox toggle and on saved-alert load.
   function renderBranchFields() {
-    const container = $("branchFieldsContainer");
-    if (!container) return;
+    SOURCES.filter((s) => s.supportsBranch).forEach((s) => {
+      const container = $(`branchField-${s.id}`);
+      if (!container) return;
 
-    const branchSources = SOURCES.filter((s) => s.supportsBranch && state.sources[s.id]);
+      if (!state.sources[s.id]) {
+        container.innerHTML = "";
+        return;
+      }
 
-    if (branchSources.length === 0) {
-      container.innerHTML =
-        '<label>Branch</label>' +
-        '<p class="hint">Enable a branch-aware money changer (Taj Muhabath, Wawasan Ilham, or Jalinan Duta) to choose a branch. ' +
-        'My Money Master and Merchantrade Asia each publish one site-wide rate — no branch selection applies to them.</p>';
-      return;
-    }
-
-    container.innerHTML = branchSources.map((s) => {
       const selId = `branch__${s.id}`;
-      return (
-        `<div class="field">` +
-        `<label for="${selId}">Branch <span style="text-transform:none; font-weight:400;">(${s.name})</span></label>` +
-        `<select id="${selId}" name="${selId}"></select>` +
-        `</div>`
-      );
-    }).join("");
+      container.innerHTML =
+        `<label for="${selId}">${s.name} branch</label>` +
+        `<select id="${selId}" name="${selId}"></select>`;
 
-    branchSources.forEach((s) => {
       const branches = BRANCHES_BY_SOURCE[s.id] || [];
-      const sel = $(`branch__${s.id}`);
+      const sel = $(selId);
       if (!sel) return;
       sel.innerHTML = branches.map((b) => `<option value="${b}">${b}</option>`).join("");
       sel.value = (state.branches && state.branches[s.id]) || branches[0] || "";

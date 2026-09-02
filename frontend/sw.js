@@ -65,7 +65,14 @@
 // index.html's phase chip (v2.0 -> v3.0) and app.js's official-default
 // branch values / loadAlertIntoForm() fallback (see that file's own
 // Phase 53 comments).
-const CKM_SHELL_CACHE = 'ckm-shell-v13';
+// Bumped again (02-Sep-2026, Phase 54): each branch-aware money
+// changer's branch dropdown now renders directly under that money
+// changer's own checkbox row instead of in one shared block further
+// down the form -- touched index.html (per-source branchField-<id>
+// containers replacing the old single #branchFieldsContainer),
+// app.js's renderBranchFields(), and styles.css's new .branch-field
+// rules.
+const CKM_SHELL_CACHE = 'ckm-shell-v14';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

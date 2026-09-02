@@ -75,6 +75,16 @@
         <p class="hint" id="targetRateHint">Numeric, greater than zero. Up to 4 decimal places.</p>
       </div>
 
+      <!-- Phase 54 (02-Sep-2026): each branch-aware money changer's
+           branch dropdown now renders directly under that money changer's
+           own checkbox row (id="branchField-<sourceId>"), instead of in one
+           shared block further down the form -- so the branch you're
+           choosing is never separated from the money changer it belongs
+           to. frontend/app.js's renderBranchFields() fills a container with
+           a <label>+<select> when that source is checked, and empties it
+           (collapsing to zero height via CSS :empty) when it isn't. My
+           Money Master and Merchantrade Asia have no container at all --
+           they each publish one site-wide rate, no branch to choose. -->
       <div class="field">
         <label>Money changer</label>
         <div class="checkbox-row">
@@ -85,6 +95,7 @@
           <input type="checkbox" id="srcTM" value="tajmuhabath" checked>
           <label for="srcTM">Taj Muhabath</label>
         </div>
+        <div class="branch-field" id="branchField-tajmuhabath"></div>
         <div class="checkbox-row">
           <input type="checkbox" id="srcMTA" value="merchantradeasia" checked>
           <label for="srcMTA">Merchantrade Asia</label>
@@ -93,23 +104,13 @@
           <input type="checkbox" id="srcJD" value="jalinanduta">
           <label for="srcJD">Jalinan Duta</label>
         </div>
+        <div class="branch-field" id="branchField-jalinanduta"></div>
         <div class="checkbox-row">
           <input type="checkbox" id="srcWI" value="wawasanilham">
           <label for="srcWI">Wawasan Ilham</label>
         </div>
+        <div class="branch-field" id="branchField-wawasanilham"></div>
       </div>
-
-      <!-- Phase 52 (02-Sep-2026): was a single static <select id="branch">
-           (Taj Muhabath only). Wawasan Ilham and Jalinan Duta are
-           branch-aware now too, and more than one branch-aware source can
-           be selected at once (comparing money changers is this app's own
-           core feature) -- frontend/app.js's renderBranchFields() rebuilds
-           this container's contents on every relevant change: one
-           <div class="field"> block with its own <select> per currently
-           selected branch-aware source, or a plain hint when none is
-           selected. See that function's own header comment for the full
-           "why". -->
-      <div id="branchFieldsContainer"></div>
 
       <div class="field">
         <label for="condition">Alert condition</label>
