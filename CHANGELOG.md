@@ -66,6 +66,23 @@ entry. This file tracks releases going forward.
 
 ### Fixed
 
+**Branch dropdown missing for every source after the Phase 52 deploy (02-Sep-2026)**
+- After the per-source branch selection release (see above), the custom
+  domain briefly served a stale cached `app.js` (still built around the
+  old single `<select id="branch">` element) alongside the newly deployed
+  `index.html` (which had already replaced that element with
+  `#branchFieldsContainer`). The mismatch threw `Cannot set properties of
+  null` while loading any saved alert, which silently broke the branch
+  dropdown for every money changer — Taj Muhabath included, not just the
+  two newly branch-aware sources — until each visitor's browser cache
+  happened to expire.
+- Fixed structurally, not just by waiting it out: `.github/workflows/pages.yml`
+  now runs `.github/scripts/cache_bust_frontend.py` before every deploy,
+  appending a `?v=<git-sha>` suffix to every local script/stylesheet URL in
+  `frontend/*.html`. A URL the browser has never cached before is always
+  fetched fresh, so `index.html` and its scripts can never again be served
+  as a mismatched pair from two different deploys.
+
 - The Admin Module's "🛡️ Admin" link and "← Back to dashboard" button
   rendered as underlined text links instead of pill buttons.
 - Signing out left the "Build Your Alert" form permanently hidden on

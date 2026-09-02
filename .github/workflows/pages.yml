@@ -88,6 +88,25 @@ jobs:
         run: node scripts/checkRate.js jalinanduta CNY
         continue-on-error: true
 
+      - name: Check Wawasan Ilham CNY rate
+        # Phase 52 (02-Sep-2026): wired into production the same way Jalinan
+        # Duta was -- robots.txt (404, no restriction) and Terms of Use (none
+        # exists) both checked, and a real checkRate.js run already confirmed
+        # LIVE/PASSED before this step was added. See
+        # config/websites/wawasanilham.json's compliance block.
+        working-directory: backend
+        run: node scripts/checkRate.js wawasanilham CNY "Seri Kembangan"
+        continue-on-error: true
+
+      - name: Cache-bust local script/stylesheet URLs
+        # Phase 52 follow-up (02-Sep-2026): fixes a real production
+        # incident where a stale cached app.js (pre-Phase-52 single-branch
+        # markup) was served alongside a freshly deployed index.html
+        # (post-Phase-52 markup), breaking the branch dropdown for every
+        # source, not just the new branch-aware ones. Full rationale in the
+        # script itself.
+        run: python3 .github/scripts/cache_bust_frontend.py
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
