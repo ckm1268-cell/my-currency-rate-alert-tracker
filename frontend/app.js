@@ -102,12 +102,30 @@
     "The Gardens Mall KL",
   ];
 
+  // Phase 56 (02-Sep-2026) — My Money Master's site itself has NO real
+  // branch selection (re-confirmed live during the Phase 55 investigation:
+  // one physical address, Mid Valley Megamall, one site-wide rate, no
+  // <select>/dropdown/location control anywhere on the page). This single-
+  // entry array exists purely so the UI can show a branch dropdown here
+  // too, for visual consistency with the other 4 money changers — per
+  // explicit request ("consistent with the rest of the Money Changers to
+  // have a branch selection too and default Mid Valley Megamall at the
+  // backend when retrieving exchange rate no changes. Just the frontend
+  // consistency."). backend/scrapers/mymoneymaster.adapter.js never reads
+  // input.branch (confirmed: buildResult() hardcodes branch: null), so
+  // whatever value ends up in state.branches.mymoneymaster is inert as far
+  // as the actual scrape/comparison/alert logic is concerned — it changes
+  // nothing about which rate is fetched or how it's validated.
+  const MMM_BRANCHES = ["Mid Valley Megamall"];
+
   // Phase 52 — which BRANCHES list backs each branch-aware source's own
   // dropdown (see renderBranchFields() below). Phase 55 added a 4th entry
-  // (merchantradeasia) here — this map was already the one place that
+  // (merchantradeasia) here; Phase 56 added a 5th (mymoneymaster, UI-only —
+  // see MMM_BRANCHES above) — this map was already the one place that
   // needed touching, no new if/else required, exactly as the Phase 52
   // comment above originally intended.
   const BRANCHES_BY_SOURCE = {
+    mymoneymaster: MMM_BRANCHES,
     tajmuhabath: TM_BRANCHES,
     wawasanilham: WI_BRANCHES,
     jalinanduta: JD_BRANCHES,
@@ -131,7 +149,12 @@
   // (loaded here via a <script> tag, immediately before this file) instead
   // of each typing its own copy of the same four names.
   const SOURCES = [
-    { id: "mymoneymaster", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.mymoneymaster, supportsBranch: false, spreadBias: 0, checkboxId: "srcMMM" },
+    // Phase 56 (02-Sep-2026): supportsBranch flipped false -> true for UI
+    // consistency only -- the real site still has no branch selection (see
+    // MMM_BRANCHES above and config/websites/mymoneymaster.json's
+    // branchSupport, deliberately left false since that field describes
+    // the real site, not this UI choice).
+    { id: "mymoneymaster", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.mymoneymaster, supportsBranch: true, spreadBias: 0, checkboxId: "srcMMM" },
     { id: "tajmuhabath", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.tajmuhabath, supportsBranch: true, spreadBias: 0.06, checkboxId: "srcTM" },
     // Phase 55 (02-Sep-2026): supportsBranch flipped false -> true — a
     // real "Select Branch" control was found live on this site, genuinely
@@ -210,6 +233,10 @@
     // database/schema.sql's Phase 52 migration and renderBranchFields()
     // below for the full picture.
     branches: {
+      // Phase 56 (02-Sep-2026): mymoneymaster added -- UI-only, always
+      // "Mid Valley Megamall" (its one real address; see MMM_BRANCHES
+      // above). Not a real per-branch default like the entries below.
+      mymoneymaster: MMM_BRANCHES[0], // Mid Valley Megamall
       // Phase 53 (02-Sep-2026): each entry here is that source's own real
       // official live-site default branch -- the one already pre-selected
       // if you open the site yourself and never touch its branch selector
@@ -1806,7 +1833,9 @@
       state.targetRate = Number.isFinite(v) && v > 0 ? v : state.targetRate;
     });
 
-    on("srcMMM", "change", (e) => { state.userEditedForm = true; state.sources.mymoneymaster = e.target.checked; });
+    // Phase 56: srcMMM now also re-renders the branch fields -- My Money
+    // Master is a (UI-only) branch-aware source as of this phase.
+    on("srcMMM", "change", (e) => { state.userEditedForm = true; state.sources.mymoneymaster = e.target.checked; renderBranchFields(); });
     on("srcTM", "change", (e) => { state.userEditedForm = true; state.sources.tajmuhabath = e.target.checked; renderBranchFields(); });
     // Phase 55: srcMTA now also re-renders the branch fields — Merchantrade
     // Asia is a branch-aware source as of this phase.

@@ -86,16 +86,23 @@
            Phase 55 (02-Sep-2026): Merchantrade Asia joined Taj Muhabath/
            Wawasan Ilham/Jalinan Duta as branch-aware -- a real "Select
            Branch" control was found live on its site (see
-           config/websites/merchantradeasia.json's branchNotes). My Money
-           Master is the only money changer left with no container at all --
-           confirmed live to publish one site-wide rate, no branch selector
-           on the page at all. -->
+           config/websites/merchantradeasia.json's branchNotes).
+           Phase 56 (02-Sep-2026): My Money Master also now shows a branch
+           container, but purely for visual consistency across all 5 money
+           changers -- its site still has just one address (Mid Valley
+           Megamall) and no real branch selector at all (re-confirmed live
+           during the Phase 55 investigation). The dropdown here always
+           shows that one fixed option; nothing about the live scrape or
+           the backend comparison logic changes (see frontend/app.js's
+           MMM_BRANCHES comment and backend/scrapers/mymoneymaster.adapter.js,
+           which is untouched and still ignores any incoming branch value). -->
       <div class="field">
         <label>Money changer</label>
         <div class="checkbox-row">
           <input type="checkbox" id="srcMMM" value="mymoneymaster" checked>
           <label for="srcMMM">My Money Master</label>
         </div>
+        <div class="branch-field" id="branchField-mymoneymaster"></div>
         <div class="checkbox-row">
           <input type="checkbox" id="srcTM" value="tajmuhabath" checked>
           <label for="srcTM">Taj Muhabath</label>

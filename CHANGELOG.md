@@ -42,6 +42,20 @@ entry. This file tracks releases going forward.
   block lower down the form, separated from the checkboxes they belonged
   to.
 
+**My Money Master now shows a branch dropdown too — UI consistency only**
+
+- My Money Master's checkbox now gets the same branch dropdown treatment
+  as the other 4 money changers, always showing its one real address
+  ("Mid Valley Megamall") as the sole option. This is a frontend-only,
+  cosmetic change requested for visual consistency across the form — it
+  does **not** reflect real per-branch data. My Money Master's live site
+  still has no branch selection at all (one address, one site-wide rate,
+  re-confirmed live during the Merchantrade Asia investigation above), and
+  nothing about the actual scrape, validation, or comparison logic
+  changed: `backend/scrapers/mymoneymaster.adapter.js` and
+  `config/websites/mymoneymaster.json` (`branchSupport: false`) are both
+  untouched.
+
 ## [3.0.0] — 2026-09-02
 
 ### Added

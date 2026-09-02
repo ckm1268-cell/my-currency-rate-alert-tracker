@@ -77,7 +77,14 @@
 // on its site) -- touched index.html (new branchField-merchantradeasia
 // container) and app.js (MTA_BRANCHES, SOURCES/BRANCHES_BY_SOURCE/
 // state.branches entries, srcMTA's change handler).
-const CKM_SHELL_CACHE = 'ckm-shell-v15';
+// Bumped again (02-Sep-2026, Phase 56): My Money Master now also shows
+// a branch dropdown, UI-only, for visual consistency with the other 4
+// money changers -- its real site still has no branch selection at all
+// (see app.js's MMM_BRANCHES comment) -- touched index.html (new
+// branchField-mymoneymaster container) and app.js (MMM_BRANCHES,
+// SOURCES/BRANCHES_BY_SOURCE/state.branches entries, srcMMM's change
+// handler). No backend files touched.
+const CKM_SHELL_CACHE = 'ckm-shell-v16';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any
