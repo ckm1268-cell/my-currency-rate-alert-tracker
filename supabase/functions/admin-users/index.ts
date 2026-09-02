@@ -55,7 +55,23 @@
 // Project Settings -> API Keys, not the retired legacy key.
 // =============================================================================
 
-import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+// Bug fix (02-Sep-2026): this was pinned to @2.45.4 -- a version from
+// well before Supabase's newer publishable/secret API key format and
+// asymmetric (JWT Signing Keys / ES256) JWT signing existed. Both this
+// project's frontend (frontend/index.html's unpinned `@supabase/supabase-js@2`
+// CDN import, currently resolving to 2.112.4 in production -- confirmed
+// live via this function's own request logs, request.headers.x_client_info)
+// and its backend scheduler (backend/package.json's `^2.45.0`, resolved to
+// 2.112.4 in backend/package-lock.json) have long since moved on to a
+// current 2.x release. A live-captured invocation of this exact function
+// showed a REAL, unexpired ES256-signed session token (confirmed correct
+// issuer, role, ~36 minutes left before expiry) still getting rejected by
+// admin.auth.getUser(jwt) below -- consistent with this stale SDK version
+// not correctly handling a SERVICE_ROLE_KEY in the newer sb_secret_...
+// format, or the newer ES256-signed tokens it's being asked to verify.
+// Pinned to the exact same version already proven working everywhere else
+// in this project, rather than an untested "latest", for consistency.
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.112.4";
 import { corsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;

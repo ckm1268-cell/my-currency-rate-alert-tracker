@@ -303,15 +303,25 @@ you just signed in and your token isn't close to expiring.** This is a
 different failure from the "missing secrets" one above: the two secrets
 ARE present, but `admin.auth.getUser(jwt)` — the Edge Function's own
 server-side check of your session, independent of anything `admin.js`
-already checked client-side — is failing anyway. As of the 02-Sep-2026 fix,
-this function logs the *real* reason instead of hiding it behind a generic
-message and retries once automatically before giving up (rules out a
-one-off network blip). Check Supabase Dashboard → Edge Functions →
-`admin-users` → Logs for a line starting `admin-users: auth.getUser(jwt)
-failed:` — its `message`/`status`/`code` fields tell you which of these
-it actually is:
-1. **`SERVICE_ROLE_KEY` (or `SUPABASE_URL`) is stale or wrong** — by far
-   the most likely cause if this project's Supabase API keys were ever
+already checked client-side — is failing anyway.
+
+**Most likely already fixed (02-Sep-2026):** this function's own
+`@supabase/supabase-js` import was pinned to `2.45.4`, a version old
+enough to predate this project's move to the newer publishable/secret API
+key format and asymmetric (ES256) JWT signing — confirmed live via
+Supabase Dashboard → Edge Functions → admin-users → Invocations, where a
+rejected request's own logged JWT metadata showed a completely valid,
+correctly-issued, unexpired ES256-signed token still failing this check.
+Every other place this project talks to Supabase was already on `2.112.4`
+in production. Now bumped to match. If you're reading this after that
+fix has been deployed and the 401 is still happening, it logs the *real*
+reason instead of hiding it behind a generic message, and retries once
+automatically before giving up (rules out a one-off network blip). Check
+Supabase Dashboard → Edge Functions → `admin-users` → Logs for a line
+starting `admin-users: auth.getUser(jwt) failed:` — its
+`message`/`status`/`code` fields tell you which of these it actually is:
+1. **`SERVICE_ROLE_KEY` (or `SUPABASE_URL`) is stale or wrong** — the
+   next most likely cause if this project's Supabase API keys were ever
    rotated (see this repo's Aug-2026 key-rotation note near the top of
    this doc) and the Edge Function's own copy of the secret wasn't updated
    to match — unlike the frontend's `supabaseConfig.js` and the scheduler's

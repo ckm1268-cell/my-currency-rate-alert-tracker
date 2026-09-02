@@ -45,22 +45,32 @@ entry. This file tracks releases going forward.
 **Admin panel's `admin-users` Edge Function returned a misleading 401 "Invalid or expired session"**
 
 - Reported live even when the caller's session token had many minutes
-  left before expiring -- the function's `admin.auth.getUser(jwt)` check
-  was failing for some other reason (most likely a stale/mismatched
-  `SERVICE_ROLE_KEY` or `SUPABASE_URL` Edge Function secret, e.g. left
-  over from this project's Aug-2026 API key rotation), but every possible
-  failure reason was silently swallowed and reported as the exact same
-  "sign in again" message, with nothing logged anywhere to tell them
-  apart. `supabase/functions/admin-users/index.ts` now (1) retries the
-  check once after a short delay, ruling out a one-off network blip
-  before it's ever treated as a real failure, and (2) logs the actual
-  error (message/status/code) so it shows up in the function's own
-  Supabase Dashboard logs. **Note:** this makes the true cause
-  diagnosable and rules out transient network errors, but if the root
-  cause turns out to be a stale secret, actually fixing it requires
-  re-setting that secret in the Supabase project -- see ADMIN_SETUP.md's
-  Troubleshooting section for the exact steps; this repo has no way to do
-  that on its own.
+  left before expiring. Investigated with live Supabase Dashboard logs
+  (Edge Functions -> admin-users -> Invocations): confirmed real,
+  reproducing 401s in production, each carrying a genuinely valid,
+  correctly-issued, unexpired session token (right project issuer,
+  "authenticated" role, ~36 minutes left before its own `exp`) -- ruling
+  out "your login actually expired" entirely. Two fixes:
+  1. **Likely root cause, fixed:** the function's own
+     `@supabase/supabase-js` import was pinned to `2.45.4` -- a version
+     from well before this project's Supabase project moved to the newer
+     publishable/secret API key format and asymmetric (ES256) JWT
+     signing (confirmed live: the rejected tokens above were ES256-signed).
+     Every other place this project talks to Supabase (the frontend's
+     unpinned CDN import, the backend scheduler's own dependency) had
+     long since resolved to `2.112.4` in production; only this one
+     function was left behind on a version old enough to plausibly
+     mishandle either the newer `SERVICE_ROLE_KEY` format or the newer
+     token signing scheme when calling `admin.auth.getUser()`. Bumped to
+     `2.112.4` to match everywhere else in this project.
+  2. **Diagnosability, in case the above isn't the whole story:** the
+     `admin.auth.getUser(jwt)` check now retries once after a short
+     delay (rules out a one-off network blip) and logs the real error
+     (message/status/code) so it shows up in the function's own Supabase
+     Dashboard logs instead of being invisible, and the message shown to
+     the user no longer insists "sign in again" is the fix. See
+     ADMIN_SETUP.md's Troubleshooting section for what to check if this
+     recurs after the version bump above.
 
 ### Added
 
