@@ -370,7 +370,20 @@ select:focus, input:focus {
 }
 .branch-field select { width: 100%; }
 
-select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; }
+select:disabled, input:disabled, .checkbox-row.is-disabled { opacity: 0.45; cursor: not-allowed; }
+/* Phase 57 (02-Sep-2026): the "Build Your Alert" form's own lock state
+   (see app.js's setFormLocked()) -- a signed-out visitor's disabled
+   checkbox rows/segmented buttons still need this same not-allowed cursor,
+   which the generic select/input rule above doesn't reach on its own. */
+.form-locked .checkbox-row, #rateTypeSeg button:disabled { cursor: not-allowed; }
+#formLockHint.lock-hint {
+  background: var(--accent-tint);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin: 0 0 18px;
+  color: var(--ink);
+}
 
 .btn-primary {
   width: 100%;

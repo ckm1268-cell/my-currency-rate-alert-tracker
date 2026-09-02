@@ -165,9 +165,10 @@
     // confirmed-different per-branch rates (see JD_BRANCHES above and
     // config/websites/jalinanduta.json's branchNotes).
     { id: "jalinanduta", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.jalinanduta, supportsBranch: true, spreadBias: 0.02, checkboxId: "srcJD" },
-    // Phase 52 (02-Sep-2026) — newest real source, unchecked by default,
-    // same "opt-in until it's earned some track record" precedent Jalinan
-    // Duta itself launched under.
+    // Phase 52 (02-Sep-2026) — newest real source at the time, originally
+    // launched unchecked by default ("opt-in until it's earned some track
+    // record"). Phase 57 (02-Sep-2026) changed every source, including
+    // this one, to checked by default -- see state.sources below.
     { id: "wawasanilham", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.wawasanilham, supportsBranch: true, spreadBias: 0.04, checkboxId: "srcWI" },
   ];
 
@@ -224,7 +225,18 @@
     rateType: "SELL",
     targetRate: 60.5,
     pctChange: 1,
-    sources: { mymoneymaster: true, tajmuhabath: true, merchantradeasia: true, jalinanduta: false, wawasanilham: false },
+    // Phase 57 (02-Sep-2026): every money changer now defaults to checked
+    // -- previously jalinanduta/wawasanilham launched unchecked ("opt-in
+    // until it's earned some track record"); requested explicitly that
+    // all 5 money changers be checked by default.
+    sources: { mymoneymaster: true, tajmuhabath: true, merchantradeasia: true, jalinanduta: true, wawasanilham: true },
+    // Phase 57 (02-Sep-2026) — true whenever the "Build Your Alert" form's
+    // selection controls are disabled (a signed-out visitor may only view
+    // the defaults, not customize them; see setFormLocked() below). Read
+    // by renderBranchFields() so a branch <select> it (re)builds while
+    // locked comes out disabled too, since those controls don't exist yet
+    // when setFormLocked() itself runs and can't be looped over directly.
+    formLocked: false,
     // Phase 52 (02-Sep-2026): `branch` (a single string) replaced with
     // `branches` — an object keyed by source id, one entry per
     // branch-aware source, since more than one can now be selected on the
@@ -1793,12 +1805,59 @@
       if (!sel) return;
       sel.innerHTML = branches.map((b) => `<option value="${b}">${b}</option>`).join("");
       sel.value = (state.branches && state.branches[s.id]) || branches[0] || "";
+      // Phase 57 (02-Sep-2026): this container's whole <select> is torn
+      // down and rebuilt from scratch on every call (checkbox toggle,
+      // saved-alert load, ...), so a static "disable it once" pass over
+      // the DOM (like setFormLocked() does for the form's other fields)
+      // would never reach a select built AFTER that pass ran. Reading
+      // state.formLocked fresh here instead means every rebuild -- no
+      // matter what triggered it -- always comes out in the form's
+      // current locked/unlocked state.
+      sel.disabled = !!state.formLocked;
       sel.addEventListener("change", (e) => {
         state.userEditedForm = true;
         state.branches[s.id] = e.target.value;
       });
     });
   }
+
+  // Phase 57 (02-Sep-2026) — every plain (non-dynamic) control in "Build
+  // Your Alert" that a signed-out visitor must not be able to change.
+  // Deliberately excludes startBtn/resetBtn (a signed-out visitor can
+  // still preview monitoring using the defaults shown -- just can't
+  // customize them) and notifWhatsapp (already permanently disabled,
+  // unrelated to sign-in state). Branch <select>s aren't listed here --
+  // renderBranchFields() above disables/enables those itself, since they
+  // don't exist in the DOM yet the first time this list is used.
+  const LOCKABLE_FIELD_IDS = [
+    "currency", "targetRate", "condition", "pctChange", "interval",
+    "notifEmail", "notifTelegram", "notifPush", "telegramChatId",
+    ...SOURCES.map((s) => s.checkboxId),
+  ];
+
+  // Phase 57 (02-Sep-2026) — locks/unlocks the entire "Build Your Alert"
+  // form. Requested explicitly: "Build Your Alert section for non signed
+  // in user is locked. non signed in user only can use the default values
+  // on screen. Can not change any selection on screen." auth.js's
+  // updateAuthUI() calls this (via window.CKM.setFormLocked, the same
+  // narrow-bridge pattern every other auth.js/app.js hookup in this file
+  // uses) every time the session changes -- unlocked once genuinely
+  // signed in, locked again the moment the session goes away for any
+  // reason. On the sign-out path, auth.js calls resetFormToDefaults()
+  // immediately before locking, so "the default values on screen" is
+  // always literally true at the moment this runs, never whatever the
+  // previous signed-in visitor had customized.
+  function setFormLocked(locked) {
+    state.formLocked = !!locked;
+    LOCKABLE_FIELD_IDS.forEach((id) => { if ($(id)) $(id).disabled = state.formLocked; });
+    document.querySelectorAll("#rateTypeSeg button").forEach((b) => { b.disabled = state.formLocked; });
+    renderBranchFields(); // rebuilds each visible branch <select> with the new locked state applied
+    const formEl = $("alertForm");
+    if (formEl) formEl.classList.toggle("form-locked", state.formLocked);
+    const hint = $("formLockHint");
+    if (hint) hint.style.display = state.formLocked ? "block" : "none";
+  }
+  window.CKM.setFormLocked = setFormLocked;
 
   function wireForm() {
     populateSelects();
@@ -1972,6 +2031,13 @@
     const cur = CURRENCIES.find((c) => c.code === state.currency);
     $("targetRate").value = cur.base.toFixed(cur.decimals);
     wireForm();
+    // Phase 57 (02-Sep-2026): locked by default on every page load -- the
+    // safe assumption until auth.js's own async session check resolves
+    // and calls window.CKM.setFormLocked(false) for a genuinely signed-in
+    // visitor. Without this, there'd be a brief window on every load where
+    // a signed-out visitor's form is fully interactive before auth.js gets
+    // a chance to lock it.
+    setFormLocked(true);
     wireChartRange();
     renderActivityLog(); // show the empty-state placeholder immediately, before any activity happens
 

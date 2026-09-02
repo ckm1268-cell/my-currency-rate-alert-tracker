@@ -53,6 +53,15 @@
   <section class="form-panel" id="formPanel" aria-labelledby="formHeading">
     <h2 id="formHeading">Build Your Alert</h2>
     <p class="lede">Set a target and the Tracker will watch it for you. Takes under a minute.</p>
+    <!-- Phase 57 (02-Sep-2026): shown only while the form is locked for a
+         signed-out visitor (app.js's setFormLocked() toggles this and
+         disables every field below); hidden the instant they sign in. -->
+    <p class="hint lock-hint" id="formLockHint" style="display:none;">
+      🔒 Sign in to customize this alert. You're seeing the default currency,
+      target rate, money changers and settings — click "Start monitoring"
+      below to preview them as-is, or sign in via your account card to
+      change anything.
+    </p>
 
     <form id="alertForm">
       <div class="field">
@@ -114,12 +123,12 @@
         </div>
         <div class="branch-field" id="branchField-merchantradeasia"></div>
         <div class="checkbox-row">
-          <input type="checkbox" id="srcJD" value="jalinanduta">
+          <input type="checkbox" id="srcJD" value="jalinanduta" checked>
           <label for="srcJD">Jalinan Duta</label>
         </div>
         <div class="branch-field" id="branchField-jalinanduta"></div>
         <div class="checkbox-row">
-          <input type="checkbox" id="srcWI" value="wawasanilham">
+          <input type="checkbox" id="srcWI" value="wawasanilham" checked>
           <label for="srcWI">Wawasan Ilham</label>
         </div>
         <div class="branch-field" id="branchField-wawasanilham"></div>

@@ -84,7 +84,15 @@
 // branchField-mymoneymaster container) and app.js (MMM_BRANCHES,
 // SOURCES/BRANCHES_BY_SOURCE/state.branches entries, srcMMM's change
 // handler). No backend files touched.
-const CKM_SHELL_CACHE = 'ckm-shell-v16';
+// Bumped again (02-Sep-2026, Phase 57): all 5 money changers now default
+// to checked, and "Build Your Alert" locks entirely for a signed-out
+// visitor (only default values shown, nothing changeable until sign-in)
+// -- touched index.html (checked attributes, new #formLockHint), app.js
+// (state.sources defaults, setFormLocked()/LOCKABLE_FIELD_IDS,
+// renderBranchFields()'s disabled sync), auth.js (updateAuthUI() calls
+// setFormLocked()/resetFormToDefaults() on every session change), and
+// styles.css (.lock-hint / not-allowed cursor rules).
+const CKM_SHELL_CACHE = 'ckm-shell-v17';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

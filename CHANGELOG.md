@@ -13,6 +13,21 @@ entry. This file tracks releases going forward.
 
 ### Added
 
+**"Build Your Alert" now locks for signed-out visitors**
+
+- A signed-out visitor now sees the "Build Your Alert" form showing only
+  its default settings (CNY SELL, target 60.50, all 5 money changers
+  checked, "Rate reaches or falls below target", every 5 minutes, Email
+  notifications) -- every field is disabled and cannot be changed until
+  they sign in. "Start monitoring" and "Reset alert" still work, so a
+  signed-out visitor can preview monitoring with these defaults; they just
+  can't customize currency, target rate, money changers, branches,
+  condition, interval, or notification method without an account.
+- All 5 money changers (My Money Master, Taj Muhabath, Merchantrade Asia,
+  Jalinan Duta, Wawasan Ilham) now default to checked -- previously
+  Jalinan Duta and Wawasan Ilham launched unchecked ("opt-in until it's
+  earned some track record").
+
 **Merchantrade Asia is now branch-aware**
 
 - A real "Select Branch" control was found live on Merchantrade Asia's own

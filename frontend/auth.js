@@ -209,6 +209,12 @@
       if (resetForm) resetForm.style.display = "block";
       if (signedInPanel) signedInPanel.style.display = "none";
       if (saveAlertSection) saveAlertSection.style.display = "none";
+      // Phase 57 (02-Sep-2026): mid password-reset isn't a genuine signed-in
+      // editing session either, even though Supabase has issued a real
+      // (temporary) session for it -- keep "Build Your Alert" locked here too.
+      if (typeof window.CKM !== "undefined" && typeof window.CKM.setFormLocked === "function") {
+        window.CKM.setFormLocked(true);
+      }
       return;
     }
 
@@ -220,6 +226,11 @@
       if (resetForm) resetForm.style.display = "none";
       if (signedInPanel) signedInPanel.style.display = "block";
       if (saveAlertSection) saveAlertSection.style.display = "block";
+      // Phase 57 (02-Sep-2026): genuinely signed in -- "Build Your Alert"
+      // becomes fully editable.
+      if (typeof window.CKM !== "undefined" && typeof window.CKM.setFormLocked === "function") {
+        window.CKM.setFormLocked(false);
+      }
       const emailEl = $("authUserEmail");
       if (emailEl) emailEl.textContent = currentSession.user.email || "(no email on session)";
       loadMyAlerts();
@@ -258,6 +269,21 @@
       if (signedInPanel) signedInPanel.style.display = "none";
       if (saveAlertSection) saveAlertSection.style.display = "none";
       stopEditingAlert(); // signed out mid-edit shouldn't leave a stale "Editing..." banner for the next sign-in
+
+      // Phase 57 (02-Sep-2026): not signed in -- "Build Your Alert" shows
+      // ONLY the default values and nothing on it can be changed. Reset
+      // BEFORE locking: resetFormToDefaults() sets form values/state via
+      // loadAlertIntoForm() (plain .value/.checked assignment, unaffected
+      // by the disabled attribute setFormLocked() is about to apply), so
+      // by the time the form is actually locked it's already showing the
+      // real defaults, not whatever a previous signed-in visitor -- or an
+      // expired/another-tab sign-out mid-edit -- had left on screen.
+      if (typeof window.CKM !== "undefined" && typeof window.CKM.resetFormToDefaults === "function") {
+        window.CKM.resetFormToDefaults();
+      }
+      if (typeof window.CKM !== "undefined" && typeof window.CKM.setFormLocked === "function") {
+        window.CKM.setFormLocked(true);
+      }
 
       // Bug fix (28-Aug-2026): the desktop auto-collapse above (see the
       // signed-in branch) adds "form-panel-hidden" to .layout, and its
