@@ -45,6 +45,7 @@
     tajmuhabath: 'Taj Muhabath',
     merchantradeasia: 'Merchantrade Asia',
     jalinanduta: 'Jalinan Duta',
+    wawasanilham: 'Wawasan Ilham', // Phase 52 (02-Sep-2026)
   };
 
   return {

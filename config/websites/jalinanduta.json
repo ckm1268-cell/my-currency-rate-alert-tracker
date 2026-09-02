@@ -6,12 +6,30 @@
   "notes": "Added 24-Aug-2026 in response to a request to add 4 new money changers, whose URLs as given were all pages on klmoneyexchange.com — a THIRD-PARTY rate-comparison/aggregator site ('Compare live exchange rates from 7 KL money changers'), not any of those 4 businesses' own website. Building an adapter against that aggregator and labeling its output as e.g. 'Wawasan Ilham's live rate' would have violated this project's own Core Principle ('Do NOT rely on... Third-party exchange-rate summaries') and Section 25 ('Never silently substitute an alternative source and label it as the original money changer's live rate') — so it was not done. Instead, each of the 4 requested businesses' OWN official domain was investigated for a compliant equivalent (see README.md's Compliance section for the other 3 outcomes: Wawasan Ilham inconclusive/not added, Jags Money and KL Remit Exchange excluded). Jalinan Duta's own site (this file) is the one that checked out: real, plausible current rate data for CNY and 9 other currencies was directly observed in the page's initial HTTP response (a text-extraction fetch, not a raw-HTML/DOM capture — see 'verificationLimitation' below) on 24-Aug-2026, matching this project's existing CURRENCIES list (frontend/app.js) exactly in both magnitude and unit convention (e.g. THB/HKD/CNY quoted per 100, JPY/KRW per 1000, matching frontend/app.js's own CURRENCIES.base values with zero rescaling needed) — a strong signal this is genuine, current, correctly-scaled data rather than a stale or fabricated placeholder.",
   "verificationLimitation": "IMPORTANT — read before relying on this adapter or 'fixing' its selectors from memory. Unlike mymoneymaster.json/tajmuhabath.json/merchantradeasia.json, this config was NOT built from a raw HTML/DOM capture via a real browser session — the development environment this file was authored in has no outbound network access to jalinanduta.com at all (sandboxed egress allowlist), and no headless-browser tool was available for a live DOM inspection either. What WAS available: a text-extraction fetch of https://www.jalinanduta.com/, which rendered the rates table as a clean Markdown table with a 6-column header (Flag | Code | Currency | Unit | We Sell | We Buy) and real-looking numeric data for 10+ currencies. This is enough to be confident the DATA exists and is real, but NOT enough to know the exact HTML tag structure (table id/class, whether it's one <table> or several, whether flag images are real <td>s or CSS backgrounds) the way the other 3 adapters' selectors were confirmed. parseHtml() below is therefore written to be structure-agnostic rather than selector-exact: it reads the table's OWN header row to find which column is which (by header text: 'code', 'unit', 'we sell', 'we buy'), rather than hardcoding column positions or CSS classes that could not be verified. This is more resilient to being slightly wrong about exact markup, but it has genuinely never been run against the live site — the first real run (a developer's machine, or the GitHub Actions runner) is the actual first end-to-end confirmation, exactly as mymoneymaster.json's own notes describe for its own first live run. If it returns EXTRACTION_ERROR on that first run, that is the system correctly reporting 'SOURCE STRUCTURE MAY HAVE CHANGED' (project brief section 23) rather than a sign anything was rushed — inspect the real page's HTML at that point and adjust parseHtml() with actual selectors if the header-driven approach isn't enough.",
   "requiresBrowserAutomation": false,
-  "requiresBrowserAutomationReason": "The rates table's We Sell/We Buy values were present in the initial HTTP response of a fetch of https://www.jalinanduta.com/ (observed 24-Aug-2026) — no client-side JS execution appeared to be required to see the numbers, unlike Taj Muhabath or Wawasan Ilham's branch-select rate board (see README.md). A plain HTTP GET + HTML parser (cheerio) is the primary path, exactly as for My Money Master.",
+  "requiresBrowserAutomationReason": "The rates table's We Sell/We Buy values were present in the initial HTTP response of a fetch of https://www.jalinanduta.com/ (observed 24-Aug-2026), and confirmed again 02-Sep-2026 for each of the 3 branch subpages listed in branches above — no client-side JS execution appeared to be required to see the numbers on any of them, unlike Taj Muhabath. A plain HTTP GET + HTML parser (cheerio) is the primary path, exactly as for My Money Master, just against whichever branch's own URL was requested.",
   "playwrightFallback": true,
   "playwrightFallbackReason": "Same reasoning as mymoneymaster.json: if this page ever moves to client-side-rendered rates, plain-fetch extraction fails validation cleanly (never silently stale) and this fallback re-uses the same header-driven parseHtml() against the rendered DOM of the same URL instead.",
   "extractionMethod": "HTTP_FETCH_HTML_PARSE",
-  "branchSupport": false,
-  "branchNotes": "Jalinan Duta's own site navigation lists 3 separate branch pages (Bukit Bintang, Masjid India, Nu Sentral: /bukit-bintang/, /masjid-india/, /nu-sentral/), suggesting rates may genuinely differ by branch, similar to Taj Muhabath. However, only the homepage (liveRateUrl above) was actually observed to have real rate data during this build; the 3 branch subpages were not fetched or confirmed. Treating this as a single site-wide rate for now (branchSupport: false), same conservative default as My Money Master and Merchantrade Asia, rather than guessing branch-specific behavior that hasn't been checked. Revisit if per-branch rates are confirmed to differ.",
+  "branchSupport": true,
+  "branchNotes": "RESOLVED 02-Sep-2026 (Phase 52): confirmed live via a real fetch of the homepage plus all 3 branch subpages (https://www.jalinanduta.com/bukit-bintang/, /masjid-india/, /nu-sentral/) that rates genuinely differ by branch, not just by page URL — Masjid India in particular: CNY We Sell 60.5000 / We Buy 60.0000, vs Bukit Bintang's We Sell 60.6000 / We Buy 59.8000 and Nu Sentral's We Sell 60.5500 / We Buy 59.8000 (USD showed the same pattern: Masjid India 4.0400/4.0250 vs Bukit Bintang and Nu Sentral both 4.0450/4.0150). The homepage (liveRateUrl above) mirrors Bukit Bintang's own numbers exactly — kept as-is for the compliance/robots.txt read, which covers the whole domain, but fetchRate() below reads from each branch's own subpage URL, not the homepage, so a requested branch always gets that branch's own real numbers rather than an assumed-equal homepage figure. Previously (24-Aug-2026) this was left as branchSupport: false because the 3 branch subpages were named in the site's own navigation but never actually fetched or compared — this resolves that open question with real data instead of a guess, same bar this project holds every other source to. VERIFICATION LIMITATION (branches specifically, 02-Sep-2026): the 3 branch subpages' existence and their DATA differing was confirmed via a text-extraction fetch (WebFetch, run from the cloud side of this session — this repo's own device-bridge shell still has no outbound network access to jalinanduta.com at all, same constraint documented elsewhere in this file), not a raw-HTML/DOM capture. This is enough to know real, different data exists at each branch URL, but NOT enough to guarantee the same header-driven parseHtml() logic that already works against the homepage will find a qualifying table on each branch subpage without any adjustment — same category of gap this file's own verificationLimitation field already describes for the homepage itself, now applying per-branch too. Before trusting a specific branch in production, run `node backend/scripts/checkRate.js jalinanduta CNY masjid-india` (and nu-sentral) from a machine with real network access and confirm status LIVE / validationStatus PASSED, exactly the same bar the original homepage rollout was held to.",
+  "branches": [
+    {
+      "id": "bukit-bintang",
+      "name": "Bukit Bintang",
+      "url": "https://www.jalinanduta.com/bukit-bintang/"
+    },
+    {
+      "id": "masjid-india",
+      "name": "Masjid India",
+      "url": "https://www.jalinanduta.com/masjid-india/"
+    },
+    {
+      "id": "nu-sentral",
+      "name": "Nu Sentral",
+      "url": "https://www.jalinanduta.com/nu-sentral/"
+    }
+  ],
+  "defaultBranch": "bukit-bintang",
   "primarySelector": {
     "description": "A rates table somewhere on liveRateUrl, identified by ITS OWN header row rather than a fixed CSS selector (see verificationLimitation above for why). Header cells are matched case-insensitively, trimmed, against: 'code' (ISO currency code, e.g. 'USD'), 'unit' (the denomination the rate is quoted per, e.g. 100/1000/1000000), 'we sell' (the SELL rate — what the changer sells foreign currency to a customer for, in MYR), 'we buy' (the BUY rate — what the changer pays a customer for foreign currency, in MYR).",
     "page": "https://www.jalinanduta.com/",
@@ -29,18 +47,54 @@
   },
   "validation": {
     "expectedRange": {
-      "CNY": { "min": 40, "max": 80 },
-      "USD": { "min": 3, "max": 5.5 },
-      "SGD": { "min": 2.5, "max": 3.6 },
-      "THB": { "min": 8, "max": 16 },
-      "JPY": { "min": 15, "max": 35 },
-      "KRW": { "min": 2, "max": 4 },
-      "HKD": { "min": 40, "max": 60 },
-      "EUR": { "min": 3.5, "max": 5.5 },
-      "GBP": { "min": 4, "max": 7 },
-      "AUD": { "min": 2, "max": 4 },
-      "VND": { "min": 100, "max": 250 },
-      "TWD": { "min": 8, "max": 20 }
+      "CNY": {
+        "min": 40,
+        "max": 80
+      },
+      "USD": {
+        "min": 3,
+        "max": 5.5
+      },
+      "SGD": {
+        "min": 2.5,
+        "max": 3.6
+      },
+      "THB": {
+        "min": 8,
+        "max": 16
+      },
+      "JPY": {
+        "min": 15,
+        "max": 35
+      },
+      "KRW": {
+        "min": 2,
+        "max": 4
+      },
+      "HKD": {
+        "min": 40,
+        "max": 60
+      },
+      "EUR": {
+        "min": 3.5,
+        "max": 5.5
+      },
+      "GBP": {
+        "min": 4,
+        "max": 7
+      },
+      "AUD": {
+        "min": 2,
+        "max": 4
+      },
+      "VND": {
+        "min": 100,
+        "max": 250
+      },
+      "TWD": {
+        "min": 8,
+        "max": 20
+      }
     },
     "notes": "Ranges are sanity bounds only, set from the single live sample observed 24-Aug-2026 (see primarySelector.liveSampleObservedAt) with generous headroom — widen per-currency as real historical data accumulates, same approach as mymoneymaster.json. The site's own table also lists several rows that look like data-entry artifacts rather than real currencies (e.g. a second 'SARS' row duplicating 'SAR', and a 'SGDB' row with Unit 0) — parseHtml() only ever matches on the exact currencyCode requested, so these never get a chance to be selected, but they're a mild signal to treat this specific source's data with a bit of extra skepticism relative to the other 3. VND added 26-Aug-2026: wasn't in the original 24-Aug-2026 sample (see primarySelector.liveSampleObservedAt, which predates it), but a real production checkRate poll returned VND We Buy 155.00 / We Sell 159.00 (quoted per 1,000,000, matching frontend/app.js's CURRENCIES VND convention), and the project owner independently cross-checked that exact pair against jalinanduta.com live — same 2-step confirmation CNY went through. Range set to {min:100,max:250}, matching merchantradeasia.json's own VND bounds (same order of magnitude, same currency) pending more real history. TWD added 26-Aug-2026 (Phase 38), the only currency this file's expectedRange was still missing relative to this project's full 12-currency dropdown — built around the real value observed live that same day (see primarySelector's Phase 38 note), no separate promotion step, per the project owner's request (see compliance.actionRequired below).",
     "unitConvention": "Confirmed 24-Aug-2026: this site's own Unit column matches frontend/app.js's CURRENCIES[].base convention exactly for all 10 currencies checked (THB/HKD/CNY per 100, JPY/KRW per 1000, everything else per 1) — no rescaling is applied or needed between this adapter's output and what the frontend already expects."

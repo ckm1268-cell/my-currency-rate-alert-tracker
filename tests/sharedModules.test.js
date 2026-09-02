@@ -18,8 +18,9 @@ test('backend/scheduler/run.js\'s SOURCE_DISPLAY_NAMES is frontend/sourceNames.j
 
 test('frontend/sourceNames.js has exactly one entry per registered adapter source', () => {
   const { SOURCE_DISPLAY_NAMES } = require('../frontend/sourceNames.js');
+  // Phase 52 (02-Sep-2026): wawasanilham added, wired into production.
   assert.deepEqual(Object.keys(SOURCE_DISPLAY_NAMES).sort(), [
-    'jalinanduta', 'merchantradeasia', 'mymoneymaster', 'tajmuhabath',
+    'jalinanduta', 'merchantradeasia', 'mymoneymaster', 'tajmuhabath', 'wawasanilham',
   ]);
 });
 

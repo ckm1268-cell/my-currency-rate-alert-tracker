@@ -21,7 +21,7 @@
  */
 
 const assert = require('node:assert');
-const { parseHtml } = require('../backend/scrapers/jalinanduta.adapter');
+const { parseHtml, resolveBranch } = require('../backend/scrapers/jalinanduta.adapter');
 
 const fixtureHtml = `
 <html><body>
@@ -51,6 +51,21 @@ function run() {
   // even though it appears first in document order.
   const navOnlyHtml = `<table><tr><th>Link</th><th>URL</th></tr><tr><td>Home</td><td>/</td></tr></table>`;
   assert.strictEqual(parseHtml(navOnlyHtml, 'CNY'), null, 'a table with no rate-like header must not be matched');
+
+  // --- resolveBranch() (Phase 52, 02-Sep-2026) — real, confirmed-different
+  // branch URLs, per config/websites/jalinanduta.json's branchNotes ---
+  assert.strictEqual(resolveBranch('masjid-india').name, 'Masjid India');
+  assert.strictEqual(resolveBranch('masjid-india').url, 'https://www.jalinanduta.com/masjid-india/');
+  assert.strictEqual(resolveBranch('Masjid India').id, 'masjid-india'); // case-insensitive by name
+  assert.strictEqual(resolveBranch('MASJID INDIA').id, 'masjid-india');
+  assert.strictEqual(resolveBranch('nu-sentral').name, 'Nu Sentral');
+  assert.ok(resolveBranch(undefined), 'no branch requested should fall back to config.defaultBranch');
+  assert.strictEqual(resolveBranch(undefined).id, 'bukit-bintang', 'default branch is Bukit Bintang, matching the homepage\'s own numbers');
+  assert.strictEqual(
+    resolveBranch('Some Branch That Does Not Exist'),
+    null,
+    'an unknown branch must return null, never a silent default to the wrong branch'
+  );
 
   console.log('jalinanduta.adapter.test.js: all assertions passed');
 }

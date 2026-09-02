@@ -29,9 +29,9 @@ test('comboKey is stable and treats a null/missing branch consistently', () => {
 
 test('getRequiredCombos dedupes identical combos across multiple alerts', () => {
   const alerts = [
-    { sources: ['mymoneymaster', 'tajmuhabath'], currency: 'CNY', branch: 'LALAPORT BBCC' },
-    { sources: ['mymoneymaster'], currency: 'CNY', branch: null }, // same mymoneymaster combo as above
-    { sources: ['tajmuhabath'], currency: 'CNY', branch: 'LALAPORT BBCC' }, // same tajmuhabath combo as above
+    { sources: ['mymoneymaster', 'tajmuhabath'], currency: 'CNY', branches: { tajmuhabath: 'LALAPORT BBCC' } },
+    { sources: ['mymoneymaster'], currency: 'CNY', branches: {} }, // same mymoneymaster combo as above
+    { sources: ['tajmuhabath'], currency: 'CNY', branches: { tajmuhabath: 'LALAPORT BBCC' } }, // same tajmuhabath combo as above
   ];
   const combos = getRequiredCombos(alerts);
   assert.equal(combos.length, 2); // not 4 — two alerts share both combos with the first
@@ -41,8 +41,8 @@ test('getRequiredCombos dedupes identical combos across multiple alerts', () => 
 
 test('getRequiredCombos never applies a branch to a source that does not support one', () => {
   // My Money Master publishes one site-wide rate — even if an alert row
-  // somehow has a stray branch value, it must not leak into the combo.
-  const alerts = [{ sources: ['mymoneymaster'], currency: 'CNY', branch: 'Some Branch' }];
+  // somehow has a stray branches entry for it, it must not leak into the combo.
+  const alerts = [{ sources: ['mymoneymaster'], currency: 'CNY', branches: { mymoneymaster: 'Some Branch' } }];
   const combos = getRequiredCombos(alerts);
   assert.equal(combos.length, 1);
   assert.equal(combos[0].branch, null);
@@ -50,11 +50,50 @@ test('getRequiredCombos never applies a branch to a source that does not support
 
 test('getRequiredCombos distinguishes different Taj Muhabath branches as separate combos', () => {
   const alerts = [
-    { sources: ['tajmuhabath'], currency: 'CNY', branch: 'LALAPORT BBCC' },
-    { sources: ['tajmuhabath'], currency: 'CNY', branch: 'Econsave, Balakong' },
+    { sources: ['tajmuhabath'], currency: 'CNY', branches: { tajmuhabath: 'LALAPORT BBCC' } },
+    { sources: ['tajmuhabath'], currency: 'CNY', branches: { tajmuhabath: 'Econsave, Balakong' } },
   ];
   const combos = getRequiredCombos(alerts);
   assert.equal(combos.length, 2);
+});
+
+// Phase 52 (02-Sep-2026) — the actual bug this migration fixes: before this
+// phase, a SINGLE alert.branch value was applied identically to EVERY
+// branch-supporting source an alert selected. Once Wawasan Ilham and
+// Jalinan Duta also became branch-aware, an alert comparing Taj Muhabath +
+// Wawasan Ilham at once would have silently sent Taj Muhabath's branch name
+// to Wawasan Ilham's adapter (or vice versa) -- wrong data, not a crash.
+test('getRequiredCombos gives each branch-aware source selected on the same alert its own correct branch', () => {
+  const alerts = [{
+    sources: ['tajmuhabath', 'wawasanilham', 'jalinanduta'],
+    currency: 'CNY',
+    branches: {
+      tajmuhabath: 'LALAPORT BBCC',
+      wawasanilham: 'Seri Kembangan',
+      jalinanduta: 'Masjid India',
+    },
+  }];
+  const combos = getRequiredCombos(alerts);
+  assert.equal(combos.length, 3);
+  const byBranch = Object.fromEntries(combos.map((c) => [c.source, c.branch]));
+  assert.deepEqual(byBranch, {
+    tajmuhabath: 'LALAPORT BBCC',
+    wawasanilham: 'Seri Kembangan',
+    jalinanduta: 'Masjid India',
+  });
+});
+
+test('getRequiredCombos ignores a branches entry for a source not actually selected on that alert', () => {
+  // A leftover branches entry from a source the user unchecked must not
+  // fabricate a combo for a source that was never actually requested.
+  const alerts = [{
+    sources: ['tajmuhabath'],
+    currency: 'CNY',
+    branches: { tajmuhabath: 'LALAPORT BBCC', wawasanilham: 'Seri Kembangan' },
+  }];
+  const combos = getRequiredCombos(alerts);
+  assert.equal(combos.length, 1);
+  assert.equal(combos[0].source, 'tajmuhabath');
 });
 
 test('getRequiredCombos handles alerts with no sources/malformed input without throwing', () => {
@@ -70,7 +109,7 @@ test('readingsForAlert returns only the readings for this alert\'s selected sour
     ['tajmuhabath::JPY::LALAPORT BBCC', { source: 'tajmuhabath', currency: 'JPY', branch: 'LALAPORT BBCC', sellRate: 23.99 }],
   ]);
 
-  const alert = { sources: ['mymoneymaster', 'tajmuhabath'], currency: 'CNY', branch: 'LALAPORT BBCC' };
+  const alert = { sources: ['mymoneymaster', 'tajmuhabath'], currency: 'CNY', branches: { tajmuhabath: 'LALAPORT BBCC' } };
   const result = readingsForAlert(alert, resultsByComboKey);
 
   assert.equal(result.length, 2);
@@ -84,7 +123,7 @@ test('readingsForAlert silently skips a source with no corresponding combo resul
     // no entry for tajmuhabath::CNY::LALAPORT BBCC — e.g. that combo failed to load an adapter this run
   ]);
 
-  const alert = { sources: ['mymoneymaster', 'tajmuhabath'], currency: 'CNY', branch: 'LALAPORT BBCC' };
+  const alert = { sources: ['mymoneymaster', 'tajmuhabath'], currency: 'CNY', branches: { tajmuhabath: 'LALAPORT BBCC' } };
   const result = readingsForAlert(alert, resultsByComboKey);
 
   assert.equal(result.length, 1);
@@ -152,6 +191,12 @@ test('isSupportedCombo is true for a display-name-matched source only when curre
   assert.equal(isSupportedCombo('merchantradeasia', 'JPY'), true);
   assert.equal(isSupportedCombo('merchantradeasia', 'USD'), true);
   assert.equal(isSupportedCombo('merchantradeasia', 'SGD'), true);
+
+  // Phase 52 (02-Sep-2026) — Wawasan Ilham is display-name-matched too (its
+  // rate table has no ISO-code column), same shape as Merchantrade Asia.
+  assert.equal(isSupportedCombo('wawasanilham', 'CNY'), true);
+  assert.equal(isSupportedCombo('wawasanilham', 'VND'), true);
+  assert.equal(isSupportedCombo('wawasanilham', 'TWD'), true);
 });
 
 test('isSupportedCombo is false for an unknown source, not just an unknown currency', () => {
@@ -249,6 +294,6 @@ test('getSkippedUnsupportedCombos does not report a source that was skipped only
   // Sanity check that skip detection is keyed on isSupportedCombo(source,
   // currency), independent of branch — branch has nothing to do with
   // whether an adapter exists for a currency.
-  const alerts = [{ sources: ['tajmuhabath'], currency: 'CNY', branch: 'LALAPORT BBCC' }];
+  const alerts = [{ sources: ['tajmuhabath'], currency: 'CNY', branches: { tajmuhabath: 'LALAPORT BBCC' } }];
   assert.deepEqual(getSkippedUnsupportedCombos(alerts), []); // tajmuhabath+CNY is supported
 });

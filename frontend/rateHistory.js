@@ -43,8 +43,14 @@
   const RANGE_MS = { "1h": 3600e3, "6h": 6 * 3600e3, "24h": 24 * 3600e3, "7d": 7 * 24 * 3600e3 };
   const RANGE_LABELS = { "1h": "the last hour", "6h": "the last 6 hours", "24h": "the last 24 hours", "7d": "the last 7 days" };
 
-  const SOURCE_LABELS = { mymoneymaster: "My Money Master", tajmuhabath: "Taj Muhabath" };
-  const SOURCE_COLORS = { mymoneymaster: "#2f6fed", tajmuhabath: "#c2650f" }; // distinct, both readable on light/dark
+  // Phase 52 (02-Sep-2026): added Jalinan Duta and Wawasan Ilham. A source
+  // missing here still charts fine (both lookups below already fall back
+  // to the raw id / a generic gray at their call sites) -- this is purely
+  // cosmetic labeling/coloring, unlike frontend/sourceNames.js's shared
+  // SOURCE_DISPLAY_NAMES, which is the real source of truth used
+  // everywhere a name is user-facing rather than just a chart legend.
+  const SOURCE_LABELS = { mymoneymaster: "My Money Master", tajmuhabath: "Taj Muhabath", jalinanduta: "Jalinan Duta", wawasanilham: "Wawasan Ilham" };
+  const SOURCE_COLORS = { mymoneymaster: "#2f6fed", tajmuhabath: "#c2650f", jalinanduta: "#2f9e59", wawasanilham: "#a23b9e" }; // distinct, all readable on light/dark
 
   const $ = (id) => document.getElementById(id);
 
@@ -80,11 +86,16 @@
     if (typeof window.CKM === "undefined" || typeof window.CKM.getState !== "function") return null;
     const state = window.CKM.getState();
     const sourceIds = Object.keys(state.sources || {}).filter((k) => state.sources[k]);
-    return { currency: state.currency, rateType: state.rateType, sourceIds, branch: state.branch };
+    // Phase 52 (02-Sep-2026): branches is a per-source map now (Taj
+    // Muhabath, Wawasan Ilham, Jalinan Duta), not a single branch value.
+    return { currency: state.currency, rateType: state.rateType, sourceIds, branches: { ...(state.branches || {}) } };
   }
 
   function cacheKey(sel, range) {
-    return `${sel.currency}::${sel.rateType}::${sel.sourceIds.slice().sort().join("+")}::${sel.branch}::${range}`;
+    // Stable regardless of key insertion order, so two selections that
+    // pick the same branches in a different order still share a cache entry.
+    const branchesKey = Object.keys(sel.branches || {}).sort().map((k) => `${k}=${sel.branches[k] || ""}`).join(",");
+    return `${sel.currency}::${sel.rateType}::${sel.sourceIds.slice().sort().join("+")}::${branchesKey}::${range}`;
   }
 
   /**
@@ -110,7 +121,16 @@
         .gte("created_at", since)
         .order("created_at", { ascending: true })
         .limit(1000);
-      q = sourceId === "tajmuhabath" && sel.branch ? q.eq("branch", sel.branch) : q.is("branch", null);
+      // Phase 52 -- generalized off which sources actually support branches
+      // (SOURCES' own supportsBranch flag, via getBranchSupportedSourceIds()),
+      // not a single hardcoded "tajmuhabath" check -- Wawasan Ilham and
+      // Jalinan Duta are branch-aware now too, each with its OWN branch
+      // value from sel.branches, never another source's.
+      const branchSupportedIds = (typeof window.CKM !== "undefined" && typeof window.CKM.getBranchSupportedSourceIds === "function")
+        ? window.CKM.getBranchSupportedSourceIds()
+        : ["tajmuhabath"];
+      const branchForThisSource = branchSupportedIds.includes(sourceId) ? (sel.branches || {})[sourceId] : null;
+      q = branchForThisSource ? q.eq("branch", branchForThisSource) : q.is("branch", null);
       return q;
     });
 

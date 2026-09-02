@@ -720,6 +720,57 @@ create trigger on_auth_user_created_notify_admin
   after insert on auth.users
   for each row execute function public.notify_admin_of_new_signup();
 
+-- -----------------------------------------------------------------------------
+-- Phase 52 migration (02-Sep-2026) -- per-source branch selection: branches.
+-- Branch selection used to mean exactly one thing project-wide: Taj
+-- Muhabath's own branch, stored in the single `branch` column above and
+-- applied identically to whichever branch-aware source(s) an alert
+-- selected. That was correct only because Taj Muhabath was the only
+-- branch-aware source that ever existed. Adding real branch selection to
+-- Wawasan Ilham and Jalinan Duta (both real, confirmed-different branch
+-- rates -- see config/websites/wawasanilham.json and jalinanduta.json)
+-- broke that assumption: an alert selecting more than one branch-aware
+-- source at once (the app's own core "compare multiple money changers"
+-- feature) would otherwise silently apply the same branch text to
+-- sources whose branch names have nothing to do with each other.
+--
+-- `branches` replaces `branch` as the real source of truth going forward:
+-- a jsonb object keyed by source id, e.g.
+-- {"tajmuhabath":"LALAPORT BBCC","wawasanilham":"Seri Kembangan"} -- only
+-- entries for sources that are BOTH selected on the alert AND actually
+-- branch-aware are ever written (see frontend/auth.js's saveCurrentAlert()).
+-- The old singular `branch` column is left in place, unused going
+-- forward, matching this file's own established precedent for
+-- notification_method -> notification_methods above (Phase 11) -- never
+-- dropped, so a rollback or an old cached frontend build still has
+-- something sane to read.
+--
+-- Backfill: every existing alert's `branch` value only ever meant
+-- Taj Muhabath (the only source that could have set it), so it is copied
+-- into `branches.tajmuhabath` for any row that has one and doesn't
+-- already have a `branches` entry. Safe to re-run: `add column if not
+-- exists` is a no-op if it's already there, and the backfill UPDATE only
+-- ever touches a row whose `branches` is still the default empty object,
+-- so re-running this after new branches data already exists can never
+-- clobber it.
+--
+-- IMPORTANT DEPLOY-ORDER NOTE: run this migration BEFORE deploying the
+-- frontend change that starts writing `branches` on save -- the new
+-- frontend code sends a `branches` field on every alert insert/update,
+-- and Postgres/PostgREST will reject that write outright ("column
+-- branches does not exist") for EVERY alert save, not just branch-aware
+-- ones, until this column exists. Run this in the Supabase SQL Editor
+-- first, confirm it succeeds, then push the frontend commit.
+-- -----------------------------------------------------------------------------
+
+alter table public.alerts
+  add column if not exists branches jsonb not null default '{}'::jsonb;
+
+update public.alerts
+set branches = jsonb_build_object('tajmuhabath', branch)
+where branch is not null
+  and branches = '{}'::jsonb;
+
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to
 -- get your Project URL / anon key into frontend/supabaseConfig.js, and your

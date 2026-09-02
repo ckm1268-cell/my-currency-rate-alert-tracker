@@ -79,6 +79,11 @@
 
   var DISPLAY_NAME_MATCHED_CURRENCIES = {
     merchantradeasia: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW', 'JPY', 'USD', 'SGD'],
+    // Phase 52 (02-Sep-2026) — Wawasan Ilham matches by the rate table's own
+    // currency-name cell (see config/websites/wawasanilham.json's
+    // currencyDisplayNames), same shape as Merchantrade Asia, not by ISO code.
+    // All 12 of this app's currencies are confirmed present in its own table.
+    wawasanilham: ['CNY', 'VND', 'TWD', 'HKD', 'EUR', 'GBP', 'AUD', 'THB', 'KRW', 'JPY', 'USD', 'SGD'],
   };
 
   var CURRENCY_UNIT = {

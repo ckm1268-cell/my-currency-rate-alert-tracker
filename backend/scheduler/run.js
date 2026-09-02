@@ -170,6 +170,16 @@ const ADAPTERS = {
   // NEW_SOURCES_INVESTIGATION.md for the full trail before touching this
   // adapter's selectors.
   jalinanduta: () => require('../scrapers/jalinanduta.adapter'),
+  // Phase 52 (02-Sep-2026) — verified via a real checkRate.js run (status
+  // LIVE, validationStatus PASSED, CNY 59.15/61.95 at the Seri Kembangan
+  // branch, 01-Sep-2026) plus a robots.txt check (404 — no restriction) and
+  // a Terms of Use check (genuinely no ToU/ToS/Privacy page exists anywhere
+  // on the site), both done live from this session on 02-Sep-2026 — see
+  // config/websites/wawasanilham.json's compliance section for the full
+  // trail. Also newly supports branch selection — see BRANCH_SUPPORTED_SOURCES
+  // in backend/scheduler/comboSelection.js, which reads this generically off
+  // config.branchSupport rather than needing a change here.
+  wawasanilham: () => require('../scrapers/wawasanilham.adapter'),
 };
 
 // Phase 49 (29-Aug-2026): this used to be a hand-typed object literal

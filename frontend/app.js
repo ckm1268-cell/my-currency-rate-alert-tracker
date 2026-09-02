@@ -66,6 +66,34 @@
     "AEON MALL CHERAS SELATAN",
   ];
 
+  // Phase 52 (02-Sep-2026) — real branch names, verified from
+  // config/websites/wawasanilham.json's own branches array (captured
+  // directly from the site's live <select id="branch_id"> during the
+  // project owner's own browser session, 01-Sep-2026). Index 0 (NSK Trade
+  // City, Kuchai Lama = branch_id "1") matches the adapter's own
+  // config.defaultBranch, so it's the sensible default here too.
+  const WI_BRANCHES = [
+    "NSK Trade City, Kuchai Lama", "Chowkit", "Seri Kembangan",
+    "Bandar Puteri", "Melawati Mall",
+  ];
+
+  // Phase 52 (02-Sep-2026) — real branch names, verified live 02-Sep-2026
+  // by fetching jalinanduta.com's homepage and all 3 branch subpages and
+  // confirming their CNY/USD rates genuinely differ (see
+  // config/websites/jalinanduta.json's branchNotes for the actual
+  // numbers). "Bukit Bintang" is first/default because the homepage's own
+  // rates match Bukit Bintang's subpage exactly.
+  const JD_BRANCHES = ["Bukit Bintang", "Masjid India", "Nu Sentral"];
+
+  // Phase 52 — which BRANCHES list backs each branch-aware source's own
+  // dropdown (see renderBranchFields() below). One place to add a 4th
+  // branch-aware source later, instead of a new hardcoded if/else.
+  const BRANCHES_BY_SOURCE = {
+    tajmuhabath: TM_BRANCHES,
+    wawasanilham: WI_BRANCHES,
+    jalinanduta: JD_BRANCHES,
+  };
+
   // checkboxId added 25-Aug-2026 (bug fix, see loadAlertIntoForm() below): each
   // source's money-changer checkbox <input id>, so state.sources can be
   // rebuilt and every checkbox re-synced by looping over this ONE list
@@ -86,7 +114,14 @@
     { id: "mymoneymaster", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.mymoneymaster, supportsBranch: false, spreadBias: 0, checkboxId: "srcMMM" },
     { id: "tajmuhabath", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.tajmuhabath, supportsBranch: true, spreadBias: 0.06, checkboxId: "srcTM" },
     { id: "merchantradeasia", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.merchantradeasia, supportsBranch: false, spreadBias: 0.03, checkboxId: "srcMTA" },
-    { id: "jalinanduta", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.jalinanduta, supportsBranch: false, spreadBias: 0.02, checkboxId: "srcJD" },
+    // Phase 52 (02-Sep-2026): supportsBranch flipped false -> true — real,
+    // confirmed-different per-branch rates (see JD_BRANCHES above and
+    // config/websites/jalinanduta.json's branchNotes).
+    { id: "jalinanduta", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.jalinanduta, supportsBranch: true, spreadBias: 0.02, checkboxId: "srcJD" },
+    // Phase 52 (02-Sep-2026) — newest real source, unchecked by default,
+    // same "opt-in until it's earned some track record" precedent Jalinan
+    // Duta itself launched under.
+    { id: "wawasanilham", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.wawasanilham, supportsBranch: true, spreadBias: 0.04, checkboxId: "srcWI" },
   ];
 
   const RATE_TYPE_EXPLAINERS = {
@@ -142,12 +177,23 @@
     rateType: "SELL",
     targetRate: 60.5,
     pctChange: 1,
-    sources: { mymoneymaster: true, tajmuhabath: true, merchantradeasia: true, jalinanduta: false },
-    branch: TM_BRANCHES[13], // LALAPORT BBCC — the branch the Phase 3 backend job explicitly
-    // requests via checkRate.js (see .github/workflows/pages.yml). NOT the page's own
-    // natural default when no branch is selected (that's "THE EXCHANGE TRX", confirmed
-    // live during the Phase 3 build) — LALAPORT BBCC was chosen here specifically to
-    // exercise the branch-selection code path in backend/scrapers/tajmuhabath.adapter.js.
+    sources: { mymoneymaster: true, tajmuhabath: true, merchantradeasia: true, jalinanduta: false, wawasanilham: false },
+    // Phase 52 (02-Sep-2026): `branch` (a single string) replaced with
+    // `branches` — an object keyed by source id, one entry per
+    // branch-aware source, since more than one can now be selected on the
+    // same alert at once (Taj Muhabath, Wawasan Ilham, Jalinan Duta) and
+    // each source's branch names mean nothing to any other source. See
+    // database/schema.sql's Phase 52 migration and renderBranchFields()
+    // below for the full picture.
+    branches: {
+      tajmuhabath: TM_BRANCHES[13], // LALAPORT BBCC — the branch the Phase 3 backend job explicitly
+      // requests via checkRate.js (see .github/workflows/pages.yml). NOT the page's own
+      // natural default when no branch is selected (that's "THE EXCHANGE TRX", confirmed
+      // live during the Phase 3 build) — LALAPORT BBCC was chosen here specifically to
+      // exercise the branch-selection code path in backend/scrapers/tajmuhabath.adapter.js.
+      wawasanilham: WI_BRANCHES[0], // NSK Trade City, Kuchai Lama — matches config.defaultBranch
+      jalinanduta: JD_BRANCHES[0], // Bukit Bintang — matches the homepage's own default numbers
+    },
     condition: "AT_OR_BELOW",
     interval: 5,
     // Phase 11 — an object of booleans, not one selected value: any
@@ -213,7 +259,7 @@
     rate_type: state.rateType,
     target_rate: state.targetRate,
     sources: Object.keys(state.sources).filter((k) => state.sources[k]),
-    branch: state.branch,
+    branches: { ...state.branches }, // Phase 52 — snapshot, not a live reference
     condition: state.condition,
     pct_change_threshold: state.pctChange,
     monitoring_interval_minutes: state.interval,
@@ -299,6 +345,19 @@
   // config/websites/*.json's branchSupport, this session) instead of
   // hardcoding 'tajmuhabath' a 3rd time in a completely different file.
   window.CKM.getBranchSupportedSourceIds = () => SOURCES.filter((s) => s.supportsBranch).map((s) => s.id);
+  // Phase 52 (02-Sep-2026) — order-independent equality for two
+  // {sourceId: branchName} maps, used everywhere a "does this saved
+  // alert's branch selection match the current form/hero" check used to
+  // just compare two single `branch` strings (auth.js's
+  // getAlertDisplayReading() and resolveLoadedAlertId()). null/undefined
+  // and a missing key are treated the same, matching how `branch || null`
+  // already normalized a single value before this phase.
+  window.CKM.branchesEqual = (a, b) => {
+    const ka = Object.keys(a || {}).filter((k) => (a[k] ?? null) !== null);
+    const kb = Object.keys(b || {}).filter((k) => (b[k] ?? null) !== null);
+    if (ka.length !== kb.length) return false;
+    return ka.every((k) => (a[k] ?? null) === ((b || {})[k] ?? null));
+  };
   // Phase 25 (25-Aug-2026) bug fix — found while fixing the branch-mislabel
   // bug above: auth.js kept its OWN hardcoded copy of source display names
   // (SOURCE_LABELS), which was never updated when merchantradeasia (Phase
@@ -432,12 +491,18 @@
       state.sources[s.id] = selected;
       if ($(s.checkboxId)) $(s.checkboxId).checked = selected;
     });
-    updateBranchAvailability();
-
-    if (row.branch) {
-      state.branch = row.branch;
-      if ($("branch")) $("branch").value = row.branch;
-    }
+    // Phase 52 — row.branches is a per-source map; fall back to the legacy
+    // singular row.branch (a pre-migration row, or a frontend that shipped
+    // before database/schema.sql's Phase 52 migration ran) by treating it
+    // as Taj Muhabath's own branch, the only source a bare `branch` value
+    // could ever have meant.
+    const incomingBranches = row.branches && typeof row.branches === "object" && !Array.isArray(row.branches)
+      ? row.branches
+      : (row.branch ? { tajmuhabath: row.branch } : {});
+    Object.keys(incomingBranches).forEach((sourceId) => {
+      if (incomingBranches[sourceId] != null) state.branches[sourceId] = incomingBranches[sourceId];
+    });
+    renderBranchFields(); // must run after state.sources/state.branches are both set above
 
     state.condition = row.condition || state.condition;
     if ($("condition")) $("condition").value = state.condition;
@@ -997,7 +1062,9 @@
     const list = [];
     SOURCES.forEach((s) => {
       if (!state.sources[s.id]) return;
-      if (s.supportsBranch) list.push({ ...s, branch: state.branch });
+      // Phase 52 — each branch-aware source reads its OWN entry from
+      // state.branches, not a single shared value.
+      if (s.supportsBranch) list.push({ ...s, branch: (state.branches && state.branches[s.id]) || null });
       else list.push({ ...s, branch: null });
     });
     return list;
@@ -1043,7 +1110,8 @@
     // tick's own result keeps the hero and that one matching card always
     // in perfect agreement, with only one walk step per tick either way.
     lastHeroReading = {
-      currency: state.currency, rateType: state.rateType, branch: state.branch,
+      currency: state.currency, rateType: state.rateType,
+      branches: { ...state.branches }, // Phase 52 — was a single `branch` value
       sourceIds: active.map((s) => s.id).slice().sort(),
       best, valid: !!best.valid,
       value: best.valid ? (state.rateType === "SELL" ? best.sellRate : best.buyRate) : null,
@@ -1230,7 +1298,9 @@
 
     const readings = sourceIds.map((sourceId) => {
       const src = SOURCES.find((s) => s.id === sourceId);
-      const branch = src && src.supportsBranch ? alertRow.branch || null : null;
+      // Phase 52 — alertRow.branches is a per-source map now, not a single
+      // alertRow.branch value.
+      const branch = src && src.supportsBranch ? (alertRow.branches && alertRow.branches[sourceId]) || null : null;
       const r = getReading(sourceId, branch, currencyCode);
       const v = validateReading(r, rateType, currencyCode);
       return { ...r, sourceName: src ? src.name : sourceId, valid: v.passed, invalidReason: v.reason };
@@ -1613,24 +1683,59 @@
     const currencySel = $("currency");
     currencySel.innerHTML = CURRENCIES.map((c) => `<option value="${c.code}">${c.code} — ${c.name}</option>`).join("");
     currencySel.value = state.currency;
-
-    const branchSel = $("branch");
-    branchSel.innerHTML = TM_BRANCHES.map((b) => `<option value="${b}">${b}</option>`).join("");
-    branchSel.value = state.branch;
   }
 
-  function updateBranchAvailability() {
-    const branchSel = $("branch");
-    const tmChecked = state.sources.tajmuhabath;
-    branchSel.disabled = !tmChecked;
-    $("branchHint").textContent = tmChecked
-      ? "Applies to Taj Muhabath. My Money Master publishes one site-wide rate."
-      : "Enable Taj Muhabath to choose a branch.";
+  // Phase 52 (02-Sep-2026) replaces updateBranchAvailability(): the old
+  // single, static <select id="branch"> only ever had to handle ONE
+  // branch-aware source (Taj Muhabath). With Wawasan Ilham and Jalinan
+  // Duta also branch-aware, more than one such source can be checked at
+  // once (comparing money changers is this app's own core feature), and
+  // each needs its own dropdown with its own branch list — a shared
+  // dropdown can't represent two sources' branches at the same time. This
+  // rebuilds #branchFieldsContainer's contents from scratch on every call
+  // (checkbox toggle, or a saved alert loading) — one <div class="field">
+  // block per currently-selected branch-aware source, each wired straight
+  // to its own state.branches[sourceId] entry.
+  function renderBranchFields() {
+    const container = $("branchFieldsContainer");
+    if (!container) return;
+
+    const branchSources = SOURCES.filter((s) => s.supportsBranch && state.sources[s.id]);
+
+    if (branchSources.length === 0) {
+      container.innerHTML =
+        '<label>Branch</label>' +
+        '<p class="hint">Enable a branch-aware money changer (Taj Muhabath, Wawasan Ilham, or Jalinan Duta) to choose a branch. ' +
+        'My Money Master and Merchantrade Asia each publish one site-wide rate — no branch selection applies to them.</p>';
+      return;
+    }
+
+    container.innerHTML = branchSources.map((s) => {
+      const selId = `branch__${s.id}`;
+      return (
+        `<div class="field">` +
+        `<label for="${selId}">Branch <span style="text-transform:none; font-weight:400;">(${s.name})</span></label>` +
+        `<select id="${selId}" name="${selId}"></select>` +
+        `</div>`
+      );
+    }).join("");
+
+    branchSources.forEach((s) => {
+      const branches = BRANCHES_BY_SOURCE[s.id] || [];
+      const sel = $(`branch__${s.id}`);
+      if (!sel) return;
+      sel.innerHTML = branches.map((b) => `<option value="${b}">${b}</option>`).join("");
+      sel.value = (state.branches && state.branches[s.id]) || branches[0] || "";
+      sel.addEventListener("change", (e) => {
+        state.userEditedForm = true;
+        state.branches[s.id] = e.target.value;
+      });
+    });
   }
 
   function wireForm() {
     populateSelects();
-    updateBranchAvailability();
+    renderBranchFields();
     if ($("rateTypeHint")) $("rateTypeHint").textContent = RATE_TYPE_EXPLAINERS[state.rateType];
 
     on("currency", "change", (e) => {
@@ -1662,11 +1767,12 @@
     });
 
     on("srcMMM", "change", (e) => { state.userEditedForm = true; state.sources.mymoneymaster = e.target.checked; });
-    on("srcTM", "change", (e) => { state.userEditedForm = true; state.sources.tajmuhabath = e.target.checked; updateBranchAvailability(); });
+    on("srcTM", "change", (e) => { state.userEditedForm = true; state.sources.tajmuhabath = e.target.checked; renderBranchFields(); });
     on("srcMTA", "change", (e) => { state.userEditedForm = true; state.sources.merchantradeasia = e.target.checked; });
-    on("srcJD", "change", (e) => { state.userEditedForm = true; state.sources.jalinanduta = e.target.checked; });
-
-    on("branch", "change", (e) => { state.userEditedForm = true; state.branch = e.target.value; });
+    // Phase 52: srcJD and srcWI now also re-render the branch fields —
+    // both are branch-aware sources as of this phase.
+    on("srcJD", "change", (e) => { state.userEditedForm = true; state.sources.jalinanduta = e.target.checked; renderBranchFields(); });
+    on("srcWI", "change", (e) => { state.userEditedForm = true; state.sources.wawasanilham = e.target.checked; renderBranchFields(); });
 
     on("condition", "change", (e) => {
       state.userEditedForm = true;
@@ -1736,7 +1842,7 @@
       const cur = CURRENCIES.find((c) => c.code === state.currency);
       const key = walkKey("mymoneymaster", null);
       state.walk[key] = state.targetRate - 0.01;
-      const key2 = walkKey("tajmuhabath", state.branch);
+      const key2 = walkKey("tajmuhabath", state.branches.tajmuhabath);
       state.walk[key2] = state.targetRate - 0.01;
       state.forcedMode = null;
       tick();

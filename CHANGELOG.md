@@ -47,6 +47,23 @@ entry. This file tracks releases going forward.
   rate, same ambiguity USD had until Phase 44 — the project owner picked
   BIG as the standard tier, same as USD.
 
+**New money-changer source & branch selection**
+- Wawasan Ilham is now a fully live source (previously investigated but
+  not built) — its rate table requires a branch to be selected first, so
+  it ships with branch selection using the same pattern as Taj Muhabath.
+  Confirmed live via `checkRate.js wawasanilham CNY` (`LIVE`/`PASSED`) and
+  cross-checked against the project owner's own screenshots of the live
+  site.
+- Jalinan Duta also gained branch selection (Bukit Bintang / Masjid
+  India / Nu Sentral), each confirmed to publish genuinely different
+  rates.
+- Alerts can now select more than one branch-aware source at once, each
+  keeping its own branch choice — previously the app only stored a single
+  shared branch value, which would have silently misapplied one source's
+  branch name to another. Alerts now store a `branches` map instead of one
+  `branch` value; requires the `database/schema.sql` migration to be run
+  before this release is deployed.
+
 ### Fixed
 
 - The Admin Module's "🛡️ Admin" link and "← Back to dashboard" button

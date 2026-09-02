@@ -126,15 +126,18 @@ function comboKey({ source, currency, branch }) {
  * not just true relative to per-browser scraping.
  *
  * `branch` is only ever taken from the alert for sources that actually
- * support branches (currently just "tajmuhabath" — see
- * config/websites/tajmuhabath.json's branchSupport flag). For every other
- * source the combo's branch is always null, even if the alert row happens
- * to have a branch value stored (My Money Master publishes one site-wide
- * rate; a branch value on an alert only ever meant something for a Taj
- * Muhabath row in the first place, per how frontend/auth.js's
- * saveCurrentAlert() writes it).
+ * support branches — BRANCH_SUPPORTED_SOURCES above, read generically
+ * from each config's own branchSupport flag (Taj Muhabath, Wawasan Ilham,
+ * Jalinan Duta as of Phase 52). For every other source the combo's branch
+ * is always null, even if the alert row's `branches` object happens to
+ * have a stray entry for it. Phase 52 (02-Sep-2026): `alert.branches` is
+ * now a per-source map ({"tajmuhabath":"...", "wawasanilham":"..."}), not
+ * a single `alert.branch` string — see database/schema.sql's Phase 52
+ * migration for why a single value stopped being correct the moment a
+ * second branch-aware source existed, and frontend/auth.js's
+ * saveCurrentAlert() for how it's written.
  *
- * @param {Array<{ sources: string[], currency: string, branch?: string|null }>} alerts
+ * @param {Array<{ sources: string[], currency: string, branches?: Record<string,string|null> }>} alerts
  * @returns {Array<{ source: string, currency: string, branch: string|null }>}
  */
 function getRequiredCombos(alerts) {
@@ -147,7 +150,13 @@ function getRequiredCombos(alerts) {
       // isSupportedCombo()'s own comment above for why calling the
       // adapter anyway is wrong, not just noisy.
       if (!isSupportedCombo(source, alert.currency)) return;
-      const branch = BRANCH_SUPPORTED_SOURCES.has(source) ? (alert.branch || null) : null;
+      // Phase 52 (02-Sep-2026): branch now comes from alert.branches[source] —
+      // a per-source map, not a single alert.branch value. See this file's
+      // own header comment update below and database/schema.sql's Phase 52
+      // migration for why: more than one branch-aware source can now be
+      // selected on the same alert (Taj Muhabath, Wawasan Ilham, Jalinan
+      // Duta), each with its own, mutually meaningless branch name.
+      const branch = BRANCH_SUPPORTED_SOURCES.has(source) ? ((alert.branches && alert.branches[source]) || null) : null;
       const combo = { source, currency: alert.currency, branch };
       seen.set(comboKey(combo), combo);
     });
@@ -203,7 +212,8 @@ function readingsForAlert(alert, resultsByComboKey) {
   const sources = Array.isArray(alert.sources) ? alert.sources : [];
   return sources
     .map((source) => {
-      const branch = BRANCH_SUPPORTED_SOURCES.has(source) ? (alert.branch || null) : null;
+      // Phase 52 — same per-source branches map as getRequiredCombos() above.
+      const branch = BRANCH_SUPPORTED_SOURCES.has(source) ? ((alert.branches && alert.branches[source]) || null) : null;
       return resultsByComboKey.get(comboKey({ source, currency: alert.currency, branch }));
     })
     .filter(Boolean);

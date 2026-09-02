@@ -48,6 +48,30 @@ const DEFAULT_USER_AGENT =
 const FETCH_TIMEOUT_MS = 15_000;
 
 /**
+ * Phase 52 (02-Sep-2026) — resolves a requested branch (id or display
+ * name) against config.branches, matching wawasanilham.adapter.js's own
+ * resolveBranch() exactly (same shape, same "never silently guess"
+ * contract). Falls back to config.defaultBranch when no branch was
+ * requested. Returns null for an unrecognized branch rather than
+ * defaulting to the wrong one.
+ *
+ * @param {string} [requestedBranch]
+ * @returns {{ id: string, name: string, url: string } | null}
+ */
+function resolveBranch(requestedBranch) {
+  const branches = config.branches || [];
+  if (!requestedBranch) {
+    return branches.find((b) => b.id === config.defaultBranch) || branches[0] || null;
+  }
+  const needle = String(requestedBranch).trim().toLowerCase();
+  return (
+    branches.find(
+      (b) => b.id === String(requestedBranch) || b.name.toLowerCase() === needle
+    ) || null
+  );
+}
+
+/**
  * Header cell text -> which logical column it is, per
  * config.extraction.headerSynonyms (falls back to a small built-in default
  * if that config block is ever missing, so this never throws on a merely
@@ -152,28 +176,29 @@ async function fetchHtml(url, { signal } = {}) {
   return res.text();
 }
 
-function buildResult({ input, buyRate, sellRate, status, validationStatus, errorMessage }) {
+function buildResult({ input, branch, buyRate, sellRate, status, validationStatus, errorMessage }) {
   return {
     source: config.id,
-    branch: null,
+    branch: branch ?? null,
     currency: input.currencyCode,
     buyRate: buyRate ?? null,
     sellRate: sellRate ?? null,
     retrievedAt: new Date().toISOString(),
-    sourceTimestamp: null, // this page's homepage table does not publish its own per-row timestamp
+    sourceTimestamp: null, // none of this site's pages publish their own per-row timestamp
     status,
     validationStatus,
     ...(errorMessage ? { errorMessage } : {}),
   };
 }
 
-async function runExtraction(html, input) {
+async function runExtraction(html, input, branchName, sourceUrl) {
   let parsed;
   try {
     parsed = parseHtml(html, input.currencyCode);
   } catch (err) {
     return buildResult({
       input,
+      branch: branchName,
       status: 'EXTRACTION_ERROR',
       validationStatus: 'NOT_RUN',
       errorMessage: `Parse threw: ${err.message}`,
@@ -183,11 +208,12 @@ async function runExtraction(html, input) {
   if (!parsed) {
     return buildResult({
       input,
+      branch: branchName,
       status: 'EXTRACTION_ERROR',
       validationStatus: 'NOT_RUN',
       errorMessage:
         `Could not locate a rate table with recognizable Code/We Sell/We Buy headers ` +
-        `containing a "${input.currencyCode}" row on ${config.liveRateUrl}. ` +
+        `containing a "${input.currencyCode}" row on ${sourceUrl || config.liveRateUrl}. ` +
         `Per config/websites/jalinanduta.json's verificationLimitation, this adapter's ` +
         `column discovery was never confirmed against a live run — inspect the real ` +
         `page's HTML now and adjust discoverRateTable()/classifyHeaderCell() if the ` +
@@ -211,6 +237,7 @@ async function runExtraction(html, input) {
   if (!validation.passed) {
     return buildResult({
       input,
+      branch: branchName,
       buyRate,
       sellRate,
       status: 'RATE_VALIDATION_ERROR',
@@ -221,6 +248,7 @@ async function runExtraction(html, input) {
 
   return buildResult({
     input,
+    branch: branchName,
     buyRate,
     sellRate,
     status: 'LIVE',
@@ -229,7 +257,11 @@ async function runExtraction(html, input) {
 }
 
 /**
- * Primary path: plain HTTP GET + cheerio parse.
+ * Primary path: plain HTTP GET + cheerio parse, against whichever
+ * branch's own URL was requested (config.branches — see resolveBranch()
+ * above). Defaults to config.defaultBranch when no branch is given, and
+ * refuses to fetch anything for an unrecognized branch rather than
+ * silently falling back to a different one.
  * @param {import('./rateAdapter.interface').RateAdapterInput} input
  * @returns {Promise<import('./rateAdapter.interface').StandardRateResult>}
  */
@@ -238,15 +270,28 @@ async function fetchRate(input) {
     throw new Error('fetchRate(input): input.currencyCode is required');
   }
 
+  const branch = resolveBranch(input.branch);
+  if (!branch) {
+    return buildResult({
+      input,
+      branch: input.branch || null,
+      status: 'EXTRACTION_ERROR',
+      validationStatus: 'NOT_RUN',
+      errorMessage: `Unknown branch "${input.branch}" — not one of config.branches. ` +
+        `Refusing to guess a branch rather than silently defaulting to the wrong one.`,
+    });
+  }
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
   let html;
   try {
-    html = await fetchHtml(config.liveRateUrl, { signal: controller.signal });
+    html = await fetchHtml(branch.url, { signal: controller.signal });
   } catch (err) {
     return buildResult({
       input,
+      branch: branch.name,
       status: 'SOURCE_UNAVAILABLE',
       validationStatus: 'NOT_RUN',
       errorMessage: `Fetch failed: ${err.message}`,
@@ -255,22 +300,34 @@ async function fetchRate(input) {
     clearTimeout(timeout);
   }
 
-  return runExtraction(html, input);
+  return runExtraction(html, input, branch.name, branch.url);
 }
 
 /**
- * Fallback path: same URL, rendered DOM via Playwright instead of raw HTML —
- * covers the case where the primary path's "rates are present without JS"
- * assumption turns out to be wrong. See config.playwrightFallbackReason.
+ * Fallback path: same branch URL, rendered DOM via Playwright instead of
+ * raw HTML — covers the case where the primary path's "rates are present
+ * without JS" assumption turns out to be wrong. See config.playwrightFallbackReason.
  * @param {import('./rateAdapter.interface').RateAdapterInput} input
  */
 async function fetchRateViaPlaywright(input) {
+  const branch = resolveBranch(input.branch);
+  if (!branch) {
+    return buildResult({
+      input,
+      branch: input.branch || null,
+      status: 'EXTRACTION_ERROR',
+      validationStatus: 'NOT_RUN',
+      errorMessage: `Unknown branch "${input.branch}" — not one of config.branches.`,
+    });
+  }
+
   let chromium;
   try {
     ({ chromium } = require('playwright'));
   } catch (err) {
     return buildResult({
       input,
+      branch: branch.name,
       status: 'SOURCE_UNAVAILABLE',
       validationStatus: 'NOT_RUN',
       errorMessage: `Playwright fallback unavailable: ${err.message}`,
@@ -281,15 +338,16 @@ async function fetchRateViaPlaywright(input) {
   try {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ userAgent: DEFAULT_USER_AGENT });
-    await page.goto(config.liveRateUrl, { waitUntil: 'domcontentloaded', timeout: FETCH_TIMEOUT_MS });
+    await page.goto(branch.url, { waitUntil: 'domcontentloaded', timeout: FETCH_TIMEOUT_MS });
     // Header-driven discovery needs at least one <table> attached with a
     // "Code"-like header cell — see config.waitStrategy.playwrightFallback.
     await page.waitForSelector('table', { timeout: FETCH_TIMEOUT_MS }).catch(() => {});
     const html = await page.content();
-    return runExtraction(html, input);
+    return runExtraction(html, input, branch.name, branch.url);
   } catch (err) {
     return buildResult({
       input,
+      branch: branch.name,
       status: 'SOURCE_UNAVAILABLE',
       validationStatus: 'NOT_RUN',
       errorMessage: `Playwright fetch failed: ${err.message}`,
@@ -312,4 +370,4 @@ async function fetchRateWithFallback(input) {
   return fallback.status === 'LIVE' ? fallback : primary;
 }
 
-module.exports = { fetchRate, fetchRateViaPlaywright, fetchRateWithFallback, parseHtml };
+module.exports = { fetchRate, fetchRateViaPlaywright, fetchRateWithFallback, parseHtml, resolveBranch };

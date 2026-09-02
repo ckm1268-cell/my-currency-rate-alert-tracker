@@ -525,12 +525,21 @@
       ? window.CKM.getBranchSupportedSourceIds()
       : ["tajmuhabath"]; // conservative fallback matching today's only branch-supporting source, if the bridge is ever unavailable
 
+    // Phase 52 (02-Sep-2026): a.branches is a per-source map now, not a
+    // single a.branch value — each source's own label gets its OWN branch
+    // (if any), never another selected source's. Falls back to the legacy
+    // singular a.branch (pre-migration rows) treated as Taj Muhabath's own
+    // branch, the only source it could ever have meant.
+    const branchesForRow = a.branches && typeof a.branches === "object" && !Array.isArray(a.branches)
+      ? a.branches
+      : (a.branch ? { tajmuhabath: a.branch } : {});
     const sources = Array.isArray(a.sources)
       ? a.sources.map((s) => {
           const label = (typeof window.CKM !== "undefined" && typeof window.CKM.getSourceName === "function")
             ? window.CKM.getSourceName(s)
             : s;
-          return (a.branch && branchSupportedIds.includes(s)) ? `${label} (${a.branch})` : label;
+          const branchForThisSource = branchSupportedIds.includes(s) ? branchesForRow[s] : null;
+          return branchForThisSource ? `${label} (${branchForThisSource})` : label;
         }).join(" + ")
       : "—";
     const cond = CONDITION_LABELS[a.condition] || a.condition;
@@ -657,7 +666,10 @@
       heroReading &&
       heroReading.currency === a.currency &&
       heroReading.rateType === a.rate_type &&
-      heroReading.branch === (a.branch || null) &&
+      // Phase 52 — heroReading.branches / a.branches are per-source maps now.
+      (typeof window.CKM.branchesEqual === "function"
+        ? window.CKM.branchesEqual(heroReading.branches, a.branches)
+        : true) &&
       JSON.stringify(heroReading.sourceIds) === JSON.stringify(alertSourceIds);
 
     if (isLoadedAlert) {
@@ -1192,6 +1204,22 @@
       return;
     }
 
+    // Phase 52 (02-Sep-2026): `branch` (a single string, Taj Muhabath only)
+    // replaced with `branches` — one entry per source that is BOTH
+    // currently selected AND actually branch-aware (Taj Muhabath, Wawasan
+    // Ilham, Jalinan Duta), read generically off SOURCES' own
+    // supportsBranch flag via getBranchSupportedSourceIds() rather than a
+    // hardcoded list — see database/schema.sql's Phase 52 migration for
+    // the full "why" (more than one branch-aware source can now be
+    // selected on the same alert at once).
+    const branchSupportedIds = (typeof window.CKM !== "undefined" && typeof window.CKM.getBranchSupportedSourceIds === "function")
+      ? window.CKM.getBranchSupportedSourceIds()
+      : ["tajmuhabath"]; // conservative fallback if the bridge is ever unavailable
+    const branches = {};
+    branchSupportedIds.forEach((sourceId) => {
+      if (sources.includes(sourceId)) branches[sourceId] = (state.branches && state.branches[sourceId]) || null;
+    });
+
     const row = {
       currency: state.currency,
       rate_type: state.rateType,
@@ -1199,7 +1227,7 @@
       condition: state.condition,
       pct_change_threshold: state.condition === "PCT_CHANGE" ? state.pctChange : null,
       sources,
-      branch: sources.includes("tajmuhabath") ? state.branch : null,
+      branches,
       monitoring_interval_minutes: state.interval,
       notification_methods: notificationMethods,
       // Phase 10: only meaningful (and only ever sent) when Telegram is one
@@ -1293,7 +1321,10 @@
     const matches =
       alert.currency === state.currency &&
       alert.rate_type === state.rateType &&
-      (alert.branch || null) === (state.branch || null) &&
+      // Phase 52 — alert.branches / state.branches are per-source maps now.
+      (typeof window.CKM.branchesEqual === "function"
+        ? window.CKM.branchesEqual(alert.branches, state.branches)
+        : true) &&
       JSON.stringify(alertSourceIds) === JSON.stringify(stateSourceIds);
 
     return matches ? alert.id : null;

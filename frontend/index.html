@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MY Currency Rate Tracker</title>
-<meta name="description" content="Track any currency pair across multiple Malaysian money changers, compare rates side by side, and get alerted the moment your target is reached. My Money Master, Taj Muhabath, and Merchantrade Asia rates are currently retrieved live from the real sites; other currency/money-changer combinations are simulated and clearly labeled while more real connections are added.">
+<meta name="description" content="Track any currency pair across multiple Malaysian money changers, compare rates side by side, and get alerted the moment your target is reached. My Money Master, Taj Muhabath, Merchantrade Asia, Jalinan Duta, and Wawasan Ilham rates are currently retrieved live from the real sites; other currency/money-changer combinations are simulated and clearly labeled while more real connections are added.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -93,13 +93,23 @@
           <input type="checkbox" id="srcJD" value="jalinanduta">
           <label for="srcJD">Jalinan Duta</label>
         </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="srcWI" value="wawasanilham">
+          <label for="srcWI">Wawasan Ilham</label>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="branch">Branch <span style="text-transform:none; font-weight:400;">(Taj Muhabath)</span></label>
-        <select id="branch" name="branch"></select>
-        <p class="hint" id="branchHint">My Money Master publishes one site-wide rate — no branch selection applies to it.</p>
-      </div>
+      <!-- Phase 52 (02-Sep-2026): was a single static <select id="branch">
+           (Taj Muhabath only). Wawasan Ilham and Jalinan Duta are
+           branch-aware now too, and more than one branch-aware source can
+           be selected at once (comparing money changers is this app's own
+           core feature) -- frontend/app.js's renderBranchFields() rebuilds
+           this container's contents on every relevant change: one
+           <div class="field"> block with its own <select> per currently
+           selected branch-aware source, or a plain hint when none is
+           selected. See that function's own header comment for the full
+           "why". -->
+      <div id="branchFieldsContainer"></div>
 
       <div class="field">
         <label for="condition">Alert condition</label>
@@ -399,7 +409,7 @@
          cluttering the production experience. See app.js's init(). -->
     <article class="card test-controls" id="testControlsSection" style="display:none;">
       <div class="card-eyebrow">Test controls — simulated sources only</div>
-      <p>These buttons force the SIMULATED sources into each state so you can see it without waiting for the demo to land on it naturally. They only affect simulated rows — they cannot fake a real My Money Master, Taj Muhabath, or Merchantrade Asia LIVE reading.</p>
+      <p>These buttons force the SIMULATED sources into each state so you can see it without waiting for the demo to land on it naturally. They only affect simulated rows — they cannot fake a real My Money Master, Taj Muhabath, Merchantrade Asia, Jalinan Duta, or Wawasan Ilham LIVE reading.</p>
       <div class="btn-row">
         <button type="button" id="testForceTrigger">Force target reached</button>
         <button type="button" id="testSourceDown">Simulate source unavailable</button>

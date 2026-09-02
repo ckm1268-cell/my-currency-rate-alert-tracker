@@ -1,3 +1,25 @@
+> **Status update (Phase 52, 02-Sep-2026):** Wawasan Ilham is now fully
+> wired into production too — the 5th real source. Its live rate table
+> needs a branch selected first (confirmed via a real live check on
+> 01-Sep-2026, `checkRate.js wawasanilham CNY`, `LIVE`/`PASSED`, and
+> independently cross-checked against the user's own screenshots of the
+> live site), so it ships with branch selection using the same concept as
+> Taj Muhabath, per the user's request. Jalinan Duta also gained branch
+> selection (Bukit Bintang / Masjid India / Nu Sentral — confirmed via
+> `WebFetch` to have genuinely different rates), though its adapter's
+> parsing logic against real per-branch HTML is still unconfirmed by a
+> live run — see `config/websites/jalinanduta.json`'s `branchNotes` for
+> exactly what is/isn't verified and the command to run once real network
+> access is available. My Money Master and Merchantrade Asia's own live
+> pages each publish one site-wide rate with no branch selector, so no
+> branch UI was added for either. Supporting more than one branch-aware
+> source on the same alert required a schema change — each alert now
+> stores a `branches` map (one branch choice per source) instead of a
+> single shared value — see `database/schema.sql`'s Phase 52 migration
+> block, which must be run in the Supabase SQL Editor **before** this
+> commit is deployed (the frontend will send a `branches` field the old
+> schema doesn't have).
+
 > **Status update (v1.0.0, 26-Aug-2026):** Jalinan Duta's live check
 > (`node backend/scripts/checkRate.js jalinanduta CNY`) has since been run
 > and confirmed `LIVE`. It is now fully wired into production — the 4th
