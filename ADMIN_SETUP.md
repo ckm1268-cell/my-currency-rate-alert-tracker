@@ -305,21 +305,36 @@ ARE present, but `admin.auth.getUser(jwt)` — the Edge Function's own
 server-side check of your session, independent of anything `admin.js`
 already checked client-side — is failing anyway.
 
-**Most likely already fixed (02-Sep-2026):** this function's own
-`@supabase/supabase-js` import was pinned to `2.45.4`, a version old
-enough to predate this project's move to the newer publishable/secret API
-key format and asymmetric (ES256) JWT signing — confirmed live via
-Supabase Dashboard → Edge Functions → admin-users → Invocations, where a
-rejected request's own logged JWT metadata showed a completely valid,
-correctly-issued, unexpired ES256-signed token still failing this check.
-Every other place this project talks to Supabase was already on `2.112.4`
-in production. Now bumped to match. If you're reading this after that
-fix has been deployed and the 401 is still happening, it logs the *real*
-reason instead of hiding it behind a generic message, and retries once
-automatically before giving up (rules out a one-off network blip). Check
-Supabase Dashboard → Edge Functions → `admin-users` → Logs for a line
-starting `admin-users: auth.getUser(jwt) failed:` — its
-`message`/`status`/`code` fields tell you which of these it actually is:
+**Most likely already fixed (02-Sep-2026):** `admin.auth.getUser(jwt)` —
+a read-only check of "is this JWT valid, and whose is it" — was being
+verified using a client built from the SECRET/service-role key. A
+documented, real-world case of this exact symptom (a valid caller token
+still rejected, after Supabase's move to opaque `sb_secret_...` /
+`sb_publishable_...` API keys) was fixed by verifying the caller's own
+JWT with a client built from the PUBLISHABLE key instead — the same
+public value `frontend/supabaseConfig.js` already ships to every
+visitor's browser, safe to use here since it grants no privilege by
+itself. Applied here as a second `authClient`, used only for this one
+check; the service-role client is unchanged for everything that
+genuinely needs it (the `profiles.role` lookup and the actual admin
+actions). Confirmed live via Supabase Dashboard → Edge Functions →
+admin-users → Invocations that the rejected requests carried a
+completely valid, correctly-issued, unexpired ES256-signed token, so a
+genuinely expired session was never the cause.
+
+Also fixed at the same time: this function's own `@supabase/supabase-js`
+import was pinned to `2.45.4`, a version old enough to predate this
+project's move to the newer publishable/secret API key format and
+asymmetric (ES256) JWT signing. Every other place this project talks to
+Supabase was already on `2.112.4` in production. Now bumped to match.
+
+If you're reading this after both fixes above have been deployed and the
+401 is still happening, the check also logs the *real* reason instead of
+hiding it behind a generic message, and retries once automatically before
+giving up (rules out a one-off network blip). Check Supabase Dashboard →
+Edge Functions → `admin-users` → Logs for a line starting
+`admin-users: auth.getUser(jwt) failed:` — its `message`/`status`/`code`
+fields tell you which of these it actually is:
 1. **`SERVICE_ROLE_KEY` (or `SUPABASE_URL`) is stale or wrong** — the
    next most likely cause if this project's Supabase API keys were ever
    rotated (see this repo's Aug-2026 key-rotation note near the top of

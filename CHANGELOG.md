@@ -50,8 +50,25 @@ entry. This file tracks releases going forward.
   reproducing 401s in production, each carrying a genuinely valid,
   correctly-issued, unexpired session token (right project issuer,
   "authenticated" role, ~36 minutes left before its own `exp`) -- ruling
-  out "your login actually expired" entirely. Two fixes:
-  1. **Likely root cause, fixed:** the function's own
+  out "your login actually expired" entirely. Three fixes, most targeted
+  first:
+  1. **Most likely actual root cause, fixed:** `admin.auth.getUser(jwt)`
+     -- a read-only check of "is this JWT valid, and whose is it" -- was
+     being called on a client built with the SECRET/service-role key.
+     Research into this project's exact symptom turned up a documented,
+     real-world case of the same thing: after Supabase's move to opaque
+     `sb_secret_...`/`sb_publishable_...` API keys, calling
+     `admin.auth.getUser(jwt)` with a secret-key client can reject a
+     perfectly valid caller token (the secret key isn't JWT-shaped the
+     way the old service-role key was). The fix used there, and applied
+     here: verify the caller's own JWT with a second client built from
+     this app's PUBLISHABLE key instead (the same public value
+     `frontend/supabaseConfig.js` already ships to every visitor's
+     browser -- safe to use for this, since it grants no privilege by
+     itself). The service-role client is unchanged and still used for
+     everything that genuinely needs it (the `profiles.role` lookup,
+     and every list/disable/enable/delete admin action).
+  2. **Also fixed, contributing regardless:** the function's own
      `@supabase/supabase-js` import was pinned to `2.45.4` -- a version
      from well before this project's Supabase project moved to the newer
      publishable/secret API key format and asymmetric (ES256) JWT
@@ -59,18 +76,16 @@ entry. This file tracks releases going forward.
      Every other place this project talks to Supabase (the frontend's
      unpinned CDN import, the backend scheduler's own dependency) had
      long since resolved to `2.112.4` in production; only this one
-     function was left behind on a version old enough to plausibly
-     mishandle either the newer `SERVICE_ROLE_KEY` format or the newer
-     token signing scheme when calling `admin.auth.getUser()`. Bumped to
-     `2.112.4` to match everywhere else in this project.
-  2. **Diagnosability, in case the above isn't the whole story:** the
-     `admin.auth.getUser(jwt)` check now retries once after a short
-     delay (rules out a one-off network blip) and logs the real error
+     function was left behind. Bumped to `2.112.4` to match everywhere
+     else in this project.
+  3. **Diagnosability, in case neither of the above is the whole story:**
+     the caller-JWT check now retries once after a short delay (rules
+     out a one-off network blip) and logs the real error
      (message/status/code) so it shows up in the function's own Supabase
      Dashboard logs instead of being invisible, and the message shown to
      the user no longer insists "sign in again" is the fix. See
      ADMIN_SETUP.md's Troubleshooting section for what to check if this
-     recurs after the version bump above.
+     recurs after the fixes above.
 
 ### Added
 

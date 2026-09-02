@@ -77,6 +77,31 @@ import { corsHeaders } from "../_shared/cors.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SERVICE_ROLE_KEY")!;
 
+// Bug fix (02-Sep-2026), likely the actual root cause: this app's own
+// publishable key -- the exact same value frontend/supabaseConfig.js
+// ships to every visitor's browser in plain text, since it is explicitly
+// designed to be public (safe to expose; access is enforced by RLS, not
+// by hiding this value -- see that file's own header comment). Hardcoded
+// here (rather than read from a secret) precisely BECAUSE it isn't a
+// secret -- there's nothing to configure or keep in sync.
+//
+// Why this exists: research into this project's admin-users 401 bug
+// turned up a real-world report (a Supabase user fixing the same
+// "valid session token still rejected" symptom after Supabase's move to
+// asymmetric JWT signing / the new secret-key format) whose fix was
+// exactly this -- verifying a caller's own session JWT via
+// admin.auth.getUser(jwt) using a client built with the PUBLISHABLE key,
+// never the SECRET/service-role key. That matches this project's own
+// live evidence: a Supabase Dashboard invocation log for this exact
+// function showed a real, unexpired, correctly-issued ES256-signed
+// token still getting rejected by this call. Verifying "is this JWT
+// valid, and whose is it" is a read-only, publicly-permissioned
+// operation that never needed service-role privileges in the first
+// place -- only the profiles.role lookup and the actual admin actions
+// below (list/disable/enable/delete) genuinely need the service-role
+// client, and those are unchanged.
+const PUBLISHABLE_KEY = "sb_publishable_WHj9KO6LMC7f7nO-dCmiHQ_f8mh1-Gy";
+
 // Supabase's Admin API has no literal "ban forever" value — its own docs
 // and examples use a very long finite duration instead. ~100 years is the
 // commonly documented convention for "effectively permanent" until the
@@ -113,6 +138,11 @@ Deno.serve(async (req: Request) => {
   const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+  // See the PUBLISHABLE_KEY comment above -- used ONLY to verify the
+  // caller's own JWT below, never for anything privileged.
+  const authClient = createClient(SUPABASE_URL, PUBLISHABLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 
   try {
     const authHeader = req.headers.get("Authorization") ?? "";
@@ -138,7 +168,7 @@ Deno.serve(async (req: Request) => {
     // -> Logs (search for "auth.getUser(jwt) failed") shows the actual
     // reason instead of nothing -- see ADMIN_SETUP.md's Troubleshooting
     // section for what each cause looks like there and how to fix it.
-    const { data: callerData, error: callerErr } = await getUserWithRetry(admin, jwt);
+    const { data: callerData, error: callerErr } = await getUserWithRetry(authClient, jwt);
     if (callerErr || !callerData?.user) {
       console.error("admin-users: auth.getUser(jwt) failed:", {
         message: callerErr?.message,
