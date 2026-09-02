@@ -154,7 +154,14 @@
     // MMM_BRANCHES above and config/websites/mymoneymaster.json's
     // branchSupport, deliberately left false since that field describes
     // the real site, not this UI choice).
-    { id: "mymoneymaster", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.mymoneymaster, supportsBranch: true, spreadBias: 0, checkboxId: "srcMMM" },
+    // Phase 58 (02-Sep-2026): branchIsCosmetic marks this field as display
+    // only -- renderBranchFields() below reads it to (a) label the field
+    // with just this source's name, not "... branch" (there's only ever
+    // one real address, so "branch" implies a choice that doesn't exist),
+    // and (b) keep the dropdown permanently disabled, regardless of
+    // setFormLocked()'s sign-in-driven lock -- there's nothing real to
+    // select, so it should never invite a click either way.
+    { id: "mymoneymaster", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.mymoneymaster, supportsBranch: true, branchIsCosmetic: true, spreadBias: 0, checkboxId: "srcMMM" },
     { id: "tajmuhabath", name: window.CKM_SOURCE_NAMES.SOURCE_DISPLAY_NAMES.tajmuhabath, supportsBranch: true, spreadBias: 0.06, checkboxId: "srcTM" },
     // Phase 55 (02-Sep-2026): supportsBranch flipped false -> true — a
     // real "Select Branch" control was found live on this site, genuinely
@@ -1796,8 +1803,13 @@
       }
 
       const selId = `branch__${s.id}`;
+      // Phase 58 (02-Sep-2026): a cosmetic-only field (currently just My
+      // Money Master -- see its SOURCES entry's own comment) labels
+      // itself with the source's plain name, not "<name> branch", since
+      // there's no real branch choice behind it.
+      const labelText = s.branchIsCosmetic ? s.name : `${s.name} branch`;
       container.innerHTML =
-        `<label for="${selId}">${s.name} branch</label>` +
+        `<label for="${selId}">${labelText}</label>` +
         `<select id="${selId}" name="${selId}"></select>`;
 
       const branches = BRANCHES_BY_SOURCE[s.id] || [];
@@ -1813,7 +1825,11 @@
       // state.formLocked fresh here instead means every rebuild -- no
       // matter what triggered it -- always comes out in the form's
       // current locked/unlocked state.
-      sel.disabled = !!state.formLocked;
+      // Phase 58 (02-Sep-2026): a cosmetic-only field's dropdown is ALWAYS
+      // disabled, independent of state.formLocked -- there's only ever
+      // one real option, so it stays locked even for a signed-in user who
+      // can freely edit every other field.
+      sel.disabled = s.branchIsCosmetic ? true : !!state.formLocked;
       sel.addEventListener("change", (e) => {
         state.userEditedForm = true;
         state.branches[s.id] = e.target.value;

@@ -13,6 +13,15 @@ entry. This file tracks releases going forward.
 
 ### Added
 
+**My Money Master's branch field is now clearly cosmetic**
+
+- Its label reads just "My Money Master" instead of "My Money Master
+  branch", and the dropdown itself is now permanently disabled (it
+  already only ever offered one option, "Mid Valley Megamall") -- signed
+  in or not. This makes it visually obvious there's nothing to actually
+  select, matching the underlying reality: the real site has no branch
+  selection at all.
+
 **"Build Your Alert" now locks for signed-out visitors**
 
 - A signed-out visitor now sees the "Build Your Alert" form showing only

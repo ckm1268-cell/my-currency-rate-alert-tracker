@@ -92,7 +92,13 @@
 // renderBranchFields()'s disabled sync), auth.js (updateAuthUI() calls
 // setFormLocked()/resetFormToDefaults() on every session change), and
 // styles.css (.lock-hint / not-allowed cursor rules).
-const CKM_SHELL_CACHE = 'ckm-shell-v17';
+// Bumped again (02-Sep-2026, Phase 58): My Money Master's branch field
+// relabeled to just "My Money Master" (was "My Money Master branch") and
+// its dropdown now permanently disabled (cosmetic-only, one fixed
+// option) regardless of sign-in state -- touched app.js only
+// (SOURCES.mymoneymaster's new branchIsCosmetic flag, renderBranchFields()
+// reading it for the label text and the disabled state).
+const CKM_SHELL_CACHE = 'ckm-shell-v18';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any
