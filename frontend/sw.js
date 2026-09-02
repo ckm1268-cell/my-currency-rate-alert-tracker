@@ -111,7 +111,7 @@
 // future non-shell page) is left completely alone, exactly as a
 // cross-origin or non-GET request already was -- see the fetch handler's
 // own comment below for the detail. Touched sw.js only.
-const CKM_SHELL_CACHE = 'ckm-shell-v19';
+const CKM_SHELL_CACHE = 'ckm-shell-v20';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

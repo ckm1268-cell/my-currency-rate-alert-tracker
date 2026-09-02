@@ -89,6 +89,34 @@ entry. This file tracks releases going forward.
 
 ### Added
 
+**Jalinan Duta EXTRACTION_ERROR now explains itself, and the reason is visible on the dashboard**
+
+- Investigated a live EXTRACTION_ERROR reported for Jalinan Duta (Bukit
+  Bintang branch). Re-confirmed the live site's actual structure two
+  independent ways -- a raw fetch and a real Chrome DOM read -- and both
+  found exactly the table/header/row shape this adapter already expects
+  (one `<table>`, headers `Flag/Code/Currency/Unit/We Sell/We Buy`, a
+  clean CNY row within the configured validation range). Could not
+  directly confirm why the scheduled job itself failed (no access to that
+  run's own logs), so rather than guess at the already-verified-correct
+  selectors, `backend/scrapers/jalinanduta.adapter.js` now diagnoses its
+  own failures: a new `diagnoseFailure()` distinguishes "no `<table>` in
+  the response at all" (the strongest sign of a bot/WAF challenge page
+  rather than a real redesign) from "table(s) present but no header this
+  adapter recognizes" (a real redesign) from "a qualifying table was
+  found, but this currency has no matching row." That detail is appended
+  to the stored `errorMessage`, so the next occurrence is self-diagnosing
+  instead of needing another live investigation like this one.
+- The `errorMessage` this produces (and the equivalent one every other
+  adapter already writes for `SOURCE_UNAVAILABLE`/`STALE`/validation
+  failures) already flowed all the way to Supabase and into the frontend's
+  reading objects, but was never actually shown anywhere. It's now a
+  hover tooltip on the affected status pill, in both the hero card and
+  the comparison table (`frontend/app.js`'s `renderHero()` and
+  `renderCompareTable()`), via a new `escapeAttr()` helper (`escapeHtml()`
+  alone isn't safe inside an HTML attribute since it doesn't escape
+  quotes).
+
 **My Money Master's branch field is now clearly cosmetic**
 
 - Its label reads just "My Money Master" instead of "My Money Master

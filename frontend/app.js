@@ -1324,6 +1324,10 @@
 
     $("statusPill").className = "status-pill " + pillClass;
     $("statusPill").textContent = pillText;
+    // Direct DOM property assignment (not innerHTML), so no escaping is
+    // needed here -- same errorMessage now shown as a tooltip in the
+    // comparison table below (see renderCompareTable()).
+    $("statusPill").title = pillClass === "error" ? (best.errorMessage || "") : "";
     $("heroRateLabel").textContent = rateLabel;
     $("heroRateValue").textContent = rateText;
     $("heroTarget").textContent = state.targetRate ? formatRate(state.targetRate) : "—";
@@ -1362,10 +1366,18 @@
       // immediately above this table, for the exact same alert. Dropping
       // the state.monitoring requirement makes state.triggered alone the
       // one source of truth this comment already promised, in both cases.
-      const statusBadge = r.status === "SOURCE_UNAVAILABLE" ? `<span class="status-pill error" style="font-size:.72rem;">⚠ UNAVAILABLE</span>`
-        : r.status === "EXTRACTION_ERROR" ? `<span class="status-pill error" style="font-size:.72rem;">⚠ EXTRACTION ERROR</span>`
-        : r.status === "STALE" ? `<span class="status-pill error" style="font-size:.72rem;">🟠 STALE</span>`
-        : !r.valid ? `<span class="status-pill error" style="font-size:.72rem;">⚠ INVALID</span>`
+      // The captured errorMessage (adapter diagnostics, or a locally
+      // synthesized reason -- see getRealReading()/buildRealReadingFromEntry())
+      // already flows all the way from the scraper through Supabase into
+      // every reading object, but was never actually shown anywhere. Surface
+      // it as a hover tooltip on the error-state pills below rather than
+      // cluttering the table itself -- escapeAttr() (not escapeHtml(), which
+      // doesn't escape quotes) keeps it safe inside the title="..." attribute.
+      const errorTitle = r.errorMessage ? ` title="${escapeAttr(r.errorMessage)}"` : "";
+      const statusBadge = r.status === "SOURCE_UNAVAILABLE" ? `<span class="status-pill error" style="font-size:.72rem;"${errorTitle}>⚠ UNAVAILABLE</span>`
+        : r.status === "EXTRACTION_ERROR" ? `<span class="status-pill error" style="font-size:.72rem;"${errorTitle}>⚠ EXTRACTION ERROR</span>`
+        : r.status === "STALE" ? `<span class="status-pill error" style="font-size:.72rem;"${errorTitle}>🟠 STALE</span>`
+        : !r.valid ? `<span class="status-pill error" style="font-size:.72rem;"${errorTitle}>⚠ INVALID</span>`
         : i === bestIdx && state.triggered ? `<span class="status-pill reached" style="font-size:.72rem;">🔴 REACHED</span>`
         : r.origin === "REAL" ? `<span class="status-pill live" style="font-size:.72rem;">🟢 LIVE</span>`
         : `<span class="status-pill waiting" style="font-size:.72rem;">🟡 WAITING</span>`;
@@ -1709,6 +1721,16 @@
   }
 
   function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+  // Same idea as escapeHtml(), but also escapes quote characters so the
+  // result is safe to drop straight into an HTML attribute value (e.g.
+  // title="..."), not just into text content. escapeHtml() alone is NOT
+  // safe there since a " or ' in the source string would close the
+  // attribute early.
+  function escapeAttr(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+    }[c]));
+  }
 
   // Bug fix (26-Aug-2026, reported): fireAlert()'s "Time:" line used
   // `new Date().toLocaleString()`, which formats using the BROWSER's own

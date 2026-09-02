@@ -94,14 +94,19 @@ function classifyHeaderCell(cellText, synonyms) {
 /**
  * Given a cheerio-loaded document, find the rate table by scanning every
  * <table> for a header row that yields both a "code" and a "sell" column.
- * Returns { $table, columnIndex: {code, sell, buy} } or null if nothing
- * on the page qualifies.
+ * Returns { found, tableCount } where found is either
+ * { $table, columnIndex: {code, sell, buy} } or null if nothing on the
+ * page qualifies, and tableCount is how many <table> elements were on
+ * the page at all (used by diagnoseFailure() below to tell "no tables"
+ * apart from "tables, but none with the right headers").
  */
 function discoverRateTable($) {
   const synonyms = config.extraction && config.extraction.headerSynonyms;
   let found = null;
+  let tableCount = 0;
 
   $('table').each((_, table) => {
+    tableCount++;
     if (found) return; // first qualifying table wins, per config's tableDiscovery note
     const $table = $(table);
     const headerCells = $table.find('tr').first().find('th, td');
@@ -118,25 +123,90 @@ function discoverRateTable($) {
     }
   });
 
-  return found;
+  return { found, tableCount };
+}
+
+/**
+ * Phase 59 (02-Sep-2026) — turns a raw HTML string into a short, concrete
+ * diagnostic sentence for when parseHtml() below fails, so an
+ * EXTRACTION_ERROR's own errorMessage says WHICH of these actually
+ * happened instead of just "could not locate a table":
+ *   1. No <table> tag anywhere in the response at all -- the single
+ *      strongest signal the page returned was NOT the real rates page
+ *      (a bot-check/WAF challenge, a maintenance page, or an error page
+ *      commonly return 200 with ordinary-looking HTML but no <table>).
+ *   2. A <table> exists, but none of them have a header row this
+ *      adapter's own classifyHeaderCell() recognizes as both a "code"
+ *      and a "sell" column -- points at a genuine site redesign.
+ *   3. A qualifying table was found, but no row's code column matched
+ *      the requested currency -- the table exists and looks right, but
+ *      this one currency's own row is missing (removed, or a text
+ *      variant classifyHeaderCell()/the code match didn't anticipate).
+ * Deliberately a plain string match, not a second cheerio parse -- this
+ * only has to be diagnostic-quality, not another extraction path.
+ *
+ * @param {string} html
+ * @param {string} currencyCode
+ * @param {ReturnType<typeof discoverRateTable>} tableResult
+ * @returns {string}
+ */
+function diagnoseFailure(html, currencyCode, tableResult) {
+  const hasTableTag = /<table[\s>]/i.test(html);
+  if (!hasTableTag) {
+    return (
+      `[diagnostic] The response (${html.length} chars) contains NO <table> tag at all. ` +
+      `This usually means the page returned was not the real rates page -- a bot-check/` +
+      `WAF challenge, a maintenance page, or an error page can all return HTTP 200 with a ` +
+      `normal-looking body but no rates table. The live site's real structure was manually ` +
+      `re-confirmed working (a real browser session, DevTools DOM read) shortly before this ` +
+      `code shipped, so a NO-<table> result from the scheduled job specifically -- while a ` +
+      `manual check passes -- points at the requester (this job's own IP/User-Agent) getting ` +
+      `treated differently by the host, not a real site redesign.`
+    );
+  }
+  if (!tableResult || !tableResult.found) {
+    return (
+      `[diagnostic] The response has a <table> tag, but none of the ${tableResult ? tableResult.tableCount : '?'} ` +
+      `table(s) on the page have a header row classifyHeaderCell() recognizes as both a ` +
+      `"code" and a "sell" column. This points at a genuine header-text change on the site ` +
+      `-- inspect the page's real header row text now and update classifyHeaderCell()'s ` +
+      `synonym lists (or config.extraction.headerSynonyms) to match.`
+    );
+  }
+  const codeAppears = new RegExp(currencyCode, 'i').test(html);
+  return (
+    `[diagnostic] A qualifying rate table was found, but no row's code column matched ` +
+    `"${currencyCode}". The text "${currencyCode}" ${codeAppears ? 'DOES' : 'does NOT'} appear ` +
+    `anywhere else in the response, which ${codeAppears
+      ? 'suggests the row exists but in a shape this code did not match (e.g. a table cell ' +
+        'this adapter is not reading, or extra whitespace/formatting around the code) -- ' +
+        'inspect that row directly.'
+      : 'suggests this currency genuinely has no row on this page right now (removed, or ' +
+        'renamed) rather than a parsing bug.'}`
+  );
 }
 
 /**
  * Pure parsing function: given the raw HTML of config.liveRateUrl, extract
  * the buy/sell rate for the requested currency using header-driven column
  * discovery (see file header comment for why no CSS selector is hardcoded).
+ * Returns null on any failure (no qualifying table, or no row matching
+ * this currency code) -- this function's contract is unchanged from
+ * before Phase 59 and is relied on elsewhere, including this file's own
+ * tests. When it does return null, runExtraction() below separately
+ * calls discoverRateTable() + diagnoseFailure() to explain WHY, rather
+ * than this function taking on that job itself.
  *
  * @param {string} html
  * @param {string} currencyCode e.g. "CNY"
- * @returns {{ buyRate: number, sellRate: number } | null} null if no
- *   qualifying table was found, or no row matched this currency code
+ * @returns {{ buyRate: number, sellRate: number } | null}
  */
 function parseHtml(html, currencyCode) {
   const $ = cheerio.load(html);
-  const table = discoverRateTable($);
-  if (!table) return null;
+  const { found } = discoverRateTable($);
+  if (!found) return null;
 
-  const { $table, columnIndex } = table;
+  const { $table, columnIndex } = found;
   const rows = $table.find('tr').slice(1); // skip the header row already consumed
 
   let buyRate = null;
@@ -206,18 +276,25 @@ async function runExtraction(html, input, branchName, sourceUrl) {
   }
 
   if (!parsed) {
+    let diagnostic;
+    try {
+      const $ = cheerio.load(html);
+      const tableResult = discoverRateTable($);
+      diagnostic = diagnoseFailure(html, input.currencyCode, tableResult);
+    } catch (diagErr) {
+      diagnostic = `[diagnostic] Diagnostic re-parse itself threw: ${diagErr.message}`;
+    }
     return buildResult({
       input,
       branch: branchName,
       status: 'EXTRACTION_ERROR',
       validationStatus: 'NOT_RUN',
       errorMessage:
-        `Could not locate a rate table with recognizable Code/We Sell/We Buy headers ` +
-        `containing a "${input.currencyCode}" row on ${sourceUrl || config.liveRateUrl}. ` +
-        `Per config/websites/jalinanduta.json's verificationLimitation, this adapter's ` +
-        `column discovery was never confirmed against a live run — inspect the real ` +
-        `page's HTML now and adjust discoverRateTable()/classifyHeaderCell() if the ` +
-        `page's actual header text differs from what was assumed.`,
+        `Could not locate a "${input.currencyCode}" row in a recognizable Code/We Sell/We Buy ` +
+        `rate table on ${sourceUrl || config.liveRateUrl}. This adapter's extraction logic ` +
+        `was manually confirmed working against this site's real branch pages on 02-Sep-2026 ` +
+        `(see config/websites/jalinanduta.json's branchNotes) -- so a failure here now is ` +
+        `unexpected, not an unverified guess. ${diagnostic}`,
     });
   }
 
