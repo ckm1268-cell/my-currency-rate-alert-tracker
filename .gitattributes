@@ -1,0 +1,37 @@
+# Normalize line endings for all text files to LF in the repository,
+# regardless of the checking-out platform's line-ending conventions
+# (this project is edited from both Windows and Linux environments).
+# Without eol=lf, Git would check these files out using the OS's
+# native line endings on Windows (CRLF), which is not what we want
+# here -- eol=lf pins the working-tree copy to LF too, so `git
+# status` never shows CRLF-vs-LF noise again.
+* text=auto eol=lf
+
+# Explicit text types (redundant with the blanket rule above, but
+# documents intent and guards against future changes to the blanket
+# rule accidentally excluding one of these).
+*.js text eol=lf
+*.mjs text eol=lf
+*.cjs text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sql text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.txt text eol=lf
+LICENSE text eol=lf
+.gitignore text eol=lf
+.env.example text eol=lf
+
+# Binary files -- never touch these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
