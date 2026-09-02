@@ -11,11 +11,7 @@
 > live run — see `config/websites/jalinanduta.json`'s `branchNotes` for
 > exactly what is/isn't verified and the command to run once real network
 > access is available. **Update, same day:** the project owner ran that
-> exact command from their own machine for both masjid-india and
-> nu-sentral — both `LIVE`/`PASSED`, numbers matching the earlier estimate
-> almost exactly. bukit-bintang (the default branch) still hasn't been run
-> with an explicit branch argument, though it shares the identical code
-> path that just passed twice. My Money Master and Merchantrade Asia's own live
+> exact command from their own machine for all 3 branches — masjid-india, nu-sentral, and bukit-bintang — every one returned `LIVE`/`PASSED` with plausible, branch-differentiated CNY numbers. Branch selection for Jalinan Duta is now fully confirmed live, not just plausible. My Money Master and Merchantrade Asia's own live
 > pages each publish one site-wide rate with no branch selector, so no
 > branch UI was added for either. Supporting more than one branch-aware
 > source on the same alert required a schema change — each alert now
