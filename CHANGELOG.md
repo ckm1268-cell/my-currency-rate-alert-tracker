@@ -11,6 +11,37 @@ entry. This file tracks releases going forward.
 
 ## [Unreleased]
 
+### Fixed
+
+**My Money Master permanently showed UNAVAILABLE despite the backend successfully retrieving its rate**
+
+- Root cause: the branch dropdown added for UI consistency (see "My Money
+  Master's branch field is now clearly cosmetic" below) fed its cosmetic
+  branch value ("Mid Valley Megamall") into the same lookup used for real
+  branch-aware sources, which matches Supabase rows by exact branch. My
+  Money Master's adapter has always stored `branch: null` (its real site
+  has no branches), so the lookup could never find the row the backend had
+  just successfully written -- confirmed live via GitHub Actions logs
+  showing `status=LIVE validationStatus=PASSED` for My Money Master on
+  every run, while the dashboard simultaneously showed it as UNAVAILABLE.
+  `activeSourceList()` and `computeAlertReading()` in `frontend/app.js` now
+  look up (and match) any `branchIsCosmetic` source using `branch: null`,
+  regardless of what's shown in its (disabled) dropdown.
+
+**Admin page could silently fail to open, showing the dashboard instead with no error**
+
+- `frontend/sw.js`'s service worker treated every same-origin navigation
+  identically: on success it cached the response under one hardcoded key
+  ('index.html'), and on ANY fetch failure it fell back to that same
+  cached entry -- so a transient hiccup while navigating to `admin.html`
+  could silently serve the cached dashboard at the `/admin.html` URL, with
+  no visible error. Confirmed live: a fresh fetch of `admin.html` from
+  within the wrongly-loaded page succeeded immediately (proving hosting
+  was fine), and a plain reload fixed it. Only the true shell entry page
+  (`index.html` / `/`) now gets this cache-and-fallback treatment; every
+  other navigation is left alone, so a genuine failure shows the browser's
+  own error instead of a different page's content.
+
 ### Added
 
 **My Money Master's branch field is now clearly cosmetic**

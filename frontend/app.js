@@ -1159,8 +1159,26 @@
       if (!state.sources[s.id]) return;
       // Phase 52 — each branch-aware source reads its OWN entry from
       // state.branches, not a single shared value.
-      if (s.supportsBranch) list.push({ ...s, branch: (state.branches && state.branches[s.id]) || null });
-      else list.push({ ...s, branch: null });
+      if (s.supportsBranch) {
+        // Phase 59 (02-Sep-2026) bug fix: a branchIsCosmetic source (currently
+        // only My Money Master) has NO real per-branch data -- its adapter
+        // always writes branch: null to the rates table (see
+        // backend/scrapers/mymoneymaster.adapter.js). Before this fix, this line
+        // passed state.branches.mymoneymaster ("Mid Valley Megamall", set purely
+        // for UI consistency by Phase 56/58) straight into getReading() ->
+        // findSupabaseResult()/findLiveResult(), whose branch match is exact
+        // ("Mid Valley Megamall" !== null) -- so a freshly-fetched, genuinely LIVE
+        // row could never be found, and the dashboard permanently showed My Money
+        // Master as UNAVAILABLE despite the backend successfully retrieving its
+        // rate on every run. branchIsCosmetic sources must look up (and display)
+        // using branch: null, matching what the adapter actually stores -- the
+        // cosmetic branch value stays in state.branches purely for the dropdown's
+        // own display, never reaching the lookup.
+        const lookupBranch = s.branchIsCosmetic ? null : (state.branches && state.branches[s.id]) || null;
+        list.push({ ...s, branch: lookupBranch });
+      } else {
+        list.push({ ...s, branch: null });
+      }
     });
     return list;
   }
@@ -1395,7 +1413,11 @@
       const src = SOURCES.find((s) => s.id === sourceId);
       // Phase 52 — alertRow.branches is a per-source map now, not a single
       // alertRow.branch value.
-      const branch = src && src.supportsBranch ? (alertRow.branches && alertRow.branches[sourceId]) || null : null;
+      // Phase 59 (02-Sep-2026) bug fix -- same root cause as activeSourceList()'s
+      // own Phase 59 comment above: a branchIsCosmetic source must be looked up
+      // with branch: null (matching what its adapter actually stores), never the
+      // cosmetic display value saved on the alert row.
+      const branch = src && src.supportsBranch && !src.branchIsCosmetic ? (alertRow.branches && alertRow.branches[sourceId]) || null : null;
       const r = getReading(sourceId, branch, currencyCode);
       const v = validateReading(r, rateType, currencyCode);
       return { ...r, sourceName: src ? src.name : sourceId, valid: v.passed, invalidReason: v.reason };

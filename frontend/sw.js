@@ -98,7 +98,20 @@
 // option) regardless of sign-in state -- touched app.js only
 // (SOURCES.mymoneymaster's new branchIsCosmetic flag, renderBranchFields()
 // reading it for the label text and the disabled state).
-const CKM_SHELL_CACHE = 'ckm-shell-v18';
+// Bumped again (02-Sep-2026, Phase 59): fixed a bug where ANY same-origin
+// navigation (not just the shell entry page) was being cached under the
+// single hardcoded key 'index.html', and ANY navigation fetch failure fell
+// back to that same cached 'index.html' regardless of which page was
+// actually being navigated to. Confirmed live: navigating to admin.html
+// could silently render the DASHBOARD's cached HTML instead, with the
+// address bar still showing /admin.html and no visible error -- this is
+// what was reported as "can't open the Admin page." Fix: only the true
+// shell entry point (index.html / '/') gets the network-first/cache-
+// fallback treatment now; every other navigation (admin.html and any
+// future non-shell page) is left completely alone, exactly as a
+// cross-origin or non-GET request already was -- see the fetch handler's
+// own comment below for the detail. Touched sw.js only.
+const CKM_SHELL_CACHE = 'ckm-shell-v19';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any
@@ -170,8 +183,27 @@ self.addEventListener('fetch', (event) => {
   if (!isShellFile) return;
 
   if (req.mode === 'navigate') {
-    // Network-first for the page itself, so a user who opens the
-    // installed app while online always gets the current deployed
+    // Phase 59 (02-Sep-2026) bug fix: this used to apply to EVERY
+    // same-origin navigation, not just the shell entry page -- so loading
+    // admin.html (never part of CKM_SHELL_FILES, deliberately, since it
+    // has no meaningful offline fallback) got cached under the same
+    // hardcoded 'index.html' key on success, and ANY navigation fetch
+    // failure fell back to that SAME cached 'index.html' -- silently
+    // serving the dashboard's HTML at whatever URL was actually being
+    // navigated to, with no error and the address bar unchanged. That is
+    // exactly what was reported as "the Admin page won't open": a real
+    // fetch of admin.html succeeded fine when tested directly, but the
+    // in-flight navigation's own fetch had failed once and this fallback
+    // quietly substituted the wrong page. Only the true shell entry point
+    // gets this treatment now; every other navigation falls through to
+    // the "leave it alone" behavior below (same as a cross-origin or
+    // non-GET request already gets), so a genuine failure shows the
+    // browser's normal error instead of a different page's content.
+    const isShellEntryNavigation = path === '' || path === 'index.html';
+    if (!isShellEntryNavigation) return;
+
+    // Network-first for the shell entry page itself, so a user who opens
+    // the installed app while online always gets the current deployed
     // version rather than a cached one going stale over time. Only
     // falls back to the cached shell if the network genuinely fails
     // (offline, or the request errors) — e.g. opening the app with no
