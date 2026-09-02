@@ -297,6 +297,42 @@ command in Step 2 either wasn't run or was run against a different linked
 project than the one `admin.html` is pointed at
 (`frontend/supabaseConfig.js`'s URL).
 
+**A `401` — "Could not verify your session" (or, before the 02-Sep-2026 fix
+below, "Invalid or expired session. Please sign in again.") — even though
+you just signed in and your token isn't close to expiring.** This is a
+different failure from the "missing secrets" one above: the two secrets
+ARE present, but `admin.auth.getUser(jwt)` — the Edge Function's own
+server-side check of your session, independent of anything `admin.js`
+already checked client-side — is failing anyway. As of the 02-Sep-2026 fix,
+this function logs the *real* reason instead of hiding it behind a generic
+message and retries once automatically before giving up (rules out a
+one-off network blip). Check Supabase Dashboard → Edge Functions →
+`admin-users` → Logs for a line starting `admin-users: auth.getUser(jwt)
+failed:` — its `message`/`status`/`code` fields tell you which of these
+it actually is:
+1. **`SERVICE_ROLE_KEY` (or `SUPABASE_URL`) is stale or wrong** — by far
+   the most likely cause if this project's Supabase API keys were ever
+   rotated (see this repo's Aug-2026 key-rotation note near the top of
+   this doc) and the Edge Function's own copy of the secret wasn't updated
+   to match — unlike the frontend's `supabaseConfig.js` and the scheduler's
+   `SUPABASE_SERVICE_ROLE_KEY` GitHub Actions secret, this one is easy to
+   forget since nothing else breaks when it's stale (every other Edge
+   Function call in this file happens after this check, so nothing else in
+   `admin-users` ever gets the chance to fail first and hint at it). Fix:
+   `npx -y supabase@latest secrets list` to confirm it's present, then
+   re-run `npx -y supabase@latest secrets set SERVICE_ROLE_KEY=your-current-sb_secret_key`
+   with the CURRENT value from Project Settings → API Keys, and redeploy
+   (`npx -y supabase@latest functions deploy admin-users`) — updating a
+   secret's value does not reliably reach an already-warm function
+   instance immediately; a redeploy guarantees the new value is used.
+2. **A genuinely bad/garbled token** (rare, and the logged `message` will
+   usually say so explicitly, e.g. mentioning the JWT itself rather than
+   the API key) — signing out and back in on the main dashboard actually
+   does fix this one.
+3. **A transient network error** between this function and Supabase's own
+   Auth server — the automatic retry (above) should already absorb this;
+   if it's still happening repeatedly, it's more likely cause 1.
+
 **(Step 5) No email/Telegram arrives after a test signup.** Check, in order:
 1. Supabase Dashboard → Edge Functions → `notify-admin-signup` → Logs — every
    attempt logs a `notify-admin-signup: {...}` line with per-channel

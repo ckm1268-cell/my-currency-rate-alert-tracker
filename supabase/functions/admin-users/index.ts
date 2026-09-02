@@ -105,9 +105,39 @@ Deno.serve(async (req: Request) => {
       return json({ error: "Missing Authorization header." }, 401);
     }
 
-    const { data: callerData, error: callerErr } = await admin.auth.getUser(jwt);
+    // Bug fix (02-Sep-2026): this call used to be `admin.auth.getUser(jwt)`
+    // directly, once, with no logging at all if it failed -- every possible
+    // failure reason (a genuinely expired/garbled token, a network hiccup
+    // talking to the Auth server, or a stale/mismatched SERVICE_ROLE_KEY or
+    // SUPABASE_URL secret -- e.g. left over from before this project's
+    // Aug-2026 API key rotation, see this file's header comment) was
+    // silently swallowed and reported to the browser as the exact same
+    // "Invalid or expired session. Please sign in again." message, even
+    // when the caller's own token had many minutes left before its own
+    // exp claim and signing in again would fix nothing. Two changes below:
+    // (1) getUserWithRetry() retries once so a one-off network blip
+    // between this function and the Auth server doesn't masquerade as a
+    // real auth failure; (2) the real error is now logged, so the next
+    // time this fires, Supabase Dashboard -> Edge Functions -> admin-users
+    // -> Logs (search for "auth.getUser(jwt) failed") shows the actual
+    // reason instead of nothing -- see ADMIN_SETUP.md's Troubleshooting
+    // section for what each cause looks like there and how to fix it.
+    const { data: callerData, error: callerErr } = await getUserWithRetry(admin, jwt);
     if (callerErr || !callerData?.user) {
-      return json({ error: "Invalid or expired session. Please sign in again." }, 401);
+      console.error("admin-users: auth.getUser(jwt) failed:", {
+        message: callerErr?.message,
+        name: callerErr?.name,
+        status: (callerErr as { status?: number } | undefined)?.status,
+        code: (callerErr as { code?: string } | undefined)?.code,
+        gotUser: !!callerData?.user,
+      });
+      return json(
+        {
+          error:
+            "Could not verify your session. Try signing in again -- if that keeps failing, this is likely a server configuration issue, not your login.",
+        },
+        401
+      );
     }
     const caller = callerData.user;
 
@@ -170,6 +200,18 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Internal error." }, 500);
   }
 });
+
+// One retry, after a short delay, before treating a getUser() failure as
+// final. Rules out a one-off transient network hiccup between this
+// function and Supabase's own Auth server before it's ever surfaced to
+// the caller as an auth failure -- see the bug-fix comment where this is
+// called, above.
+async function getUserWithRetry(admin: SupabaseClient, jwt: string) {
+  const first = await admin.auth.getUser(jwt);
+  if (!first.error) return first;
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  return admin.auth.getUser(jwt);
+}
 
 async function listAllUsers(admin: SupabaseClient) {
   // auth.admin.listUsers() is paginated; walk every page rather than

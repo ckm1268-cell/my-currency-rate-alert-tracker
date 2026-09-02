@@ -42,6 +42,26 @@ entry. This file tracks releases going forward.
   other navigation is left alone, so a genuine failure shows the browser's
   own error instead of a different page's content.
 
+**Admin panel's `admin-users` Edge Function returned a misleading 401 "Invalid or expired session"**
+
+- Reported live even when the caller's session token had many minutes
+  left before expiring -- the function's `admin.auth.getUser(jwt)` check
+  was failing for some other reason (most likely a stale/mismatched
+  `SERVICE_ROLE_KEY` or `SUPABASE_URL` Edge Function secret, e.g. left
+  over from this project's Aug-2026 API key rotation), but every possible
+  failure reason was silently swallowed and reported as the exact same
+  "sign in again" message, with nothing logged anywhere to tell them
+  apart. `supabase/functions/admin-users/index.ts` now (1) retries the
+  check once after a short delay, ruling out a one-off network blip
+  before it's ever treated as a real failure, and (2) logs the actual
+  error (message/status/code) so it shows up in the function's own
+  Supabase Dashboard logs. **Note:** this makes the true cause
+  diagnosable and rules out transient network errors, but if the root
+  cause turns out to be a stale secret, actually fixing it requires
+  re-setting that secret in the Supabase project -- see ADMIN_SETUP.md's
+  Troubleshooting section for the exact steps; this repo has no way to do
+  that on its own.
+
 ### Added
 
 **My Money Master's branch field is now clearly cosmetic**
