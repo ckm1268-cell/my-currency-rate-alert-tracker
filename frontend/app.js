@@ -186,13 +186,21 @@
     // database/schema.sql's Phase 52 migration and renderBranchFields()
     // below for the full picture.
     branches: {
-      tajmuhabath: TM_BRANCHES[13], // LALAPORT BBCC — the branch the Phase 3 backend job explicitly
-      // requests via checkRate.js (see .github/workflows/pages.yml). NOT the page's own
-      // natural default when no branch is selected (that's "THE EXCHANGE TRX", confirmed
-      // live during the Phase 3 build) — LALAPORT BBCC was chosen here specifically to
-      // exercise the branch-selection code path in backend/scrapers/tajmuhabath.adapter.js.
+      // Phase 53 (02-Sep-2026): each entry here is that source's own real
+      // official live-site default branch -- the one already pre-selected
+      // if you open the site yourself and never touch its branch selector
+      // -- per explicit request ("by default the branch is the same as the
+      // official website default branch"). Previously tajmuhabath defaulted
+      // to TM_BRANCHES[13] ("LALAPORT BBCC") instead of its own site
+      // default, a deliberate Phase 3 choice made so the CI smoke-check
+      // (.github/workflows/pages.yml's "Check Taj Muhabath CNY rate" step)
+      // would exercise the branch-selection code path -- that CI step still
+      // explicitly requests "LALAPORT BBCC" by name on purpose and is
+      // untouched by this change; only this UI default moved.
+      tajmuhabath: TM_BRANCHES[0], // THE EXCHANGE TRX — confirmed live (config/websites/tajmuhabath.json's
+      // branchNotes: "The page loads with a default branch already selected").
       wawasanilham: WI_BRANCHES[0], // NSK Trade City, Kuchai Lama — matches config.defaultBranch
-      jalinanduta: JD_BRANCHES[0], // Bukit Bintang — matches the homepage's own default numbers
+      jalinanduta: JD_BRANCHES[0], // Bukit Bintang — matches config.defaultBranch / the homepage's own numbers
     },
     condition: "AT_OR_BELOW",
     interval: 5,
@@ -501,6 +509,19 @@
       : (row.branch ? { tajmuhabath: row.branch } : {});
     Object.keys(incomingBranches).forEach((sourceId) => {
       if (incomingBranches[sourceId] != null) state.branches[sourceId] = incomingBranches[sourceId];
+    });
+    // Phase 53 (02-Sep-2026): a selected branch-aware source this saved
+    // alert has no explicit branch entry for (shouldn't happen after the
+    // Phase 53 database backfill, but stay correct for any row that
+    // predates it, or a future branch-aware source added later) falls back
+    // to that source's own official live-site default branch -- never a
+    // leftover value from whatever alert happened to be loaded into the
+    // form before this one.
+    SOURCES.forEach((s) => {
+      if (s.supportsBranch && state.sources[s.id] && incomingBranches[s.id] == null) {
+        const defaultBranch = (BRANCHES_BY_SOURCE[s.id] || [])[0];
+        if (defaultBranch) state.branches[s.id] = defaultBranch;
+      }
     });
     renderBranchFields(); // must run after state.sources/state.branches are both set above
 

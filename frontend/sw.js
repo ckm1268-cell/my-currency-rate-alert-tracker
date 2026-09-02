@@ -61,7 +61,11 @@
 // to the shell -- frontend/sourceNames.js and frontend/timeFormat.js --
 // touched index.html (two new <script> tags) and app.js (reads from
 // both instead of its own local copies).
-const CKM_SHELL_CACHE = 'ckm-shell-v12';
+// Bumped again (02-Sep-2026, Phase 53): version 3.0.0 marker -- touched
+// index.html's phase chip (v2.0 -> v3.0) and app.js's official-default
+// branch values / loadAlertIntoForm() fallback (see that file's own
+// Phase 53 comments).
+const CKM_SHELL_CACHE = 'ckm-shell-v13';
 
 // Exactly the app's own static shell — every entry is same-origin and
 // something this app ships itself. Deliberately NOT included: any

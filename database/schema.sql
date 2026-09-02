@@ -771,6 +771,53 @@ set branches = jsonb_build_object('tajmuhabath', branch)
 where branch is not null
   and branches = '{}'::jsonb;
 
+-- Phase 53 migration (02-Sep-2026) -- one-time reset of every existing
+-- alert's branch-aware sources to each source's own real official
+-- live-site default branch, as the first data migration onto the new
+-- per-source `branches` shape (see the Phase 52 migration above).
+--
+-- Requested explicitly: "update the respective Money Changer branch to
+-- the official live site default branch for all the saved alert records
+-- as the first migration to the new version." The official defaults,
+-- each confirmed against the live site (not guessed) and documented in
+-- that source's own config/websites/*.json:
+--   tajmuhabath   -> 'THE EXCHANGE TRX' (config's branchNotes: "The page
+--                    loads with a default branch already selected").
+--                    NOTE: this is a genuine correction, not a no-op --
+--                    every existing alert's stored Taj Muhabath branch
+--                    came from frontend/app.js's own old UI default,
+--                    which was DELIBERATELY set to 'LALAPORT BBCC'
+--                    instead (a Phase 3 choice, to exercise the
+--                    branch-selection code path in CI -- see that file's
+--                    own Phase 53 comment) -- never the site's own
+--                    natural default, so no existing row already had
+--                    'THE EXCHANGE TRX' stored by coincidence.
+--   wawasanilham  -> 'NSK Trade City, Kuchai Lama' (config.defaultBranch)
+--   jalinanduta   -> 'Bukit Bintang' (config.defaultBranch)
+--
+-- IMPORTANT: this UPDATE always overwrites, for every alert that has that
+-- source selected -- it does NOT check whether a `branches` entry already
+-- exists first. That is intentional here (a one-time reset to a known
+-- correct value across every existing row, exactly as requested), unlike
+-- the Phase 52 migration above (a backfill that only ever filled in gaps).
+-- Run this ONCE, now, as part of adopting Phase 53. Do NOT re-run it
+-- later after users have started picking their own per-alert branch --
+-- re-running it after that would silently overwrite their real choices
+-- back to these defaults, which is exactly the kind of silent
+-- overwrite this project's own Core Principle exists to prevent.
+update public.alerts
+set branches = branches
+  || case when 'tajmuhabath' = any(sources)
+       then jsonb_build_object('tajmuhabath', 'THE EXCHANGE TRX')
+       else '{}'::jsonb end
+  || case when 'wawasanilham' = any(sources)
+       then jsonb_build_object('wawasanilham', 'NSK Trade City, Kuchai Lama')
+       else '{}'::jsonb end
+  || case when 'jalinanduta' = any(sources)
+       then jsonb_build_object('jalinanduta', 'Bukit Bintang')
+       else '{}'::jsonb end
+where sources && array['tajmuhabath', 'wawasanilham', 'jalinanduta']::text[];
+
 -- =============================================================================
 -- End of schema. After running this, go back to SUPABASE_SETUP.md for how to
 -- get your Project URL / anon key into frontend/supabaseConfig.js, and your

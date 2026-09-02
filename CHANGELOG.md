@@ -11,6 +11,10 @@ entry. This file tracks releases going forward.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [3.0.0] — 2026-09-02
+
 ### Added
 
 **Admin Module — bulk manage user accounts**
@@ -175,6 +179,23 @@ entry. This file tracks releases going forward.
   never actually reading the shared source — and has been fixed the same
   way. A new `tests/sharedModules.test.js` covers the two new files.
   Full test suite verified green: 133/133 (128 previous + 5 new).
+
+**Correct official-site default branches everywhere, and a one-time data migration (Phase 53)**
+- Every branch-aware source's branch dropdown now defaults to that
+  source's own real official live-site default branch (the one already
+  pre-selected if you open the site yourself and never touch its branch
+  selector) the first time its checkbox is checked, or when a saved alert
+  is loaded without its own explicit choice for a source it has selected
+  -- previously Taj Muhabath defaulted to a different branch
+  ("LALAPORT BBCC") chosen deliberately back in Phase 3 to exercise the
+  branch-selection code path in CI, not the site's own natural default
+  ("THE EXCHANGE TRX").
+- One-time migration: every existing saved alert's branch-aware sources
+  were reset to their real official default in the database
+  (`database/schema.sql`'s Phase 53 block) -- `tajmuhabath` to
+  "THE EXCHANGE TRX", `wawasanilham` to "NSK Trade City, Kuchai Lama",
+  `jalinanduta` to "Bukit Bintang" -- so every pre-existing alert now
+  shows and monitors the same branch a fresh alert would default to.
 
 ## [2.0.0] — 2026-08-28
 
