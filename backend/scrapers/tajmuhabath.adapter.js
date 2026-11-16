@@ -40,6 +40,7 @@ const DEFAULT_USER_AGENT =
   '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 const NAV_TIMEOUT_MS = 20_000;
+const BRANCH_LIST_TIMEOUT_MS = 20_000; // time allowed for the site's own getbranchesapi call to populate #dpdBranch
 const SETTLE_WAIT_MS = 4_000; // let staggered row population finish
 
 // How old a row's own "Last Updated" timestamp can be before we flag the
@@ -168,8 +169,61 @@ async function fetchRate(input) {
   try {
     browser = await chromium.launch({ headless: true });
     const page = await browser.newPage({ userAgent: DEFAULT_USER_AGENT });
+    // Watch the page's own backend calls. The branch dropdown and the rate
+    // rows are both filled by XHRs to fx.tajmuhabath.com.my/rbapi/...; when
+    // that backend is down (HTTP 503 observed live 17-Nov-2026) the page
+    // renders with only placeholder options, which is an UPSTREAM OUTAGE, not
+    // a markup change.
+    const upstreamFailures = [];
+    page.on('response', (resp) => {
+      const u = resp.url();
+      if (u.includes('/rbapi/') && resp.status() >= 400) upstreamFailures.push(`HTTP ${resp.status()} ${u}`);
+    });
+    page.on('requestfailed', (req) => {
+      if (req.url().includes('/rbapi/')) upstreamFailures.push(`request failed ${req.url()}`);
+    });
+
     await page.goto(config.liveRateUrl, { waitUntil: 'domcontentloaded', timeout: NAV_TIMEOUT_MS });
     await page.waitForSelector(`${config.primarySelector.tableSelector} tbody tr`, { timeout: NAV_TIMEOUT_MS });
+
+    // Wait for the real branch list (more than the 2 "Select a Branch" placeholders)
+    // and, when a branch was requested, for that exact option to exist.
+    const branchListReady = await page
+      .waitForFunction(
+        ({ sel, label }) => {
+          const el = document.querySelector(sel);
+          if (!el) return false;
+          const labels = Array.from(el.options).map((o) => o.text.trim());
+          return label ? labels.includes(label) : labels.length > 2;
+        },
+        { sel: config.branchSelector, label: input.branch || null },
+        { timeout: BRANCH_LIST_TIMEOUT_MS }
+      )
+      .then(() => true)
+      .catch(() => false);
+
+    if (!branchListReady) {
+      const optionLabels = await page
+        .$$eval(`${config.branchSelector} option`, (os) => os.map((o) => o.text.trim()))
+        .catch(() => []);
+      const placeholdersOnly = optionLabels.length <= 2;
+      return buildResult({
+        input,
+        branch: input.branch || null,
+        // Placeholders only + failing /rbapi/ calls = the site's own backend is down.
+        // A populated list that merely lacks the requested label = branch renamed/removed.
+        status: placeholdersOnly ? 'SOURCE_UNAVAILABLE' : 'EXTRACTION_ERROR',
+        validationStatus: 'NOT_RUN',
+        errorMessage: placeholdersOnly
+          ? `Taj Muhabath's branch list never loaded (only placeholder options: ${optionLabels.join(' | ') || 'none'}). ` +
+            (upstreamFailures.length
+              ? `Its own backend failed: ${upstreamFailures.slice(0, 2).join('; ')}. `
+              : 'No /rbapi/ response was seen (timeout). ') +
+            `This is an upstream outage on the money changer's side, not a selector problem.`
+          : `Branch "${input.branch}" is not in the live branch list (${optionLabels.length} options: ` +
+            `${optionLabels.slice(0, 20).join(' | ')}). The branch may have been renamed or removed.`,
+      });
+    }
 
     let branchUsed = null;
     if (input.branch) {

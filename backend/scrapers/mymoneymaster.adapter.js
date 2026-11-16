@@ -91,40 +91,56 @@ const FETCH_TIMEOUT_MS = 15_000;
  */
 function parseHtml(html, currencyCode) {
   const $ = cheerio.load(html);
-  const { rowSelector, currencyTextSelector, buyCellIndex, sellCellIndex, codeExtractPattern } =
-    config.primarySelector;
-  const codePattern = new RegExp(codeExtractPattern);
+  const wanted = String(currencyCode || '').toUpperCase();
 
+  // ---- Layout 2 (current, redesign observed live 17-Nov-2026) -----------
+  // https://www.mymoneymaster.com.my/index.php/fullrate
+  // <tr class="mmm-frb-row" data-code="cny"> ... <span class="mmm-frb-rate-buy">
+  // ... <span class="mmm-frb-rate-sell"> ... — the ISO code is a plain
+  // lower-case data attribute, so no text-pattern guessing is needed.
+  const cur = config.primarySelector;
   let result = null;
-
-  $(rowSelector).each((_, row) => {
-    if (result) return; // already found it
-
-    const currencyText = $(row).find(currencyTextSelector).first().text().trim();
-    if (!currencyText) return;
-
-    const match = currencyText.match(codePattern);
-    if (!match) return;
-
-    const rowCode = match[1].toUpperCase();
-    if (rowCode !== currencyCode) return;
-
-    const cells = $(row).find('td');
-    if (cells.length <= Math.max(buyCellIndex, sellCellIndex)) return;
-
-    const buyRate = parseFloat($(cells[buyCellIndex]).text().trim());
-    const sellRate = parseFloat($(cells[sellCellIndex]).text().trim());
+  $(cur.rowSelector).each((_, row) => {
+    if (result) return;
+    const rowCode = String($(row).attr(cur.codeAttribute) || '').trim().toUpperCase();
+    if (rowCode !== wanted) return;
+    const buyRate = parseFloat($(row).find(cur.buySelector).first().text().trim());
+    const sellRate = parseFloat($(row).find(cur.sellSelector).first().text().trim());
     if (Number.isNaN(buyRate) || Number.isNaN(sellRate)) return;
-
     result = { buyRate, sellRate };
   });
+  if (result) return result;
 
+  // ---- Layout 1 (legacy, pre-redesign full_rate_board) ------------------
+  // Kept so a rollback of the site (or the old fixture) still parses.
+  const legacy = config.legacySelector;
+  if (!legacy) return null;
+  const codePattern = new RegExp(legacy.codeExtractPattern);
+  $(legacy.rowSelector).each((_, row) => {
+    if (result) return;
+    const currencyText = $(row).find(legacy.currencyTextSelector).first().text().trim();
+    if (!currencyText) return;
+    const match = currencyText.match(codePattern);
+    if (!match || match[1].toUpperCase() !== wanted) return;
+    const cells = $(row).find('td');
+    if (cells.length <= Math.max(legacy.buyCellIndex, legacy.sellCellIndex)) return;
+    const buyRate = parseFloat($(cells[legacy.buyCellIndex]).text().trim());
+    const sellRate = parseFloat($(cells[legacy.sellCellIndex]).text().trim());
+    if (Number.isNaN(buyRate) || Number.isNaN(sellRate)) return;
+    result = { buyRate, sellRate };
+  });
   return result;
 }
 
 async function fetchHtml(url, { signal } = {}) {
   const res = await fetch(url, {
-    headers: { 'User-Agent': DEFAULT_USER_AGENT },
+    headers: {
+      'User-Agent': DEFAULT_USER_AGENT,
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'en-MY,en;q=0.9',
+      'Cache-Control': 'no-cache',
+    },
+    redirect: 'follow',
     signal,
   });
   if (!res.ok) {
@@ -204,7 +220,7 @@ async function fetchRate(input) {
       validationStatus: 'NOT_RUN',
       errorMessage:
         `Could not locate a row for "${input.currencyCode}" on the page ` +
-        `(looked for "( ${input.currencyCode} )" in each row's currency-txt span). ` +
+        `(looked for tr.mmm-frb-row[data-code="${input.currencyCode.toLowerCase()}"], plus the legacy layout). ` +
         `The page's structure may have changed, or this currency genuinely isn't ` +
         `listed there right now — see config/websites/mymoneymaster.json.`,
     });

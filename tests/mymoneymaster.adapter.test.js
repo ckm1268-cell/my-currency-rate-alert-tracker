@@ -151,3 +151,40 @@ test('validateRate rejects a VND reading missing its 1,000,000-unit scaling (e.g
   });
   assert.equal(validation.passed, false);
 });
+
+// ---------------------------------------------------------------------------
+// 17-Nov-2026 redesign (index.php/fullrate, "mmm-frb-*" markup)
+// ---------------------------------------------------------------------------
+const NEW_FIXTURE = fs.readFileSync(
+  path.join(__dirname, 'fixtures', 'mymoneymaster.fullrate.2026-11.sample.html'),
+  'utf8'
+);
+
+test('redesign layout: parseHtml extracts the real captured CNY rate (61.65 / 61.88)', () => {
+  assert.deepEqual(parseHtml(NEW_FIXTURE, 'CNY'), { buyRate: 61.65, sellRate: 61.88 });
+});
+
+test('redesign layout: parseHtml extracts VND, USD and AUD without crossing rows', () => {
+  assert.deepEqual(parseHtml(NEW_FIXTURE, 'VND'), { buyRate: 157.8, sellRate: 159.3 });
+  assert.deepEqual(parseHtml(NEW_FIXTURE, 'USD'), { buyRate: 4.08, sellRate: 4.095 });
+  assert.deepEqual(parseHtml(NEW_FIXTURE, 'AUD'), { buyRate: 2.765, sellRate: 2.7995 });
+});
+
+test('redesign layout: an absent currency returns null (honest failure), not a wrong row', () => {
+  assert.equal(parseHtml(NEW_FIXTURE, 'XXX'), null);
+});
+
+test('redesign layout: the old home-page-without-table response (what the legacy URL now returns) yields null', () => {
+  assert.equal(parseHtml('<html><body><h1>Welcome to MY MONEY MASTER</h1></body></html>', 'CNY'), null);
+});
+
+test('redesign layout: live CNY reading passes validateRate() against the configured range', () => {
+  const { config } = require('../backend/scrapers/mymoneymaster.adapter');
+  const { buyRate, sellRate } = parseHtml(NEW_FIXTURE, 'CNY');
+  const v = validateRate({
+    currency: 'CNY', buyRate, sellRate,
+    retrievedAt: new Date().toISOString(),
+    expectedRange: config.validation.expectedRange.CNY,
+  });
+  assert.equal(v.passed, true, v.reasons && v.reasons.join('; '));
+});

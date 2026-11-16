@@ -1,8 +1,8 @@
 {
   "id": "mymoneymaster",
   "displayName": "My Money Master",
-  "officialUrl": "http://www.mymoneymaster.com.my/",
-  "liveRateUrl": "http://www.mymoneymaster.com.my/index.php?/Home/full_rate_board",
+  "officialUrl": "https://www.mymoneymaster.com.my/",
+  "liveRateUrl": "https://www.mymoneymaster.com.my/index.php/fullrate",
   "notes": "Verified 21-Aug-2026, then RE-verified live on 21-Aug-2026 (Phase 2 build) via a fresh browser-driven fetch of the raw response. The re-check corrected an assumption from the first pass: the homepage's scrolling ticker ('.rating-content.simply-scroll-list li', formerly documented as the primary selector) is actually populated by client-side JavaScript — it is NOT present in the raw HTTP response, only in the live DOM after the page's own scripts run. The site does not serve a working HTTPS version (https:// redirects back to http://) — use the http URL. SECOND CORRECTION (21-Aug-2026, after the first live GitHub Actions run returned EXTRACTION_ERROR): the site's card wrapper changed from a CSS class '.smallBox3' to an HTML id (id=\"smallBox3\") on a element now carrying the class 'ratebox-table-wrap' instead. This is exactly the 'SOURCE STRUCTURE MAY HAVE CHANGED' scenario the project brief anticipated (section 23) — the system correctly reported EXTRACTION_ERROR rather than showing stale or fabricated data as LIVE.\n\nPHASE 42 (27-Aug-2026) — liveRateUrl and extraction strategy both changed. The project owner reported the dashboard permanently showing VND as SIMULATED for this source and attached a screenshot of a real VND row (\"Viet Nam / 1M Vietnam Dong ( VND )\", Buy 155.30 / Sell 157.80) that does not exist on '/Home/rate_board' (the old liveRateUrl, an 8-card page — CNY/JPY/USD/GBP/EUR/HKD/AUD/SGD only, confirmed exhaustively as recently as Phase 38 the day before). The owner identified the actual page it came from: 'index.php?/Home/full_rate_board' (note: NOT the same as '/Home/full_rate_board' without 'index.php?' in front — that path 404s; the site uses CodeIgniter's query-string routing style, 'index.php?/Controller/method'). A live connected-browser session (27-Aug-2026) confirmed: (1) this page is a full ~40-currency table, a superset of the old 8-card page — every one of the old 8 currencies' Buy/Sell figures match the old page's numbers exactly (e.g. CNY 60.20/60.47 both places), so this migration changes nothing about those 8, it only adds coverage; (2) it genuinely lists all 12 of this app's supported currencies by ISO code, including the 4 that were previously believed entirely unavailable from this source — VND, THB, KRW, TWD; (3) the values are present in the RAW HTTP response (confirmed via fetch(location.href) from within the live page, independent of any JS execution — same 'no browser required' situation as the old page); (4) every currency's per-unit convention on this page (CNY/HKD/THB/TWD quoted per 100, JPY/KRW per 1000, VND per 1,000,000, everything else per 1 — see each row's own label text, e.g. '100 Chinese Renminbi ( CNY )', '1M Vietnam Dong ( VND )') matches backend/validation/bnmCrossCheck.js's existing ADAPTER_CURRENCY_UNIT map exactly, with zero rescaling needed. Because this page prints each currency's own ISO code directly in its row text, the matching strategy changed from currencyDisplayNames lookup (fragile, needed a hand-maintained entry per currency) to direct code extraction (see primarySelector.matchStrategy below) — the same strategy Taj Muhabath and Jalinan Duta already use. currencyDisplayNames below is kept only as a historical record of what Phase 2/37/38 captured from the old page; parseHtml() no longer reads it.",
   "requiresBrowserAutomation": false,
   "requiresBrowserAutomationReason": "The full_rate_board table's BUY/SELL values were confirmed present in the raw server-rendered HTML via a fetch independent of any browser JS execution (verified 27-Aug-2026, Phase 42, the same way the old rate_board page was originally verified). A plain HTTP GET + HTML parser (cheerio) is sufficient for the primary path.",
@@ -12,17 +12,17 @@
   "branchSupport": false,
   "branchNotes": "No branch/location selector was found on the public site; My Money Master publishes a single site-wide rate per currency. RE-CONFIRMED 02-Sep-2026 (Phase 55) via a real connected-browser session against both the homepage and index.php?/Home/full_rate_board: still exactly one physical address in the footer (Mid Valley Megamall), no <select>/dropdown/location control anywhere on either page (checked via a full interactive-elements DOM read, not just a visual look), and the rate table is one single site-wide list, unchanged from the original finding. Requested explicitly alongside the same check for Merchantrade Asia, which DID turn out to have gained real branch selection since its own last check — this negative result for My Money Master is a genuine, deliberate re-check, not an assumption carried forward.",
   "primarySelector": {
-    "description": "Phase 42 (27-Aug-2026): the desktop rate table on 'index.php?/Home/full_rate_board' — a 'div.table-responsive.rate-board-table' wrapping 'table.table', body id 'ajaxval', one 'tr.filtersearch' per currency (there is also a separate compact/mobile table on the same page, tbody id 'ajaxmobval', with only 3 cells and no country name — NOT used here, since it carries the same data with less context). Each row has 5 <td> cells: [0] 'td.currency-tbody-wrap' containing a 'span.currency-txt' whose text is '<Country name> <unit quantity> <Currency name> ( <ISO CODE> )' (e.g. 'Viet Nam 1M Vietnam Dong ( VND )', 'China 100 Chinese Renminbi ( CNY )'); [1] Buy rate (plain text); [2] Sell rate (plain text); [3] 'at HH:MM AM/PM' (this row's own last-updated time — no date; the page's own top banner shows the date once for the whole table); [4] a 'more info' link, unused.",
-    "page": "http://www.mymoneymaster.com.my/index.php?/Home/full_rate_board",
-    "rowSelector": "div.table-responsive.rate-board-table table tbody tr",
-    "currencyTextSelector": "td.currency-tbody-wrap span.currency-txt",
-    "buyCellIndex": 1,
-    "sellCellIndex": 2,
-    "lastUpdatedCellIndex": 3,
-    "codeExtractPattern": "\\(\\s*([A-Za-z]{2,5})\\s*\\)\\s*$",
-    "matchStrategy": "For each 'tr.filtersearch' row, read the currencyTextSelector span's text and apply codeExtractPattern to pull the ISO-ish code out of the trailing parentheses (uppercased before comparing). This is a CODE match, not a display-name match — same strategy as Taj Muhabath/Jalinan Duta (see frontend/app.js's CODE_MATCHED_SOURCES). Within the matching row, td[buyCellIndex] and td[sellCellIndex] are the numeric Buy/Sell values; td[lastUpdatedCellIndex] is this row's own 'at HH:MM AM/PM' text (parsed as a same-day time only — see backend/scrapers/mymoneymaster.adapter.js's header comment for why sourceTimestamp is left null rather than guessing which day it refers to).",
-    "sampleMatchedText": "Viet Nam 1M Vietnam Dong ( VND ) | Buy 155.30 | Sell 157.80 | at 09:50 AM",
-    "liveSampleObservedAt": "2026-08-27 (Phase 42, real connected-browser session, both get_page_text and a targeted javascript_tool DOM walk against the live rendered page — table/row/cell class names and the VND row's exact cell contents both confirmed this way, not guessed). Representative values captured that session: AUD 2.886/2.905, CNY 60.20/60.47, EUR 4.678/4.700, GBP 5.47/5.495, HKD 51.40/51.60, JPY 25.25/25.54, KRW 2.925/2.955, SGD 3.163/3.175, THB 12.30/12.40, TWD 12.415/12.495, USD 4.0235/4.038, VND 155.30/157.80 — all 12 of this app's supported currencies present and correctly scoped to their configured ADAPTER_CURRENCY_UNIT (backend/validation/bnmCrossCheck.js)."
+    "description": "17-Nov-2026 redesign: table.mmm-frb-table, tbody#mmmFrbTbody, one tr.mmm-frb-row per currency (40 rows) with data-code (lower-case ISO) and data-name. Cells: [0] .mmm-frb-ccy-name + .mmm-frb-ccy-unit (\"100 CNY\", \"1M VND\"), [1] span.mmm-frb-rate-buy, [2] span.mmm-frb-rate-sell, [3] span.mmm-frb-last-updated (\"at 03:52 PM\"). Values are present in the raw server-rendered HTML.",
+    "page": "https://www.mymoneymaster.com.my/index.php/fullrate",
+    "rowSelector": "table.mmm-frb-table tbody tr.mmm-frb-row",
+    "codeAttribute": "data-code",
+    "buySelector": "span.mmm-frb-rate-buy",
+    "sellSelector": "span.mmm-frb-rate-sell",
+    "lastUpdatedSelector": "span.mmm-frb-last-updated",
+    "unitSelector": "div.mmm-frb-ccy-unit",
+    "matchStrategy": "Match tr.mmm-frb-row by its data-code attribute (case-insensitive) against the requested ISO code.",
+    "sampleMatchedText": "Chinese Renminbi | 100 CNY | Buy 61.65 | Sell 61.88 | at 03:52 PM",
+    "liveSampleObservedAt": "2026-11-17 (real Chrome DOM read; CNY 61.65/61.88 per 100, VND 157.80/159.30 per 1M, USD 4.08/4.095)"
   },
   "currencyDisplayNames": {
     "CNY": "Chinese Renminbi",
@@ -46,7 +46,7 @@
   },
   "waitStrategy": {
     "httpFetch": "none required for the primary (full_rate_board table) selector — values are present on initial response",
-    "playwrightFallback": "navigate to liveRateUrl, wait for 'div.table-responsive.rate-board-table table tbody tr' to be attached, then read as with the HTTP path (same selectors, rendered DOM)"
+    "playwrightFallback": "navigate to liveRateUrl, wait for 'table.mmm-frb-table tbody tr.mmm-frb-row' to be attached, then parse the rendered HTML"
   },
   "validation": {
     "expectedRange": {
@@ -106,5 +106,15 @@
     "termsOfUseUrl": "linked from the site footer",
     "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. This site's Terms of Use page (/Home/policy) could NOT actually be read as part of that decision — the site has no working HTTPS and the fetching tool used could not follow its http-to-https-back-to-http redirect loop. Genuinely unread, not cleared; still true as of Phase 42. Phase 38 (26-Aug-2026) added JPY/USD/GBP/EUR/HKD/AUD/SGD without a separate manual-promotion step per the project owner's request that a per-currency verification ceremony no longer gate a currency newly selected at one of the 4 already-trusted money changers — see frontend/app.js's Phase 38 comment. Phase 42 (27-Aug-2026) extends the SAME already-trusted-source reasoning to VND/THB/KRW/TWD: no new site, no new ceremony, just a different (larger) page on the exact same already-approved domain, discovered because the old 8-currency page turned out not to be the full picture."
   },
-  "lastVerified": "2026-09-02 (Phase 55 -- branch selection re-checked live and reconfirmed absent, alongside the same check for Merchantrade Asia which found the opposite result). Previously: 2026-08-27 (Phase 42 — migrated to full_rate_board...)"
+  "lastVerified": "2026-11-17 — site redesigned (HTTPS only, new /index.php/fullrate route, new mmm-frb-* markup); old route now returns the home page / HTTP 403 to automated clients. Re-verified live in Chrome. Previously: 2026-09-02 (Phase 55 -- branch selection re-checked live and reconfirmed absent, alongside the same check for Merchantrade Asia which found the opposite result). Previously: 2026-08-27 (Phase 42 — migrated to full_rate_board...)",
+  "legacySelector": {
+    "rowSelector": "div.table-responsive.rate-board-table table tbody tr",
+    "currencyTextSelector": "td.currency-tbody-wrap span.currency-txt",
+    "buyCellIndex": 1,
+    "sellCellIndex": 2,
+    "lastUpdatedCellIndex": 3,
+    "codeExtractPattern": "\\(\\s*([A-Za-z]{2,5})\\s*\\)\\s*$",
+    "description": "Pre-17-Nov-2026 layout (index.php?/Home/full_rate_board). Kept as a parse fallback only."
+  },
+  "legacyLiveRateUrl": "http://www.mymoneymaster.com.my/index.php?/Home/full_rate_board"
 }
