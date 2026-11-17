@@ -13,11 +13,21 @@
   "branchNotes": "A native <select id=\"dpdBranch\"> offers branch selection. Its <option> VALUES are opaque numeric branch IDs (e.g. \"17\", \"18\") that are not human-meaningful and could be reassigned by the site at any time — select by the option's visible TEXT LABEL instead (e.g. \"LALAPORT BBCC\"), via Playwright's page.selectOption({ label }). The page loads with a default branch already selected (\"THE EXCHANGE TRX\" as of this verification) — if no branch is requested, the adapter reads whatever branch loaded by default and reports that branch's name in the result, rather than silently reading an arbitrary/undocumented default.",
   "branchSelector": "#dpdBranch",
   "knownBranches": [
-    "THE EXCHANGE TRX", "Econsave, Balakong", "Leisure Mall, Cheras",
-    "Terminal One, Seremban", "Aeon Big, Tun Hussein Onn", "CS Bangi, Bangi",
-    "PETRONAS,GP", "IOI City Mall, Putrajaya", "Jalan Bunus, Masjid India",
-    "R&R,Gelang Patah-NB", "R&R,Gelang Patah-SB", "LARKIN SENTRAL",
-    "PETRON GELANG PATAH", "LALAPORT BBCC", "SEMUA HOUSE",
+    "THE EXCHANGE TRX",
+    "Econsave, Balakong",
+    "Leisure Mall, Cheras",
+    "Terminal One, Seremban",
+    "Aeon Big, Tun Hussein Onn",
+    "CS Bangi, Bangi",
+    "PETRONAS,GP",
+    "IOI City Mall, Putrajaya",
+    "Jalan Bunus, Masjid India",
+    "R&R,Gelang Patah-NB",
+    "R&R,Gelang Patah-SB",
+    "LARKIN SENTRAL",
+    "PETRON GELANG PATAH",
+    "LALAPORT BBCC",
+    "SEMUA HOUSE",
     "AEON MALL CHERAS SELATAN"
   ],
   "knownBranchesObservedAt": "2026-08-21 (Phase 3 live re-verification) — this list is informational only (for UI dropdowns / sanity checks), not authoritative; the adapter should always read the live <option> list from the page rather than hardcoding against this array for extraction purposes.",
@@ -44,18 +54,54 @@
   },
   "validation": {
     "expectedRange": {
-      "CNY": { "min": 40, "max": 80 },
-      "USD": { "min": 2, "max": 8 },
-      "SGD": { "min": 1.5, "max": 6 },
-      "GBP": { "min": 3, "max": 10 },
-      "EUR": { "min": 2.5, "max": 9 },
-      "AUD": { "min": 1.5, "max": 5.5 },
-      "HKD": { "min": 30, "max": 90 },
-      "THB": { "min": 7, "max": 22 },
-      "TWD": { "min": 8, "max": 20 },
-      "JPY": { "min": 15, "max": 40 },
-      "KRW": { "min": 1.5, "max": 5 },
-      "VND": { "min": 100, "max": 250 }
+      "CNY": {
+        "min": 40,
+        "max": 80
+      },
+      "USD": {
+        "min": 2,
+        "max": 8
+      },
+      "SGD": {
+        "min": 1.5,
+        "max": 6
+      },
+      "GBP": {
+        "min": 3,
+        "max": 10
+      },
+      "EUR": {
+        "min": 2.5,
+        "max": 9
+      },
+      "AUD": {
+        "min": 1.5,
+        "max": 5.5
+      },
+      "HKD": {
+        "min": 30,
+        "max": 90
+      },
+      "THB": {
+        "min": 7,
+        "max": 22
+      },
+      "TWD": {
+        "min": 8,
+        "max": 20
+      },
+      "JPY": {
+        "min": 15,
+        "max": 40
+      },
+      "KRW": {
+        "min": 1.5,
+        "max": 5
+      },
+      "VND": {
+        "min": 100,
+        "max": 250
+      }
     },
     "notes": "Same scale/reasoning as My Money Master's CNY range (per-100-unit CNY quoted against MYR). Reject a reading where buyRate > sellRate, or where the value looks like it's missing the /100 unit scaling. USD/SGD/GBP/EUR/AUD/HKD/THB/TWD/JPY/KRW/VND ranges added 26-Aug-2026 (Phase 38), built around the real values observed live that same day (see primarySelector's Phase 38 note), generous padding matching this file's existing CNY convention. Unlike mymoneymaster.json/merchantradeasia.json, this source is code-matched — it did not require any currencyDisplayNames change to make these 11 currencies checkable; the adapter already worked for any code the live table lists. These expectedRange entries exist purely as this file's own sanity-bound layer, matching the other 3 sources' convention, not because the adapter needed them to function.",
     "sourceTimestampStalenessNote": "This site (unlike My Money Master) exposes a genuine per-row 'Last Updated' timestamp, which can legitimately be hours old for a currency whose rate simply hasn't moved recently — this is normal market behavior, not a broken scrape. The adapter treats a reading as LIVE if it was successfully retrieved and passed validateRate(), and separately flags it STALE (informationally, in the result's status) only if sourceTimestamp is older than a generous threshold (see backend/scrapers/tajmuhabath.adapter.js STALENESS_THRESHOLD_MS) — this threshold is a judgment call made without strong evidence of what 'too old' means for this specific currency pair's real trading frequency, and is easy to tune later once real historical data accumulates."
@@ -65,5 +111,10 @@
     "termsOfUseUrl": "not located during either inspection — check the site footer / About Us page before continuous production polling.",
     "actionRequired": "Phase 14 (22-Aug-2026): the recurring schedule was turned on at the project owner's explicit request. No public Terms of Use page could be located for this site at all — only a Privacy link and a registration-gated \"terms\" reference. Genuinely unread, not cleared. See README.md's Compliance note for the full picture across all three sites. Additionally: the internal API discovered during this build (fx.tajmuhabath.com.my/rbapi/...) must never be called directly by this codebase — see 'notes' above. Phase 38 (26-Aug-2026) — USD/SGD/GBP/EUR/AUD/HKD/THB/TWD/JPY/KRW/VND expectedRange entries added above without a separate manual-promotion step, per the project owner's request that the old per-currency verification ceremony no longer gate a currency at one of the 4 already-trusted money changers — see frontend/app.js's Phase 38 comment for the full architecture change. Because this source is code-matched, these currencies were technically already live-checkable before this edit; this only adds the sanity-bound layer, captured via a real connected-browser session reading the live rendered table (branch selector set to 'THE EXCHANGE TRX')."
   },
-  "lastVerified": "2026-08-26 (Phase 38 — USD/SGD/GBP/EUR/AUD/HKD/THB/TWD/JPY/KRW/VND expectedRange bounds added via a real connected-browser JS session, branch=THE EXCHANGE TRX; CNY re-confirmed same session; original table-structure verification 2026-08-21)"
+  "lastVerified": "2026-08-26 (Phase 38 — USD/SGD/GBP/EUR/AUD/HKD/THB/TWD/JPY/KRW/VND expectedRange bounds added via a real connected-browser JS session, branch=THE EXCHANGE TRX; CNY re-confirmed same session; original table-structure verification 2026-08-21)",
+  "branchAliases": {
+    "Terminal One, Seremban": "Terminal One",
+    "IOI City Mall, Putrajaya": "IOI City Mall"
+  },
+  "branchAliasesNote": "17-Nov-2026: the site regrouped branches under state headings and renamed/respaced several labels. Matching is case-insensitive and ignores spacing around commas; these aliases cover the two renames that normalisation alone cannot (saved alerts keep the old names, so the adapter translates instead of migrating data). New branch not yet offered in the UI: '118 Mall'."
 }

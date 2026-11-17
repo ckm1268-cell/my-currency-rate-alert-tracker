@@ -90,3 +90,37 @@ test('the extracted CNY reading passes validateRate() against the configured exp
   });
   assert.equal(validation.passed, true, `expected validation to pass, reasons: ${validation.reasons.join('; ')}`);
 });
+
+// ---------------------------------------------------------------------------
+// 17-Nov-2026: site regrouped branches by state and re-cased/re-spaced labels.
+// LIVE_OPTIONS is the real list captured from the live page (and a phone screenshot).
+// ---------------------------------------------------------------------------
+const LIVE_OPTIONS = [
+  'The Exchange TRX', '118 Mall', 'Lalaport BBCC', 'Leisure Mall, Cheras', 'Semua House',
+  'Jalan Bunus, Masjid India', 'IOI City Mall', 'Aeon Big, Tun Hussein Onn',
+  'Aeon Mall Cheras Selatan', 'Econsave, Balakong', 'CS Bangi, Bangi', 'Terminal One',
+  'Larkin Sentral', 'Petron Gelang Patah', 'Petronas, GP', 'R&R, Gelang Patah-NB', 'R&R, Gelang Patah-SB',
+];
+// The 16 names the app/saved alerts use (frontend TM_BRANCHES).
+const APP_BRANCHES = [
+  'THE EXCHANGE TRX', 'Econsave, Balakong', 'Leisure Mall, Cheras', 'Terminal One, Seremban',
+  'Aeon Big, Tun Hussein Onn', 'CS Bangi, Bangi', 'PETRONAS,GP', 'IOI City Mall, Putrajaya',
+  'Jalan Bunus, Masjid India', 'R&R,Gelang Patah-NB', 'R&R,Gelang Patah-SB', 'LARKIN SENTRAL',
+  'PETRON GELANG PATAH', 'LALAPORT BBCC', 'SEMUA HOUSE', 'AEON MALL CHERAS SELATAN',
+];
+
+test('every branch name the app offers still resolves to a live Taj Muhabath option', () => {
+  const { branchKeys, normBranch } = require('../backend/scrapers/tajmuhabath.adapter');
+  const liveKeys = LIVE_OPTIONS.map(normBranch);
+  for (const b of APP_BRANCHES) {
+    assert.ok(branchKeys(b).some((k) => liveKeys.includes(k)), `no live option matches "${b}"`);
+  }
+});
+
+test('branch matching ignores case and spacing around commas, but never crosses branches', () => {
+  const { branchKeys } = require('../backend/scrapers/tajmuhabath.adapter');
+  assert.ok(branchKeys('LALAPORT BBCC').includes('lalaport bbcc'));
+  assert.ok(branchKeys('R&R,Gelang Patah-NB').includes('r&r,gelang patah-nb'));
+  assert.ok(!branchKeys('R&R,Gelang Patah-NB').includes('r&r,gelang patah-sb'));
+  assert.ok(!branchKeys('IOI City Mall, Putrajaya').includes('118 mall'));
+});

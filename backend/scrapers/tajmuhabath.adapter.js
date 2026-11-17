@@ -141,6 +141,23 @@ function buildResult({ input, buyRate, sellRate, sourceTimestamp, branch, status
 }
 
 /**
+ * Normalised match keys for a requested branch: the name itself plus any
+ * configured alias, lower-cased, whitespace-collapsed, spacing around commas
+ * removed ("PETRONAS,GP" === "Petronas, GP"). Pure; unit-tested.
+ */
+function normBranch(t) {
+  return String(t).replace(/\s+/g, ' ').replace(/\s*,\s*/g, ',').trim().toLowerCase();
+}
+function branchKeys(branch) {
+  const keys = [normBranch(branch)];
+  const aliases = config.branchAliases || {};
+  for (const [from, to] of Object.entries(aliases)) {
+    if (normBranch(from) === keys[0]) keys.push(normBranch(to));
+  }
+  return keys;
+}
+
+/**
  * Primary (and only) extraction path: Playwright, real rendered DOM.
  * Optionally selects a branch first via the site's own dropdown.
  *
@@ -188,16 +205,17 @@ async function fetchRate(input) {
 
     // Wait for the real branch list (more than the 2 "Select a Branch" placeholders)
     // and, when a branch was requested, for that exact option to exist.
+    const wantedKeys = input.branch ? branchKeys(input.branch) : null;
     const branchListReady = await page
       .waitForFunction(
-        ({ sel, label }) => {
+        ({ sel, keys }) => {
           const el = document.querySelector(sel);
           if (!el) return false;
-          const norm = (t) => String(t).replace(/\s+/g, ' ').trim().toLowerCase();
+          const norm = (t) => String(t).replace(/\s+/g, ' ').replace(/\s*,\s*/g, ',').trim().toLowerCase();
           const labels = Array.from(el.options).map((o) => norm(o.text));
-          return label ? labels.includes(norm(label)) : labels.length > 2;
+          return keys ? keys.some((k) => labels.includes(k)) : labels.length > 2;
         },
-        { sel: config.branchSelector, label: input.branch || null },
+        { sel: config.branchSelector, keys: wantedKeys },
         { timeout: BRANCH_LIST_TIMEOUT_MS }
       )
       .then(() => true)
@@ -235,12 +253,12 @@ async function fetchRate(input) {
         // for, because the frontend/Supabase lookup matches branch names exactly.
         const realLabel = await page.$$eval(
           `${config.branchSelector} option`,
-          (os, wanted) => {
-            const norm = (t) => String(t).replace(/\s+/g, ' ').trim().toLowerCase();
-            const hit = os.find((o) => norm(o.text) === norm(wanted));
+          (os, keys) => {
+            const norm = (t) => String(t).replace(/\s+/g, ' ').replace(/\s*,\s*/g, ',').trim().toLowerCase();
+            const hit = os.find((o) => keys.includes(norm(o.text)));
             return hit ? hit.text.trim() : null;
           },
-          input.branch
+          branchKeys(input.branch)
         );
         await page.selectOption(config.branchSelector, { label: realLabel || input.branch });
         branchUsed = input.branch;
@@ -365,4 +383,4 @@ async function fetchRateWithFallback(input) {
   return fetchRate(input);
 }
 
-module.exports = { fetchRate, fetchRateWithFallback, parseHtml, parseTajTimestamp, config };
+module.exports = { branchKeys, normBranch, fetchRate, fetchRateWithFallback, parseHtml, parseTajTimestamp, config };
