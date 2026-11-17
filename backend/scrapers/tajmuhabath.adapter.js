@@ -193,8 +193,9 @@ async function fetchRate(input) {
         ({ sel, label }) => {
           const el = document.querySelector(sel);
           if (!el) return false;
-          const labels = Array.from(el.options).map((o) => o.text.trim());
-          return label ? labels.includes(label) : labels.length > 2;
+          const norm = (t) => String(t).replace(/\s+/g, ' ').trim().toLowerCase();
+          const labels = Array.from(el.options).map((o) => norm(o.text));
+          return label ? labels.includes(norm(label)) : labels.length > 2;
         },
         { sel: config.branchSelector, label: input.branch || null },
         { timeout: BRANCH_LIST_TIMEOUT_MS }
@@ -228,7 +229,20 @@ async function fetchRate(input) {
     let branchUsed = null;
     if (input.branch) {
       try {
-        await page.selectOption(config.branchSelector, { label: input.branch });
+        // The site's own label casing changes over time (17-Nov-2026: "THE EXCHANGE TRX"
+        // became "The Exchange TRX"), so match case-insensitively and select by the
+        // option's real label. The result still reports the branch name we were ASKED
+        // for, because the frontend/Supabase lookup matches branch names exactly.
+        const realLabel = await page.$$eval(
+          `${config.branchSelector} option`,
+          (os, wanted) => {
+            const norm = (t) => String(t).replace(/\s+/g, ' ').trim().toLowerCase();
+            const hit = os.find((o) => norm(o.text) === norm(wanted));
+            return hit ? hit.text.trim() : null;
+          },
+          input.branch
+        );
+        await page.selectOption(config.branchSelector, { label: realLabel || input.branch });
         branchUsed = input.branch;
       } catch (err) {
         return buildResult({
