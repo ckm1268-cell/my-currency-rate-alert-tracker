@@ -64,6 +64,12 @@
     "R&R,Gelang Patah-NB", "R&R,Gelang Patah-SB", "LARKIN SENTRAL",
     "PETRON GELANG PATAH", "LALAPORT BBCC", "SEMUA HOUSE",
     "AEON MALL CHERAS SELATAN",
+    // 17-Nov-2026: new branch on the live site (Kuala Lumpur group). Appended at
+    // the END so existing indices and saved alerts are unaffected. The site also
+    // re-cased/re-spaced other labels; the backend adapter matches those
+    // case-insensitively and via config/websites/tajmuhabath.json's branchAliases,
+    // so the names above are deliberately left as saved alerts know them.
+    "118 Mall",
   ];
 
   // Phase 52 (02-Sep-2026) — real branch names, verified from
